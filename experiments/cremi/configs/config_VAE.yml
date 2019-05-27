@@ -1,0 +1,396 @@
+global:
+  offsets: null
+
+shortcuts:
+  xy_directions: &n_directions 16
+  total_directions: &tot_directions 18
+
+
+device: cuda
+
+loaders:
+  general:
+    volume_config:
+      segmentation:
+        affinity_config:
+          retain_mask: True # This keep a mask of the valid affinities (not involving the ignore-label)
+          retain_segmentation: False # This keeps the label image in the inputs
+          ignore_label: 0
+
+    defect_augmentation_config:
+        p_missing_slice: 0.03
+        p_low_contrast: 0.03
+        p_deformed_slice: 0.03
+        p_artifact_source: 0.03
+        deformation_mode: 'compress'
+        deformation_strength: 16
+        artifact_source:
+            min_masking_ratio: .5
+            slicing_config:
+              window_size: [1, 243, 243]  #change x and y to window size
+              stride: [1, 128, 128]
+              downsampling_ratio: [1, 1, 1]
+            volume_config:
+              artifacts:
+                path: '/home/abailoni_local/hci_home/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
+                path_in_h5_dataset: 'defect_sections/raw'
+                dtype: float32
+              alpha_mask:
+                path: '/home/abailoni_local/hci_home/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
+                path_in_h5_dataset: 'defect_sections/mask'
+            master_config:
+              elastic_transform:
+                alpha: 2000.
+                sigma: 50.
+
+    # Configuration for the master dataset.
+    master_config:
+      # We might need order 0 interpolation if we have segmentation in there somewhere.
+      elastic_transform:
+        apply: False
+        alpha: 2000.
+        sigma: 50.
+        order: 0
+      random_slides: False
+      shape_after_slide: [243, 243]   #change to x, y of window size
+
+      random_flip: False
+
+      compute_directions:
+        n_directions: *n_directions
+        z_direction:  &z_direction True
+
+    # Specify configuration for the loader
+    loader_config:
+      # Number of processes to use for loading data. Set to (say) 10 if you wish to
+      # use 10 CPU cores, or to 0 if you wish to use the same process for training and
+      # data-loading (generally not recommended).
+      batch_size: 1
+      num_workers: 1
+      drop_last: True
+      pin_memory: False
+      shuffle: True
+
+
+
+  train:
+    names:
+      - A
+      - B
+      - C
+
+    # Specify how the data needs to be sliced before feeding to the network.
+    # We use a 3D sliding window over the dataset to extract patches, which
+    # are then fed to the network as batches.
+    slicing_config:
+      # Sliding window size
+      window_size:
+        A: &shape [6, 243, 243]
+        B: *shape
+        C: *shape
+      # Sliding window stride
+      stride:
+        A: [4, 128, 128]
+        B: [4, 128, 128]
+        C: [4, 128, 128]
+      # Data slice to iterate over.
+      data_slice:
+        A: ':, :, :'
+        B: ':, :, :'
+        C: ':75, :, :'
+
+    # Specify paths to volumes
+    volume_config:
+      # Raw data
+      raw:
+        path:
+          A: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleA_train.h5'
+          B: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleB_train.h5'
+          C: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleC_train.h5'
+        path_in_file:
+          A: 'raw'
+          B: 'raw'
+          C: 'raw'
+        dtype: float32
+        sigma: 0.025
+      # Segmentation
+      segmentation:
+        path:
+          A: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleA_train.h5'
+          B: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleB_train.h5'
+          C: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleC_train.h5'
+        path_in_file:
+          A: 'segmentations/groundtruth_fixed'
+          B: 'segmentations/groundtruth_fixed'
+          C: 'segmentations/groundtruth_fixed'
+        dtype: float32
+
+
+
+  val:
+    names:
+      - C
+
+    slicing_config:
+      window_size:
+        C: *shape
+      stride:
+        C: [4, 128, 128]
+      data_slice:
+        C: '75:, :, :'
+
+    volume_config:
+      raw:
+        path:
+          C: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleC_train.h5'
+        path_in_file:
+          C: 'raw'
+        dtype: float32
+        sigma: 0.025
+      segmentation:
+        affinity_config:
+          retain_segmentation: True # This keeps the label image in the inputs
+        path:
+          C: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleC_train.h5'
+        path_in_file:
+          C: 'segmentations/groundtruth_fixed'
+        dtype: float32
+
+
+
+model:
+  vaeAffs.vanila_vae.VAE:
+#    nc: *tot_offsets
+    ngf: 128
+    ndf: 128
+    latent_variable_size: 500
+
+trainer:
+  max_epochs: 10 # basically infinite
+#  TODO: increase this if we need both affinity targets and directional DT targets
+  num_targets: 1
+
+  criterion:
+    # TODO: here you will be able to add the final losses (SoresenDice for affinities and L1 for DT)
+    losses: null
+
+  metric:
+    evaluate_every: 'never'
+    quantizedVDT.metrics.ArandFromMWSDistances:
+      strides: null # [1,2,2]
+      z_direction: *z_direction
+      n_directions: *n_directions
+
+  optimizer:
+    Adam:
+      lr: 1.0e-4
+      weight_decay: 0.0005
+#      betas: [0.9, 0.999]
+
+  intervals:
+    save_every: [1000, 'iterations']
+    validate_every:
+      frequency : [100, 'iterations']
+      for_num_iterations: 5
+
+  tensorboard:
+    log_scalars_every: [1, 'iterations']
+    log_images_every: [100, 'iterations']
+    log_histograms_every: 'never'
+##    send_volume_at_z_indices: 'mid'
+#    split_config_keys: True
+#    log_anywhere: ['scalars']
+
+  callbacks:
+#    gradients:
+#      LogOutputGradients:
+#        frequency: 1
+
+    essentials:
+      SaveAtBestValidationScore:
+        smoothness: 0
+        verbose: True
+#      GradientClip:
+#        clip_value: 1e-3
+
+    scheduling:
+      AutoLR:
+        monitor: 'validation_loss'
+        factor: 0.99
+        patience: '100 iterations'
+        monitor_while: 'validating'
+        monitor_momentum: 0.75
+#        cooldown_duration: '50000 iterations'
+        consider_improvement_with_respect_to: 'previous'
+        verbose: True
+
+firelight:
+  prova:
+    RowVisualizer:
+      # For each visualizer (also container visualizers, such as RowVisualizer), an input mapping can be passed.
+      # It specifies the mapping between trainer states and the keyword arguments of the 'visualize' function of the
+      # visualizers. This is done with a dictionary with the argument names as keys. The values specify where to get
+      # the argument:
+      #   - if the value is a string, it is assumed to be the key in the trainer state dictionary
+      #     (e.g. embedding: 'prediction')
+      #   - if the value is a list, the key in the trainer state dict can be specified as its first element. if this
+      #     element is no string, the trainer key is assumed to be the same as the argument name.
+      #     The remaining entries have to be one element dictionaries, that can specify one of three things:\
+      #         - if the key is 'index', the value must be an integer that specifies which element of the trainer state
+      #           to take, if it is a list (and not a torch.Tensor)
+      #         - if the key is 'pre', the name of a function in torch.nn.functional has to be supplied as the value,
+      #           optionally as another 1-element dict, with a value containing additional arguments to that function.
+      #           This function is applied to the trainer state that is mapped (after potential slicing)
+      #         - dicts with other keys specify the slicing.
+      #           The axes of tensors are named, e.g. ['B', 'C', 'D', 'H', 'W'] for a batch of volumes. The key of the
+      #           dict must be the name of the axis to be sliced, and the value specifies which slices to take.
+      #           e.g.: taking only the first sample in a batch: [B: '0']
+      #                 taking the channels 1 to 3: [C: '1:3']
+      #                 downsampling images by a factor of 2: [H: '::2', W: '::2']
+      input_mapping:
+        global: [B: 0, D: ':'] # the mapping specified in 'global' is applied to all keys
+        input: ['inputs', index: 0, C: 0]
+        affs: ['target', index: 0]
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 3  # the whole grid is upsampled by this factor
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        # visualize raw input
+        - IdentityVisualizer:
+            input: 'input'
+            cmap: inferno
+
+        - IdentityVisualizer:
+            input: 'affs'
+#            cmap: gray
+
+#
+#        # visualize gt segmentation
+#        - SegmentationVisualizer:
+#            background_color: [1, 1, 1]
+#            background_label: 0
+
+
+##  affinities:
+##    RowVisualizer:
+##      input_mapping:
+##        global: [B: 0]
+##        affinities: ''
+##      visualizers:
+##        RiffleVisualizer:
+##          riffle_dim: 'C'
+##          colorize: True
+##          colorize_jointly: ['H', 'W', 'D', 'C']
+##          visualizers:
+##            - ImageVisualizer:
+##                colorize: False
+##                input: ['affinities_stage_0', pre: ['softplus', {normalize: {p: 1}}]]
+##            - ImageVisualizer:
+##                colorize: False
+##                input: ['affinities_stage_1', pre: ['softplus', {normalize: {p: 1}}]]
+#
+#  visualization_grid:
+#    ImageGridVisualizer:
+#      input_mapping:
+#        global: [B: 0, D: ':']
+#        input: ['inputs', index: 0]
+#        segmentation: ['target', index: 0]
+#        embedding: ['prediction', C: '1:']
+#        handcrafted_tags: ['prediction', C: *TagSlice]
+#
+#      row_specs: ['H', 'S', 'C', 'V']
+#      column_specs: ['W', 'D', 'B']
+#      pad_value: [0, .1, .2]
+#
+#      upsampling_factor: 1
+#
+#      visualizers:
+#
+#        # visualize raw input
+#        - InputVisualizer:
+#            cmap: inferno
+#
+#        # visualize GT segmentation
+#        - SegmentationVisualizer:
+#            background_label: 0
+#
+#        # visualize predicted segmentation
+#        - SegmentationVisualizer:
+#            input: 'hdbscan_segmentation'
+#            background_label: 0
+#
+#        # visualize semantic segmentation predictions
+#        - PredictionVisualizer:
+#            input: [C: '0', pre: 'sigmoid']
+#            value_range: [0, 1]
+#
+#        # visualize predicted embeddings
+#        - MaskedPcaVisualizer:
+#            ignore_label: 0
+#            n_components: 3
+#
+#        - PcaVisualizer:
+#            input: ['prediction', C: '1:']
+#            n_components: 6
+#
+#        # visualize hierarchical averaging
+##        - PcaVisualizer:
+##            joint_specs: ['S', 'D', 'H', 'W']
+##            n_components: 3
+##            input:
+##              StackVisualizer:
+##                stack_dim: 'S'
+##                visualizers:
+##                  - ImageVisualizer:
+##                      colorize: False
+##                      input: ['embedding_stage_0']
+##                  - ImageVisualizer:
+##                      colorize: False
+##                      input: ['embedding_stage_1']
+##                  - ImageVisualizer:
+##                      colorize: False
+##                      input: ['prediction', C: '1:']
+#
+##        # same, but only the free ones
+##        - MaskedPcaVisualizer:
+##            input_mapping:
+##              embedding: ['prediction', C: '5:']
+##            ignore_label: 0
+##            n_components: 3
+##
+##        - PcaVisualizer:
+##            input: ['prediction', C: '5:']
+##            n_components: 3
+##
+#         #Handcrafted Tags
+#        - OverlayVisualizer:
+#            visualizers:
+#              - StackVisualizer:
+#                  stack_dim: 'S'
+#                  visualizers:
+#                    - MaskVisualizer:
+#                        input: 'segmentation'
+#                        mask_label: 0
+#                    - MaskVisualizer:
+#                        input: 'segmentation'
+#                        mask_label: 0
+#                        opacity: 0.5
+#              - StackVisualizer:
+#                  stack_dim: 'S'
+#                  colorize: True
+#                  colorize_jointly: 'HWDS'
+#                  cmap: 'Spectral'
+#                  visualizers:
+#                    # visualize ground-truth tags
+#                    - ImageVisualizer:
+#                        input: ['target', index: 2]
+#                        colorize: False
+#
+#                    # visualize predicted tags
+#                    - ImageVisualizer:
+#                        input: 'handcrafted_tags'
+#                        colorize: False
