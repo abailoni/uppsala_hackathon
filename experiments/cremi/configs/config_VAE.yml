@@ -11,7 +11,7 @@ device: cuda
 loaders:
   general:
     volume_config:
-      rejection_threshold: 0.92
+      rejection_threshold: 0.60
       segmentation:
         affinity_config:
           retain_mask: True # This keep a mask of the valid affinities (not involving the ignore-label)
@@ -89,12 +89,12 @@ loaders:
     slicing_config:
       # Sliding window size
       window_size:
-        A: &shape [1, 92, 92]
+        A: &shape [1, 124, 124]
         B: *shape
         C: *shape
       # Sliding window stride
       stride:
-        A: &stride [1, 40, 40]
+        A: &stride [1, 30, 30]
         B: *stride
         C: *stride
       # Data slice to iterate over.
@@ -161,11 +161,12 @@ loaders:
 
 
 model:
-  vaeAffs.models.vanilla_vae.VAE:
-#    nc: *tot_offsets
-    ngf: 128
-    ndf: 128
-    latent_variable_size: 500
+  vaeAffs.models.vanilla_vae.VAE_bigger:
+#    input_ch: *tot_offsets
+    encoder_fact: 32
+    decoder_fact: 32
+    latent_variable_size: 128
+    unfold_size: 38
 
 trainer:
   max_epochs: 10 # basically infinite
@@ -256,9 +257,9 @@ firelight:
         - IdentityVisualizer:
             input: 'target'
             cmap: gray
-        - IdentityVisualizer:
-            input: 'input'
-            cmap: gray
+#        - IdentityVisualizer:
+#            input: 'input'
+#            cmap: gray
 
 #
 #        # visualize gt segmentation

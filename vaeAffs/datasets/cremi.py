@@ -28,7 +28,7 @@ class RejectSingleLabelVolumes(object):
 
     def __call__(self, fetched):
         _, counts = np.unique(fetched, return_counts=True)
-        return ((float(np.max(counts)) / fetched.size) > self.threshold) or ((np.count_nonzero(fetched) / fetched.size) != 1.)
+        return ((float(np.max(counts)) / fetched.size) > self.threshold) or ((np.count_nonzero(fetched) / fetched.size) < 0.95)
 
 
 class CremiDataset(ZipReject):

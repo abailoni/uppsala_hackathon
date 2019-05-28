@@ -15,4 +15,5 @@ class RemoveThirdDimension(Transform):
 
 class RemoveInvalidAffs(Transform):
     def tensor_function(self, tensor):
-        return (1-tensor[:12])*tensor[12:]
+        nb_offsets = int(tensor.shape[0] / 2)
+        return (1-tensor[:nb_offsets])*tensor[nb_offsets:]

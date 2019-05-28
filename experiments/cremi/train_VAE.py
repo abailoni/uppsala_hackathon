@@ -59,10 +59,10 @@ class VaeCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
 
 
     def get_default_offsets(self):
-        return [[0, -3, -3], [0, -1, 0], [0, 0, -1],
-                [0, -9, -9], [0, -3, 0], [0, 0, -3],
-                [0, -9, -15], [0, -9, 0], [0, 0, -9],
-                [0, -15, -9], [0, -27, 0], [0, 0, -27]]
+        return [[0, -4, +4],
+                [0, -4, -4], [0, -4, 0], [0, 0, -4]]
+                # [0, -9, -15], [0, -9, 0], [0, 0, -9],
+                # [0, -15, -9], [0, -27, 0], [0, 0, -27]]
         # return [[-1, 0, 0], [0, -1, 0], [0, 0, -1],
         #         [-2, 0, 0], [0, -3, 0], [0, 0, -3],
         #         [-3, 0, 0], [0, -9, 0], [0, 0, -9],
@@ -72,8 +72,8 @@ class VaeCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         model_config = self.get('model') if model_config is None else model_config
         model_class = list(model_config.keys())[0]
         n_channels = len(self.get('global/offsets'))
-        model_config[model_class]['nc'] = n_channels
-        self.set('model/{}/nc'.format(model_class), n_channels)
+        model_config[model_class]['input_ch'] = n_channels
+        self.set('model/{}/input_ch'.format(model_class), n_channels)
 
         return super(VaeCremiExperiment, self).build_model(model_config) #parse_model(model_config)
 
