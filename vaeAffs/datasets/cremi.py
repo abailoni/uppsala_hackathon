@@ -15,6 +15,20 @@ from neurofire.transform.artifact_source import RejectNonZeroThreshold
 from neurofire.transform.volume import RandomSlide
 
 from quantizedVDT.transforms import LabelToDirections
+from ..transforms import SetVAETarget, RemoveThirdDimension, RemoveInvalidAffs
+import numpy as np
+
+
+class RejectSingleLabelVolumes(object):
+    def __init__(self, threshold):
+        """
+        :param threshold: If the biggest segment takes more than 'threshold', batch is rejected
+        """
+        self.threshold = threshold
+
+    def __call__(self, fetched):
+        _, counts = np.unique(fetched, return_counts=True)
+        return ((float(np.max(counts)) / fetched.size) > self.threshold) or ((np.count_nonzero(fetched) / fetched.size) != 1.)
 
 
 class CremiDataset(ZipReject):
@@ -50,10 +64,10 @@ class CremiDataset(ZipReject):
         self.segmentation_volume = SegmentationVolume(name=name,
                                                       **segmentation_volume_kwargs)
 
-        rejection_threshold = volume_config.get('rejection_threshold', 0.6)
-        super().__init__(self.raw_volume, self.segmentation_volume,
-                         sync=True, rejection_dataset_indices=1,
-                         rejection_criterion=RejectNonZeroThreshold(rejection_threshold))
+        rejection_threshold = volume_config.get('rejection_threshold', 0.92)
+        super().__init__(self.segmentation_volume,
+                         sync=True, rejection_dataset_indices=0,
+                         rejection_criterion=RejectSingleLabelVolumes(rejection_threshold))
         # Set master config (for transforms)
         self.master_config = {} if master_config is None else master_config
         # Get transforms
@@ -86,13 +100,8 @@ class CremiDataset(ZipReject):
         # affinity transforms for affinity targets
         # we apply the affinity target calculation only to the segmentation (1)
         #assert self.affinity_config is not None
-        #transforms.add(affinity_config_to_transform(apply_to=[1], **self.affinity_config))
+        transforms.add(affinity_config_to_transform(apply_to=[0], **self.affinity_config))
 
-        # TODO: add transfrom for directional DT
-        if self.master_config.get('compute_directions', False):
-            direction_config = self.master_config.get('compute_directions')
-            transforms.add(LabelToDirections(n_directions=direction_config.get('n_directions'),
-                                             compute_z=direction_config.get('z_direction')))
 
         # TODO: add clipping transformation
 
@@ -102,6 +111,9 @@ class CremiDataset(ZipReject):
             # One might need to crop after elastic transform to avoid edge artefacts of affinity
             # computation being warped into the FOV.
             transforms.add(VolumeAsymmetricCrop(**crop_config))
+
+        transforms.add(RemoveInvalidAffs(apply_to=[0]))
+        transforms.add(SetVAETarget())
 
         return transforms
 

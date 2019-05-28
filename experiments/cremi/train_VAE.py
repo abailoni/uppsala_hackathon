@@ -1,4 +1,4 @@
-import quantizedVDT
+import vaeAffs
 
 from speedrun import BaseExperiment, TensorboardMixin, InfernoMixin
 from speedrun.log_anywhere import register_logger, log_image, log_scalar
@@ -32,7 +32,7 @@ from neurofire.criteria.loss_transforms import RemoveSegmentationFromTarget
 from neurofire.criteria.loss_transforms import InvertTarget
 
 from vaeAffs.datasets.cremi import get_cremi_loader
-from vaeAffs.utils import get_source_dir
+from vaeAffs.utils.path_utils import get_source_dir
 
 
 
@@ -59,10 +59,14 @@ class VaeCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
 
 
     def get_default_offsets(self):
-        return [[-1, 0, 0], [0, -1, 0], [0, 0, -1],
-                [-2, 0, 0], [0, -3, 0], [0, 0, -3],
-                [-3, 0, 0], [0, -9, 0], [0, 0, -9],
-                [-4, 0, 0], [0, -27, 0], [0, 0, -27]]
+        return [[0, -3, -3], [0, -1, 0], [0, 0, -1],
+                [0, -9, -9], [0, -3, 0], [0, 0, -3],
+                [0, -9, -15], [0, -9, 0], [0, 0, -9],
+                [0, -15, -9], [0, -27, 0], [0, 0, -27]]
+        # return [[-1, 0, 0], [0, -1, 0], [0, 0, -1],
+        #         [-2, 0, 0], [0, -3, 0], [0, 0, -3],
+        #         [-3, 0, 0], [0, -9, 0], [0, 0, -9],
+        #         [-4, 0, 0], [0, -27, 0], [0, 0, -27]]
 
     def build_model(self, model_config=None):
         model_config = self.get('model') if model_config is None else model_config
@@ -76,7 +80,7 @@ class VaeCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
 
     def inferno_build_criterion(self):
         print("Building criterion")
-        loss = vaeAffs.vanilla_vae.VAE_loss()
+        loss = vaeAffs.models.vanilla_vae.VAE_loss()
 
         self._trainer.build_criterion(loss)
         self._trainer.build_validation_criterion(loss)

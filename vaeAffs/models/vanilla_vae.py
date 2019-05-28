@@ -10,47 +10,11 @@ from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
 import time
 from glob import glob
-from util import *
+from .util import *
 import numpy as np
 from PIL import Image
 
-parser = argparse.ArgumentParser(description='PyTorch VAE')
-parser.add_argument('--batch-size', type=int, default=128, metavar='N',
-                    help='input batch size for training (default: 128)')
-parser.add_argument('--epochs', type=int, default=20, metavar='N',
-                    help='number of epochs to train (default: 20)')
-parser.add_argument('--no-cuda', action='store_true', default=False,
-                    help='enables CUDA training')
-parser.add_argument('--seed', type=int, default=1, metavar='S',
-                    help='random seed (default: 1)')
-parser.add_argument('--log-interval', type=int, default=1, metavar='N',
-                    help='how many batches to wait before logging training status')
-
-args = parser.parse_args()
-args.cuda = not args.no_cuda and torch.cuda.is_available()
-
-torch.manual_seed(args.seed)
-if args.cuda:
-    torch.cuda.manual_seed(args.seed)
-
-kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
-train_loader = range(2080)
-test_loader = range(40)
-
-totensor = transforms.ToTensor()
-def load_batch(batch_idx, istrain):
-    if istrain:
-        template = '../data/train/%s.jpg'
-    else:
-        template = '../data/test/%s.jpg'
-    l = [str(batch_idx*128 + i).zfill(6) for i in range(128)]
-    data = []
-    for idx in l:
-        img = Image.open(template%idx)
-        data.append(np.array(img))
-    data = [totensor(i) for i in data]
-    return torch.stack(data, dim=0)
-
+from inferno.extensions.layers.reshape import GlobalMeanPooling
 
 class VAE(nn.Module):
     def __init__(self, nc, ngf, ndf, latent_variable_size):
@@ -76,12 +40,13 @@ class VAE(nn.Module):
 
         self.e5 = nn.Conv2d(ndf*8, ndf*8, 4, 2, 1)
         self.bn5 = nn.BatchNorm2d(ndf*8)
+        self.global_pool = GlobalMeanPooling()
 
-        self.fc1 = nn.Linear(ndf*8*4*4, latent_variable_size)
-        self.fc2 = nn.Linear(ndf*8*4*4, latent_variable_size)
+        self.fc1 = nn.Conv2d(ndf * 8, latent_variable_size, 1, 1, 0)
+        self.fc2 = nn.Conv2d(ndf * 8, latent_variable_size, 1, 1, 0)
 
         # decoder
-        self.d1 = nn.Linear(latent_variable_size, ngf*8*2*4*4)
+        self.d1 = nn.Conv2d(latent_variable_size, ngf*8*2, 1, 1, 0)
 
         self.up1 = nn.UpsamplingNearest2d(scale_factor=2)
         self.pd1 = nn.ReplicationPad2d(1)
@@ -116,23 +81,33 @@ class VAE(nn.Module):
         h2 = self.leakyrelu(self.bn2(self.e2(h1)))
         h3 = self.leakyrelu(self.bn3(self.e3(h2)))
         h4 = self.leakyrelu(self.bn4(self.e4(h3)))
-        h5 = self.leakyrelu(self.bn5(self.e5(h4)))
-        h5 = h5.view(-1, self.ndf*8*4*4)
+        h5 = self.leakyrelu(self.e5(h4))
+
+        spatial_size = h5.size()[2]
+
+        # h5 = self.global_pool(h5)
 
         return self.fc1(h5), self.fc2(h5)
 
     def reparametrize(self, mu, logvar):
         std = logvar.mul(0.5).exp_()
-        if args.cuda:
-            eps = torch.cuda.FloatTensor(std.size()).normal_()
-        else:
-            eps = torch.FloatTensor(std.size()).normal_()
+        # if args.cuda:
+        eps = torch.cuda.FloatTensor(std.size()).normal_()
+        # else:
+        #     eps = torch.FloatTensor(std.size()).normal_()
         eps = Variable(eps)
         return eps.mul(std).add_(mu)
 
+    def check_dim(self, x):
+        if x.dim() != 4:
+            assert x.dim() == 5
+            # Get rid of third dimension:
+            x = x[:,:,0]
+        return x
+
     def decode(self, z):
         h1 = self.relu(self.d1(z))
-        h1 = h1.view(-1, self.ngf*8*2, 4, 4)
+        # h1 = h1.view(-1, self.ngf*8*2, 4, 4)
         h2 = self.leakyrelu(self.bn6(self.d2(self.pd1(self.up1(h1)))))
         h3 = self.leakyrelu(self.bn7(self.d3(self.pd2(self.up2(h2)))))
         h4 = self.leakyrelu(self.bn8(self.d4(self.pd3(self.up3(h3)))))
@@ -141,45 +116,38 @@ class VAE(nn.Module):
         return self.sigmoid(self.d6(self.pd5(self.up5(h5))))
 
     def get_latent_var(self, x):
-        mu, logvar = self.encode(x.view(-1, self.nc, self.ndf, self.ngf))
+        x = self.check_dim(x)
+        mu, logvar = self.encode(x)
         z = self.reparametrize(mu, logvar)
         return z
 
     def forward(self, x):
-        mu, logvar = self.encode(x.view(-1, self.nc, self.ndf, self.ngf))
+        x_shape = x.size()
+        x = self.check_dim(x)
+        mu, logvar = self.encode(x)
         z = self.reparametrize(mu, logvar)
         res = self.decode(z)
-        return res, mu, logvar
+        res = res.view(*x_shape)
+        return [res, mu, logvar]
 
 
 model = VAE(nc=3, ngf=128, ndf=128, latent_variable_size=500)
 
-if args.cuda:
-    model.cuda()
 
-reconstruction_function = nn.BCELoss()
-reconstruction_function.size_average = False
-def loss_function(recon_x, x, mu, logvar):
-    BCE = reconstruction_function(recon_x, x)
-
-    # https://arxiv.org/abs/1312.6114 (Appendix B)
-    # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-    KLD_element = mu.pow(2).add_(logvar.exp()).mul_(-1).add_(1).add_(logvar)
-    KLD = torch.sum(KLD_element).mul_(-0.5)
-
-    return BCE + KLD
-
-optimizer = optim.Adam(model.parameters(), lr=1e-4)
+# optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
 
 class VAE_loss(nn.Module):
     def __init__(self):
+        super(VAE_loss, self).__init__()
         self.reconstruction_function = nn.BCELoss()
         self.reconstruction_function.size_average = False
-        super(VAE_loss, self).__init__()
 
-    def forward(self, recon_x, x, mu, logvar):
-        BCE = reconstruction_function(recon_x, x)
+    def forward(self, predictions, target):
+        x = target[:,:,0]
+        recon_x, mu, logvar = predictions
+        recon_x = recon_x[:,:,0]
+        BCE = self.reconstruction_function(recon_x, x)
 
         # https://arxiv.org/abs/1312.6114 (Appendix B)
         # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
