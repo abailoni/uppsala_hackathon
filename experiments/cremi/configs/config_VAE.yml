@@ -206,6 +206,8 @@ trainer:
 #    split_config_keys: True
 #    log_anywhere: ['scalars']
 
+
+
   callbacks:
 #    gradients:
 #      LogOutputGradients:
@@ -217,6 +219,8 @@ trainer:
         verbose: True
 #      GradientClip:
 #        clip_value: 1e-3
+      SaveModelCallback:
+        save_every: 500
 
     scheduling:
       AutoLR:
