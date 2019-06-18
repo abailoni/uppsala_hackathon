@@ -89,12 +89,12 @@ loaders:
     slicing_config:
       # Sliding window size
       window_size:
-        A: &shape [1, 124, 124]
+        A: &shape [3, 87, 87]
         B: *shape
         C: *shape
       # Sliding window stride
       stride:
-        A: &stride [1, 30, 30]
+        A: &stride [2, 30, 30]
         B: *stride
         C: *stride
       # Data slice to iterate over.
@@ -161,12 +161,22 @@ loaders:
 
 
 model:
-  vaeAffs.models.vanilla_vae.VAE_bigger:
-#    input_ch: *tot_offsets
-    encoder_fact: 32
-    decoder_fact: 32
+  vaeAffs.models.vanilla_vae.AutoEncoder:
+#    in_channels: *tot_offsets
+#    out_channels: *tot_offsets
+    add_residual_connections: true
+    conv_type_key: conv_bn
+    fmap_growth: 3
+    in_channels: 16
+    initial_num_fmaps: 40
+    scale_factor:
+      - [1, 3, 3]
+      - [1, 3, 3]
+      - [1, 3, 3]
+    final_activation: Sigmoid
     latent_variable_size: 128
-    unfold_size: 38
+#    unfold_size: 40
+#    max_pool_factor: 8
 
 trainer:
   max_epochs: 10 # basically infinite

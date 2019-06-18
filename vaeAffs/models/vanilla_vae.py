@@ -16,6 +16,7 @@ from inferno.extensions.criteria.set_similarity_measures import SorensenDiceLoss
 
 from inferno.extensions.layers.reshape import GlobalMeanPooling
 
+
 class VAE(nn.Module):
     def __init__(self, nc, ngf, ndf, latent_variable_size):
         super(VAE, self).__init__()
@@ -29,43 +30,43 @@ class VAE(nn.Module):
         self.e1 = nn.Conv2d(nc, ndf, 4, 2, 1)
         self.bn1 = nn.BatchNorm2d(ndf)
 
-        self.e2 = nn.Conv2d(ndf, ndf*2, 4, 2, 1)
-        self.bn2 = nn.BatchNorm2d(ndf*2)
+        self.e2 = nn.Conv2d(ndf, ndf * 2, 4, 2, 1)
+        self.bn2 = nn.BatchNorm2d(ndf * 2)
 
-        self.e3 = nn.Conv2d(ndf*2, ndf*4, 4, 2, 1)
-        self.bn3 = nn.BatchNorm2d(ndf*4)
+        self.e3 = nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1)
+        self.bn3 = nn.BatchNorm2d(ndf * 4)
 
-        self.e4 = nn.Conv2d(ndf*4, ndf*8, 4, 2, 1)
-        self.bn4 = nn.BatchNorm2d(ndf*8)
+        self.e4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1)
+        self.bn4 = nn.BatchNorm2d(ndf * 8)
 
-        self.e5 = nn.Conv2d(ndf*8, ndf*8, 4, 2, 1)
-        self.bn5 = nn.BatchNorm2d(ndf*8)
+        self.e5 = nn.Conv2d(ndf * 8, ndf * 8, 4, 2, 1)
+        self.bn5 = nn.BatchNorm2d(ndf * 8)
         self.global_pool = GlobalMeanPooling()
 
         self.fc1 = nn.Conv2d(ndf * 8, latent_variable_size, 1, 1, 0)
         self.fc2 = nn.Conv2d(ndf * 8, latent_variable_size, 1, 1, 0)
 
         # decoder
-        self.d1 = nn.Conv2d(latent_variable_size, ngf*8*2, 1, 1, 0)
+        self.d1 = nn.Conv2d(latent_variable_size, ngf * 8 * 2, 1, 1, 0)
 
         self.up1 = nn.UpsamplingNearest2d(scale_factor=2)
         self.pd1 = nn.ReplicationPad2d(1)
-        self.d2 = nn.Conv2d(ngf*8*2, ngf*8, 3, 1)
-        self.bn6 = nn.BatchNorm2d(ngf*8, 1.e-3)
+        self.d2 = nn.Conv2d(ngf * 8 * 2, ngf * 8, 3, 1)
+        self.bn6 = nn.BatchNorm2d(ngf * 8, 1.e-3)
 
         self.up2 = nn.UpsamplingNearest2d(scale_factor=2)
         self.pd2 = nn.ReplicationPad2d(1)
-        self.d3 = nn.Conv2d(ngf*8, ngf*4, 3, 1)
-        self.bn7 = nn.BatchNorm2d(ngf*4, 1.e-3)
+        self.d3 = nn.Conv2d(ngf * 8, ngf * 4, 3, 1)
+        self.bn7 = nn.BatchNorm2d(ngf * 4, 1.e-3)
 
         self.up3 = nn.UpsamplingNearest2d(scale_factor=2)
         self.pd3 = nn.ReplicationPad2d(1)
-        self.d4 = nn.Conv2d(ngf*4, ngf*2, 3, 1)
-        self.bn8 = nn.BatchNorm2d(ngf*2, 1.e-3)
+        self.d4 = nn.Conv2d(ngf * 4, ngf * 2, 3, 1)
+        self.bn8 = nn.BatchNorm2d(ngf * 2, 1.e-3)
 
         self.up4 = nn.UpsamplingNearest2d(scale_factor=2)
         self.pd4 = nn.ReplicationPad2d(1)
-        self.d5 = nn.Conv2d(ngf*2, ngf, 3, 1)
+        self.d5 = nn.Conv2d(ngf * 2, ngf, 3, 1)
         self.bn9 = nn.BatchNorm2d(ngf, 1.e-3)
 
         self.up5 = nn.UpsamplingNearest2d(scale_factor=2)
@@ -102,7 +103,7 @@ class VAE(nn.Module):
         if x.dim() != 4:
             assert x.dim() == 5
             # Get rid of third dimension:
-            x = x[:,:,0]
+            x = x[:, :, 0]
         return x
 
     def decode(self, z):
@@ -130,6 +131,7 @@ class VAE(nn.Module):
         res = res.view(*x_shape)
         return [res, mu, logvar]
 
+
 class VAE_debug(VAE):
     def __init__(self, nc, ngf, ndf, latent_variable_size, unfold_size=6):
         super(VAE_debug, self).__init__(nc, ngf, ndf, latent_variable_size)
@@ -138,8 +140,8 @@ class VAE_debug(VAE):
         self.e1 = nn.Conv2d(nc, ndf, kernel_size=3, stride=1, dilation=2)
         self.bn1 = nn.BatchNorm2d(ndf)
 
-        self.e2 = nn.Conv2d(ndf, ndf*2, kernel_size=3, stride=1, dilation=2)
-        self.bn2 = nn.BatchNorm2d(ndf*2)
+        self.e2 = nn.Conv2d(ndf, ndf * 2, kernel_size=3, stride=1, dilation=2)
+        self.bn2 = nn.BatchNorm2d(ndf * 2)
 
         # self.e3 = nn.Conv2d(ndf*2, ndf*4, kernel_size=3, stride=1, dilation=2)
         # self.bn3 = nn.BatchNorm2d(ndf*4)
@@ -171,7 +173,6 @@ class VAE_debug(VAE):
         self.d3 = nn.ConvTranspose2d(ngf, nc, kernel_size=3, stride=1, padding=0, dilation=2)
         # self.bn7 = nn.BatchNorm2d(ngf, 1.e-3)
 
-
         self.leakyrelu = nn.LeakyReLU(0.2)
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
@@ -198,7 +199,6 @@ class VAE_debug(VAE):
 
         return self.sigmoid(h3)
 
-
     def forward(self, x):
         x_shape = x.size()
         x = self.check_dim(x)
@@ -221,13 +221,14 @@ class LeakyBatchNormConv2D(nn.Module):
     def forward(self, tensor):
         return self.leakyrelu(self.bn(self.conv(tensor)))
 
+
 class LeakyBatchNormTraspConv2D(nn.Module):
     def __init__(self, input_ch, output_ch, kernel_size=3, stride=1, dilation=1,
                  apply_post_conv=True):
         super(LeakyBatchNormTraspConv2D, self).__init__()
         self.conv = nn.ConvTranspose2d(input_ch, output_ch, kernel_size=kernel_size,
-                              stride=stride,
-                              dilation=dilation)
+                                       stride=stride,
+                                       dilation=dilation)
         self.leakyrelu = nn.LeakyReLU(0.2)
         self.bn = nn.BatchNorm2d(output_ch)
         self.appy_post_conv = apply_post_conv
@@ -239,34 +240,232 @@ class LeakyBatchNormTraspConv2D(nn.Module):
             return self.conv(tensor)
 
 
+from neurofire.models.unet.unet_3d import CONV_TYPES, Decoder, DecoderResidual, BaseResidual, Base, Output, Encoder, \
+    EncoderResidual
+
+
+class AutoEncoderSkeleton(nn.Module):
+    def __init__(self, encoders, base, decoders, output, final_activation=None):
+        super(AutoEncoderSkeleton, self).__init__()
+        assert isinstance(encoders, list)
+        assert isinstance(decoders, list)
+
+        assert len(encoders) == len(decoders), "%i, %i" % (len(encoders), len(decoders))
+        assert isinstance(base, list)
+        self.encoders = nn.ModuleList(encoders)
+        self.decoders = nn.ModuleList(decoders)
+
+        self.base = nn.ModuleList(base)
+        self.output = output
+        if isinstance(final_activation, str):
+            self.final_activation = getattr(nn, final_activation)()
+        elif isinstance(final_activation, nn.Module):
+            self.final_activation = final_activation
+        elif final_activation is None:
+            self.final_activation = None
+        else:
+            raise NotImplementedError
+
+    def encode(self, input_):
+        x = input_
+        encoder_out = []
+        # apply encoders and remember their outputs
+        for encoder in self.encoders:
+            x = encoder(x)
+            encoder_out.append(x)
+
+        encoded_variable = self.base[0](x)
+
+        return encoded_variable
+
+    def decode(self, encoded_variable):
+        x = self.base[1](encoded_variable)
+
+        # apply decoders
+        max_level = len(self.decoders) - 1
+        for level, decoder in enumerate(self.decoders):
+            # the decoder gets input from the previous decoder and the encoder
+            # from the same level
+            x = decoder(x)
+
+        x = self.output(x)
+        if self.final_activation is not None:
+            x = self.final_activation(x)
+        return x
+
+
+    def forward(self, input_):
+        encoded_variable = self.encode(input_)
+        x = self.decode(encoded_variable)
+        return x
+
+
+class AutoEncoder(AutoEncoderSkeleton):
+    """
+    3D U-Net architecture.
+    """
+
+    def __init__(self,
+                 in_channels,
+                 initial_num_fmaps,
+                 fmap_growth,
+                 latent_variable_size=128,
+                 scale_factor=2,
+                 final_activation='auto',
+                 conv_type_key='vanilla',
+                 add_residual_connections=False):
+        """
+        Parameter:
+        ----------
+        in_channels (int): number of input channels
+        out_channels (int): number of output channels
+        initial_num_fmaps (int): number of feature maps of the first layer
+        fmap_growth (int): growth factor of the feature maps; the number of feature maps
+        in layer k is given by initial_num_fmaps * fmap_growth**k
+        final_activation:  final activation used
+        scale_factor (int or list / tuple): upscale / downscale factor (default: 2)
+        final_activation:  final activation used (default: 'auto')
+        conv_type_key: convolutin type
+        """
+        # validate conv-type
+        assert conv_type_key in CONV_TYPES, conv_type_key
+        conv_type = CONV_TYPES[conv_type_key]
+
+        # validate scale factor
+        assert isinstance(scale_factor, (int, list, tuple))
+        self.scale_factor = [scale_factor] * 3 if isinstance(scale_factor, int) else scale_factor
+        assert len(self.scale_factor) == 3
+        # NOTE individual scale factors can have multiple entries for anisotropic sampling
+        assert all(isinstance(sfactor, (int, list, tuple))
+                   for sfactor in self.scale_factor)
+
+        # Set attributes
+        self.in_channels = in_channels
+        self.out_channels = in_channels
+
+        conv_type = CONV_TYPES[conv_type_key]
+        decoder_type = DecoderResidual if add_residual_connections else Decoder
+        encoder_type = EncoderResidual if add_residual_connections else Encoder
+        base_type = BaseResidual if add_residual_connections else Base
+
+        # Build encoders with proper number of feature maps
+        f0e = initial_num_fmaps
+        f1e = initial_num_fmaps * fmap_growth
+        f2e = initial_num_fmaps * fmap_growth ** 2
+        encoders = [
+            encoder_type(in_channels, f0e, 3, self.scale_factor[0], conv_type=conv_type),
+            encoder_type(f0e, f1e, 3, self.scale_factor[1], conv_type=conv_type),
+            encoder_type(f1e, f2e, 3, self.scale_factor[2], conv_type=conv_type)
+        ]
+
+        # Build base
+        # number of base output feature maps
+        # f0b = initial_num_fmaps * fmap_growth ** 3
+        base1 = base_type(f2e, latent_variable_size, 3, conv_type=conv_type)
+        base2 = base_type(latent_variable_size, f2e, 3, conv_type=conv_type)
+        base = [base1, base2]
+
+        # Build decoders (same number of feature maps as MALA)
+        f2d = initial_num_fmaps * fmap_growth ** 2
+        f1d = initial_num_fmaps * fmap_growth
+        f0d = initial_num_fmaps
+        decoders = [
+            decoder_type(f2e, f2d, 3, self.scale_factor[2], conv_type=conv_type),
+            decoder_type(f2d, f1d, 3, self.scale_factor[1], conv_type=conv_type),
+            decoder_type(f1d, f0d, 3, self.scale_factor[0], conv_type=conv_type)
+        ]
+
+        # Build output
+        output = Output(f0d, in_channels, 3)
+        # Parse final activation
+        if final_activation == 'auto':
+            final_activation = nn.Sigmoid() if in_channels == 1 else nn.Softmax2d()
+
+        # Build the architecture
+        super(AutoEncoder, self).__init__(encoders=encoders,
+                                     base=base,
+                                     decoders=decoders,
+                                     output=output,
+                                     final_activation=final_activation)
 
 
 class VAE_bigger(VAE):
-    def __init__(self, input_ch, encoder_fact, decoder_fact, latent_variable_size, unfold_size=6):
+    def __init__(self, input_ch, encoder_fact, decoder_fact, latent_variable_size, unfold_size=6,
+                 max_pool_factor=4):
         super(VAE_bigger, self).__init__(input_ch, encoder_fact, decoder_fact, latent_variable_size)
+
+        self.unfold_size = unfold_size
+        self.max_pool_factor = max_pool_factor
 
         # encoder
         self.layer1 = LeakyBatchNormConv2D(input_ch, decoder_fact, kernel_size=5, stride=1, dilation=1)
         self.layer2 = LeakyBatchNormConv2D(decoder_fact, decoder_fact, kernel_size=3, stride=1, dilation=3)
-        self.layer3 = LeakyBatchNormConv2D(decoder_fact, decoder_fact*2, kernel_size=3, stride=1, dilation=4)
-        self.layer4 = LeakyBatchNormConv2D(decoder_fact*2, decoder_fact*4, kernel_size=3, stride=1, dilation=4)
+        self.layer3 = LeakyBatchNormConv2D(decoder_fact, decoder_fact * 2, kernel_size=3, stride=1, dilation=4)
+        self.layer4 = LeakyBatchNormConv2D(decoder_fact * 2, decoder_fact * 4, kernel_size=3, stride=1, dilation=4)
 
         self.unfold = nn.Unfold(kernel_size=unfold_size)
 
-        self.fc1 = nn.Conv1d(decoder_fact * 4 * unfold_size * unfold_size, latent_variable_size, 1, 1, 0)
+        downscaled_patch_size = int(self.unfold_size / self.max_pool_factor)
+        self.fc1 = nn.Conv1d(decoder_fact * 4 * downscaled_patch_size * downscaled_patch_size, latent_variable_size, 1,
+                             1, 0)
 
         # decoder
-        self.d1 = nn.Conv1d(latent_variable_size, encoder_fact * 4 * unfold_size * unfold_size, 1, 1, 0)
+        self.d1 = nn.Conv1d(latent_variable_size, encoder_fact * 4 * downscaled_patch_size * downscaled_patch_size, 1,
+                            1, 0)
 
         self.fold = nn.Fold(output_size=(unfold_size, unfold_size), kernel_size=unfold_size)
-        self.trans_layer1 = LeakyBatchNormTraspConv2D(encoder_fact * 4, encoder_fact * 2, kernel_size=3, stride=1, dilation=4)
-        self.trans_layer2 = LeakyBatchNormTraspConv2D(encoder_fact * 2, encoder_fact, kernel_size=3, stride=1, dilation=4)
+        self.trans_layer1 = LeakyBatchNormTraspConv2D(encoder_fact * 4, encoder_fact * 2, kernel_size=3, stride=1,
+                                                      dilation=4)
+        self.trans_layer2 = LeakyBatchNormTraspConv2D(encoder_fact * 2, encoder_fact, kernel_size=3, stride=1,
+                                                      dilation=4)
         self.trans_layer3 = LeakyBatchNormTraspConv2D(encoder_fact, encoder_fact, kernel_size=3, stride=1, dilation=3)
         self.trans_layer4 = LeakyBatchNormTraspConv2D(encoder_fact, input_ch, kernel_size=5, stride=1, dilation=1,
                                                       apply_post_conv=False)
         self.leakyrelu = nn.LeakyReLU(0.2)
+        self.max_pool = nn.MaxPool2d(kernel_size=max_pool_factor, stride=max_pool_factor, return_indices=True)
+        self.max_unpool = nn.MaxUnpool2d(kernel_size=max_pool_factor, stride=max_pool_factor)
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
+
+    def apply_AE(self, x):
+        # Encode:
+        h1 = self.layer1(x)
+        h2 = self.layer2(h1)
+        h3 = self.layer3(h2)
+        h4 = self.layer4(h3)
+        N, C, output_size_0, output_size_1 = h4.size()
+        unfolded = self.unfold(h4)
+        nb_patches = unfolded.size(2)
+        # Reshape to get spatial patches:
+        patches = unfolded.view((N, C, self.unfold_size, self.unfold_size, nb_patches))
+        # Put patches in batch dimension:
+        patches = patches.view((-1, C, self.unfold_size, self.unfold_size))
+
+        # Perform max-pooling:
+        downscaled_patches, max_pool_indices = self.max_pool(patches)
+        new_patch_size = int(self.unfold_size / self.max_pool_factor)
+        downscaled_patches = downscaled_patches.view((N, C, new_patch_size, new_patch_size, nb_patches))
+        downscaled_patches = downscaled_patches.view((N, -1, nb_patches))
+
+        encoded = self.fc1(downscaled_patches)
+
+        h1 = self.relu(self.d1(encoded))
+        h1 = h1.view((N, C, new_patch_size, new_patch_size, nb_patches))
+        h1 = h1.view((-1, C, new_patch_size, new_patch_size))
+        # Max Unpool :
+        # h1 = nn.functional.interpolate(h1, scale_factor=self.max_pool_factor)
+        h1 = self.max_unpool(h1, max_pool_indices)
+        h1 = h1.view((N, C, self.unfold_size, self.unfold_size, nb_patches))
+        h1 = h1.view((N, -1, nb_patches))
+
+        folded_h1 = nn.functional.fold(h1, output_size=(output_size_0, output_size_1), kernel_size=self.unfold_size)
+
+        h2 = self.trans_layer1(folded_h1)
+        h3 = self.trans_layer2(h2)
+        h4 = self.trans_layer3(h3)
+        h5 = self.trans_layer4(h4)
+
+        return encoded, self.sigmoid(h5)
 
     def encode(self, x):
         h1 = self.layer1(x)
@@ -279,7 +478,7 @@ class VAE_bigger(VAE):
     def decode(self, z):
         h1 = self.relu(self.d1(z))
         nb_blocks = h1.size()[2]
-        assert nb_blocks == 1
+        # assert nb_blocks == 1
 
         h1 = self.fold(h1)
         h2 = self.trans_layer1(h1)
@@ -289,15 +488,16 @@ class VAE_bigger(VAE):
 
         return self.sigmoid(h5)
 
-
     def forward(self, x):
         x_shape = x.size()
         x = self.check_dim(x)
-        z = self.encode(x)
+        # z = self.encode(x)
         # z = self.reparametrize(mu, logvar)
-        res = self.decode(z)
+        # res = self.decode(z)
+        z, res = self.apply_AE(x)
         res = res.view(*x_shape)
         return [res, z, z]
+
 
 class VAE_loss(nn.Module):
     def __init__(self):
@@ -308,9 +508,9 @@ class VAE_loss(nn.Module):
         self.reconstruction_function = nn.MSELoss()
 
     def forward(self, predictions, target):
-        x = target[:,:,0]
+        x = target[:, :, 0]
         recon_x, mu, logvar = predictions
-        recon_x = recon_x[:,:,0]
+        recon_x = recon_x[:, :, 0]
         BCE = self.reconstruction_function(recon_x, x)
 
         return BCE
@@ -321,10 +521,6 @@ class VAE_loss(nn.Module):
         # KLD = torch.sum(KLD_element).mul_(-0.5)
         #
         # return BCE + KLD
-
-
-
-
 
 # def train(epoch):
 #     model.train()
