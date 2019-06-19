@@ -243,9 +243,27 @@ class LeakyBatchNormTraspConv2D(nn.Module):
 from neurofire.models.unet.unet_3d import CONV_TYPES, Decoder, DecoderResidual, BaseResidual, Base, Output, Encoder, \
     EncoderResidual
 
+def unfold_3d(x, *args, **kwargs):
+    unfolded = []
+    for z in range(x.shape[2]):
+        unfolded_slice = nn.functional.unfold(x[:,:,z], *args, **kwargs)
+        assert unfolded_slice.shape[-1] == 1, "kernel size does not match! Trying to unfold a patch of size {} with kernel {}".format(x.shape[-1], kwargs["kernel_size"])
+        unfolded.append(unfolded_slice)
+    x = torch.cat(unfolded, dim=2)
+    return x
+
+def fold_3d(x, *args, **kwargs):
+    folded = []
+    for z in range(x.shape[2]):
+        folded_slice = nn.functional.fold(x[:,:,[z]], *args, **kwargs)
+        folded.append(folded_slice)
+    x = torch.stack(folded, dim=2)
+    return x
 
 class AutoEncoderSkeleton(nn.Module):
-    def __init__(self, encoders, base, decoders, output, final_activation=None):
+    def __init__(self, encoders, base, decoders, output,
+                 unfold_size=1,
+                 final_activation=None):
         super(AutoEncoderSkeleton, self).__init__()
         assert isinstance(encoders, list)
         assert isinstance(decoders, list)
@@ -266,6 +284,9 @@ class AutoEncoderSkeleton(nn.Module):
         else:
             raise NotImplementedError
 
+        assert isinstance(unfold_size, int)
+        self.unfold_size = unfold_size
+
     def encode(self, input_):
         x = input_
         encoder_out = []
@@ -274,12 +295,15 @@ class AutoEncoderSkeleton(nn.Module):
             x = encoder(x)
             encoder_out.append(x)
 
+        x = unfold_3d(x, kernel_size=self.unfold_size)
+
         encoded_variable = self.base[0](x)
 
         return encoded_variable
 
     def decode(self, encoded_variable):
         x = self.base[1](encoded_variable)
+        x = fold_3d(x, output_size=(self.unfold_size, self.unfold_size), kernel_size=self.unfold_size)
 
         # apply decoders
         max_level = len(self.decoders) - 1
@@ -292,7 +316,6 @@ class AutoEncoderSkeleton(nn.Module):
         if self.final_activation is not None:
             x = self.final_activation(x)
         return x
-
 
     def forward(self, input_):
         encoded_variable = self.encode(input_)
@@ -313,6 +336,7 @@ class AutoEncoder(AutoEncoderSkeleton):
                  scale_factor=2,
                  final_activation='auto',
                  conv_type_key='vanilla',
+                 unfold_size=1,
                  add_residual_connections=False):
         """
         Parameter:
@@ -334,7 +358,7 @@ class AutoEncoder(AutoEncoderSkeleton):
         # validate scale factor
         assert isinstance(scale_factor, (int, list, tuple))
         self.scale_factor = [scale_factor] * 3 if isinstance(scale_factor, int) else scale_factor
-        assert len(self.scale_factor) == 3
+        assert len(self.scale_factor) == 1
         # NOTE individual scale factors can have multiple entries for anisotropic sampling
         assert all(isinstance(sfactor, (int, list, tuple))
                    for sfactor in self.scale_factor)
@@ -354,25 +378,25 @@ class AutoEncoder(AutoEncoderSkeleton):
         f2e = initial_num_fmaps * fmap_growth ** 2
         encoders = [
             encoder_type(in_channels, f0e, 3, self.scale_factor[0], conv_type=conv_type),
-            encoder_type(f0e, f1e, 3, self.scale_factor[1], conv_type=conv_type),
-            encoder_type(f1e, f2e, 3, self.scale_factor[2], conv_type=conv_type)
+            # encoder_type(f0e, f1e, 3, self.scale_factor[1], conv_type=conv_type),
+            # encoder_type(f1e, f2e, 3, self.scale_factor[2], conv_type=conv_type)
         ]
 
         # Build base
         # number of base output feature maps
         # f0b = initial_num_fmaps * fmap_growth ** 3
-        base1 = base_type(f2e, latent_variable_size, 3, conv_type=conv_type)
-        base2 = base_type(latent_variable_size, f2e, 3, conv_type=conv_type)
-        base = [base1, base2]
+        base_pre = nn.Conv1d(f0e * unfold_size * unfold_size, latent_variable_size, 1, 1, 0)
+        base_post = nn.Conv1d(latent_variable_size, f0e * unfold_size * unfold_size, 1, 1, 0)
+        base = [base_pre, base_post]
 
         # Build decoders (same number of feature maps as MALA)
         f2d = initial_num_fmaps * fmap_growth ** 2
         f1d = initial_num_fmaps * fmap_growth
         f0d = initial_num_fmaps
         decoders = [
-            decoder_type(f2e, f2d, 3, self.scale_factor[2], conv_type=conv_type),
-            decoder_type(f2d, f1d, 3, self.scale_factor[1], conv_type=conv_type),
-            decoder_type(f1d, f0d, 3, self.scale_factor[0], conv_type=conv_type)
+            # decoder_type(f2e, f2d, 3, self.scale_factor[2], conv_type=conv_type),
+            # decoder_type(f1d, f1d, 3, self.scale_factor[1], conv_type=conv_type),
+            decoder_type(f0d, f0d, 3, self.scale_factor[0], conv_type=conv_type)
         ]
 
         # Build output
@@ -383,10 +407,11 @@ class AutoEncoder(AutoEncoderSkeleton):
 
         # Build the architecture
         super(AutoEncoder, self).__init__(encoders=encoders,
-                                     base=base,
-                                     decoders=decoders,
-                                     output=output,
-                                     final_activation=final_activation)
+                                          base=base,
+                                          decoders=decoders,
+                                          output=output,
+                                          final_activation=final_activation,
+                                          unfold_size=unfold_size)
 
 
 class VAE_bigger(VAE):
