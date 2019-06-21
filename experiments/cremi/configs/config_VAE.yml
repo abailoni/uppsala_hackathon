@@ -89,7 +89,7 @@ loaders:
     slicing_config:
       # Sliding window size
       window_size:
-        A: &shape [1, 141, 141]
+        A: &shape [1, 87, 87] # 141
         B: *shape
         C: *shape
       # Sliding window stride

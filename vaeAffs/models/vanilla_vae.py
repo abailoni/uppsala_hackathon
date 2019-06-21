@@ -299,7 +299,8 @@ class AutoEncoderSkeleton(nn.Module):
 
         encoded_variable = self.base[0](x)
 
-        return encoded_variable
+        # FIXME: temp hack
+        return encoded_variable[:,:24], encoded_variable[:,24:]
 
     def decode(self, encoded_variable):
         x = self.base[1](encoded_variable)
@@ -317,10 +318,18 @@ class AutoEncoderSkeleton(nn.Module):
             x = self.final_activation(x)
         return x
 
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
     def forward(self, input_):
-        encoded_variable = self.encode(input_)
-        x = self.decode(encoded_variable)
-        return x
+        # encoded_variable = self.encode(input_)
+        mu, logvar = self.encode(input_)
+
+        z = self.reparameterize(mu, logvar)
+
+        return [self.decode(z), mu, logvar]
 
 
 class AutoEncoder(AutoEncoderSkeleton):
@@ -385,7 +394,7 @@ class AutoEncoder(AutoEncoderSkeleton):
         # Build base
         # number of base output feature maps
         # f0b = initial_num_fmaps * fmap_growth ** 3
-        base_pre = nn.Conv1d(f0e * unfold_size * unfold_size, latent_variable_size, 1, 1, 0)
+        base_pre = nn.Conv1d(f0e * unfold_size * unfold_size, latent_variable_size * 2, 1, 1, 0)
         base_post = nn.Conv1d(latent_variable_size, f0e * unfold_size * unfold_size, 1, 1, 0)
         base = [base_pre, base_post]
 
@@ -414,119 +423,11 @@ class AutoEncoder(AutoEncoderSkeleton):
                                           unfold_size=unfold_size)
 
 
-class VAE_bigger(VAE):
-    def __init__(self, input_ch, encoder_fact, decoder_fact, latent_variable_size, unfold_size=6,
-                 max_pool_factor=4):
-        super(VAE_bigger, self).__init__(input_ch, encoder_fact, decoder_fact, latent_variable_size)
-
-        self.unfold_size = unfold_size
-        self.max_pool_factor = max_pool_factor
-
-        # encoder
-        self.layer1 = LeakyBatchNormConv2D(input_ch, decoder_fact, kernel_size=5, stride=1, dilation=1)
-        self.layer2 = LeakyBatchNormConv2D(decoder_fact, decoder_fact, kernel_size=3, stride=1, dilation=3)
-        self.layer3 = LeakyBatchNormConv2D(decoder_fact, decoder_fact * 2, kernel_size=3, stride=1, dilation=4)
-        self.layer4 = LeakyBatchNormConv2D(decoder_fact * 2, decoder_fact * 4, kernel_size=3, stride=1, dilation=4)
-
-        self.unfold = nn.Unfold(kernel_size=unfold_size)
-
-        downscaled_patch_size = int(self.unfold_size / self.max_pool_factor)
-        self.fc1 = nn.Conv1d(decoder_fact * 4 * downscaled_patch_size * downscaled_patch_size, latent_variable_size, 1,
-                             1, 0)
-
-        # decoder
-        self.d1 = nn.Conv1d(latent_variable_size, encoder_fact * 4 * downscaled_patch_size * downscaled_patch_size, 1,
-                            1, 0)
-
-        self.fold = nn.Fold(output_size=(unfold_size, unfold_size), kernel_size=unfold_size)
-        self.trans_layer1 = LeakyBatchNormTraspConv2D(encoder_fact * 4, encoder_fact * 2, kernel_size=3, stride=1,
-                                                      dilation=4)
-        self.trans_layer2 = LeakyBatchNormTraspConv2D(encoder_fact * 2, encoder_fact, kernel_size=3, stride=1,
-                                                      dilation=4)
-        self.trans_layer3 = LeakyBatchNormTraspConv2D(encoder_fact, encoder_fact, kernel_size=3, stride=1, dilation=3)
-        self.trans_layer4 = LeakyBatchNormTraspConv2D(encoder_fact, input_ch, kernel_size=5, stride=1, dilation=1,
-                                                      apply_post_conv=False)
-        self.leakyrelu = nn.LeakyReLU(0.2)
-        self.max_pool = nn.MaxPool2d(kernel_size=max_pool_factor, stride=max_pool_factor, return_indices=True)
-        self.max_unpool = nn.MaxUnpool2d(kernel_size=max_pool_factor, stride=max_pool_factor)
-        self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
-
-    def apply_AE(self, x):
-        # Encode:
-        h1 = self.layer1(x)
-        h2 = self.layer2(h1)
-        h3 = self.layer3(h2)
-        h4 = self.layer4(h3)
-        N, C, output_size_0, output_size_1 = h4.size()
-        unfolded = self.unfold(h4)
-        nb_patches = unfolded.size(2)
-        # Reshape to get spatial patches:
-        patches = unfolded.view((N, C, self.unfold_size, self.unfold_size, nb_patches))
-        # Put patches in batch dimension:
-        patches = patches.view((-1, C, self.unfold_size, self.unfold_size))
-
-        # Perform max-pooling:
-        downscaled_patches, max_pool_indices = self.max_pool(patches)
-        new_patch_size = int(self.unfold_size / self.max_pool_factor)
-        downscaled_patches = downscaled_patches.view((N, C, new_patch_size, new_patch_size, nb_patches))
-        downscaled_patches = downscaled_patches.view((N, -1, nb_patches))
-
-        encoded = self.fc1(downscaled_patches)
-
-        h1 = self.relu(self.d1(encoded))
-        h1 = h1.view((N, C, new_patch_size, new_patch_size, nb_patches))
-        h1 = h1.view((-1, C, new_patch_size, new_patch_size))
-        # Max Unpool :
-        # h1 = nn.functional.interpolate(h1, scale_factor=self.max_pool_factor)
-        h1 = self.max_unpool(h1, max_pool_indices)
-        h1 = h1.view((N, C, self.unfold_size, self.unfold_size, nb_patches))
-        h1 = h1.view((N, -1, nb_patches))
-
-        folded_h1 = nn.functional.fold(h1, output_size=(output_size_0, output_size_1), kernel_size=self.unfold_size)
-
-        h2 = self.trans_layer1(folded_h1)
-        h3 = self.trans_layer2(h2)
-        h4 = self.trans_layer3(h3)
-        h5 = self.trans_layer4(h4)
-
-        return encoded, self.sigmoid(h5)
-
-    def encode(self, x):
-        h1 = self.layer1(x)
-        h2 = self.layer2(h1)
-        h3 = self.layer3(h2)
-        h4 = self.layer4(h3)
-        unfolded = self.unfold(h4)
-        return self.fc1(unfolded)
-
-    def decode(self, z):
-        h1 = self.relu(self.d1(z))
-        nb_blocks = h1.size()[2]
-        # assert nb_blocks == 1
-
-        h1 = self.fold(h1)
-        h2 = self.trans_layer1(h1)
-        h3 = self.trans_layer2(h2)
-        h4 = self.trans_layer3(h3)
-        h5 = self.trans_layer4(h4)
-
-        return self.sigmoid(h5)
-
-    def forward(self, x):
-        x_shape = x.size()
-        x = self.check_dim(x)
-        # z = self.encode(x)
-        # z = self.reparametrize(mu, logvar)
-        # res = self.decode(z)
-        z, res = self.apply_AE(x)
-        res = res.view(*x_shape)
-        return [res, z, z]
 
 
-class VAE_loss(nn.Module):
+class AE_loss(nn.Module):
     def __init__(self):
-        super(VAE_loss, self).__init__()
+        super(AE_loss, self).__init__()
         # self.reconstruction_function = nn.BCELoss()
         # self.reconstruction_function.size_average = False
         # self.reconstruction_function = SorensenDiceLoss()
@@ -539,6 +440,38 @@ class VAE_loss(nn.Module):
         BCE = self.reconstruction_function(recon_x, x)
 
         return BCE
+
+        # # https://arxiv.org/abs/1312.6114 (Appendix B)
+        # # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+        # KLD_element = mu.pow(2).add_(logvar.exp()).mul_(-1).add_(1).add_(logvar)
+        # KLD = torch.sum(KLD_element).mul_(-0.5)
+        #
+        # return BCE + KLD
+
+
+class VAE_loss(nn.Module):
+    # def __init__(self):
+    #     super(VAE_loss, self).__init__()
+        # self.reconstruction_function = nn.BCELoss()
+        # self.reconstruction_function.size_average = False
+        # self.reconstruction_function = SorensenDiceLoss()
+        # self.reconstruction_function = nn.MSELoss()
+
+    def forward(self, predictions, target):
+        # x = target[:, :, 0]
+        recon_x, mu, logvar = predictions
+
+        # Reconstruction loss:
+        BCE = nn.functional.binary_cross_entropy(recon_x, target, reduction='sum')
+
+        # see Appendix B from VAE paper:
+        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
+        # https://arxiv.org/abs/1312.6114
+        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+
+
+        return BCE + KLD
 
         # # https://arxiv.org/abs/1312.6114 (Appendix B)
         # # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)

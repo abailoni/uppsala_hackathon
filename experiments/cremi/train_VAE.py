@@ -33,6 +33,7 @@ from neurofire.criteria.loss_transforms import InvertTarget
 
 from vaeAffs.datasets.cremi import get_cremi_loader
 from vaeAffs.utils.path_utils import get_source_dir
+from vaeAffs.models.vanilla_vae import VAE_loss
 
 
 
@@ -82,6 +83,7 @@ class VaeCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         print("Building criterion")
         # loss = nn.MSELoss()
         loss = SorensenDiceLoss()
+        loss = VAE_loss()
 
         self._trainer.build_criterion(loss)
         self._trainer.build_validation_criterion(loss)
