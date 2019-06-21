@@ -17,3 +17,9 @@ class RemoveInvalidAffs(Transform):
     def tensor_function(self, tensor):
         nb_offsets = int(tensor.shape[0] / 2)
         return (1-tensor[:nb_offsets])*tensor[nb_offsets:]
+
+
+class InvertTargets(Transform):
+    def tensor_function(self, tensor):
+        nb_offsets = int(tensor.shape[0] / 2)
+        return (1-tensor[:nb_offsets])*tensor[nb_offsets:]

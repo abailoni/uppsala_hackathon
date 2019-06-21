@@ -18,6 +18,8 @@ from quantizedVDT.transforms import LabelToDirections
 from ..transforms import SetVAETarget, RemoveThirdDimension, RemoveInvalidAffs
 import numpy as np
 
+from neurofire.criteria.loss_transforms import InvertTarget
+
 
 class RejectSingleLabelVolumes(object):
     def __init__(self, threshold):
@@ -67,7 +69,7 @@ class CremiDataset(ZipReject):
         rejection_threshold = volume_config.get('rejection_threshold', 0.92)
         super().__init__(self.raw_volume, self.segmentation_volume,
                          sync=True, rejection_dataset_indices=1,
-                         rejection_criterion=RejectNonZeroThreshold(rejection_threshold))
+                         rejection_criterion=RejectSingleLabelVolumes(rejection_threshold))
         # Set master config (for transforms)
         self.master_config = {} if master_config is None else master_config
         # Get transforms
@@ -99,8 +101,8 @@ class CremiDataset(ZipReject):
 
         # affinity transforms for affinity targets
         # we apply the affinity target calculation only to the segmentation (1)
-        #assert self.affinity_config is not None
-        #transforms.add(affinity_config_to_transform(apply_to=[1], **self.affinity_config))
+        assert self.affinity_config is not None
+        transforms.add(affinity_config_to_transform(apply_to=[1], **self.affinity_config))
 
 
         # TODO: add clipping transformation
@@ -112,7 +114,7 @@ class CremiDataset(ZipReject):
             # computation being warped into the FOV.
             transforms.add(VolumeAsymmetricCrop(**crop_config))
 
-        #transforms.add(RemoveInvalidAffs(apply_to=[0]))
+        transforms.add(InvertTarget())
         #transforms.add(SetVAETarget())
 
         return transforms

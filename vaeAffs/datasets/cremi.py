@@ -99,7 +99,7 @@ class CremiDataset(ZipReject):
 
         # affinity transforms for affinity targets
         # we apply the affinity target calculation only to the segmentation (1)
-        #assert self.affinity_config is not None
+        assert self.affinity_config is not None
         transforms.add(affinity_config_to_transform(apply_to=[0], **self.affinity_config))
 
 

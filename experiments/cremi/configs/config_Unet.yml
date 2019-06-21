@@ -11,9 +11,10 @@ device: cuda
 loaders:
   general:
     volume_config:
+      rejection_threshold: 0.60
       segmentation:
         affinity_config:
-          retain_mask: True # This keep a mask of the valid affinities (not involving the ignore-label)
+          retain_mask: False # This keep a mask of the valid affinities (not involving the ignore-label)
           retain_segmentation: False # This keeps the label image in the inputs
           ignore_label: 0
 
@@ -27,16 +28,16 @@ loaders:
         artifact_source:
             min_masking_ratio: .5
             slicing_config:
-              window_size: [1, 81, 81]  #change x and y to window size
+              window_size: [1, 87, 87]  #change x and y to window size
               stride: [1, 128, 128]
               downsampling_ratio: [1, 1, 1]
             volume_config:
               artifacts:
-                path: '/export/home/abailoni/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
+                path: '/home/abailoni_local/hci_home/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
                 path_in_h5_dataset: 'defect_sections/raw'
                 dtype: float32
               alpha_mask:
-                path: '/export/home/abailoni/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
+                path: '/home/abailoni_local/hci_home/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
                 path_in_h5_dataset: 'defect_sections/mask'
             master_config:
               elastic_transform:
@@ -52,21 +53,23 @@ loaders:
         sigma: 50.
         order: 0
       random_slides: False
-      shape_after_slide: [81, 81]   #change to x, y of window size
+      shape_after_slide: [87, 87]   #change to x, y of window size
 
       random_flip: False
 
       compute_directions:
         n_directions: *n_directions
         z_direction:  &z_direction True
-      crop_after_target: False
+      crop_after_target:
+        crop_left: [0, 30, 30]
+        crop_right: [0, 30, 30]
 
     # Specify configuration for the loader
     loader_config:
       # Number of processes to use for loading data. Set to (say) 10 if you wish to
       # use 10 CPU cores, or to 0 if you wish to use the same process for training and
       # data-loading (generally not recommended).
-      batch_size: 1
+      batch_size: 64
       num_workers: 1
       drop_last: True
       pin_memory: False
@@ -86,7 +89,7 @@ loaders:
     slicing_config:
       # Sliding window size
       window_size:
-        A: &shape [1, 81, 81]
+        A: &shape [1, 87, 87]
         B: *shape
         C: *shape
       # Sliding window stride
@@ -105,9 +108,9 @@ loaders:
       # Raw data
       raw:
         path:
-          A: '/export/home/abailoni/datasets/cremi/SOA_affinities/sampleA_train.h5'
-          B: '/export/home/abailoni/datasets/cremi/SOA_affinities/sampleB_train.h5'
-          C: '/export/home/abailoni/datasets/cremi/SOA_affinities/sampleC_train.h5'
+          A: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleA_train.h5'
+          B: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleB_train.h5'
+          C: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
           A: 'raw'
           B: 'raw'
@@ -117,9 +120,9 @@ loaders:
       # Segmentation
       segmentation:
         path:
-          A: '/export/home/abailoni/datasets/cremi/SOA_affinities/sampleA_train.h5'
-          B: '/export/home/abailoni/datasets/cremi/SOA_affinities/sampleB_train.h5'
-          C: '/export/home/abailoni/datasets/cremi/SOA_affinities/sampleC_train.h5'
+          A: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleA_train.h5'
+          B: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleB_train.h5'
+          C: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
           A: 'segmentations/groundtruth_fixed'
           B: 'segmentations/groundtruth_fixed'
@@ -143,14 +146,14 @@ loaders:
     volume_config:
       raw:
         path:
-          C: '/export/home/abailoni/datasets/cremi/SOA_affinities/sampleC_train.h5'
+          C: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
           C: 'raw'
         dtype: float32
         sigma: 0.025
       segmentation:
         path:
-          C: '/export/home/abailoni/datasets/cremi/SOA_affinities/sampleC_train.h5'
+          C: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
           C: 'segmentations/groundtruth_fixed'
         dtype: float32
@@ -169,12 +172,15 @@ model:
       - [1, 3, 3]
       - [1, 3, 3]
       - [1, 3, 3]
-    final_activation: 'ReLU'
+#    final_activation: 'ReLU'
 #    final_activation: !Obj:Conv3D
 #      import_from: inferno.extensions.layers.convolutional
 #      in_channels: *tot_directions
 #      out_channels: *tot_directions
 #      kernel_size: 3
+autoencoder:
+  latent_variable_size: 128
+  path: "/home/abailoni_local/hci_home/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/Conv3DAutoEnc_Soresen_27_fc_noDownscale/model.pytorch"
 
 trainer:
   max_epochs: 10 # basically infinite
@@ -227,6 +233,8 @@ trainer:
 #        clip_value: 1e-3
       SaveModelCallback:
         save_every: 500
+      PlotReconstructedCallback:
+        plot_every: 100
 
     scheduling:
       AutoLR:
@@ -240,129 +248,32 @@ trainer:
         verbose: True
 
 
-#
-#        # visualize gt segmentation
-#        - SegmentationVisualizer:
-#            background_color: [1, 1, 1]
-#            background_label: 0
+firelight:
+  UNet_AE:
+    ImageGridVisualizer:
 
+      input_mapping:
+#        global: [B: 0] # the mapping specified in 'global' is applied to all keys
+        input: ['inputs', index: 0, B: 0, D: 0]
+        target: ['target', index: 0, B: 0, D: 0, C: 0]
+        preds: ['prediction', index: 0, B: 0, D: 0, C: 0]
+#        emb_pred: ["emb_pred", index: 0, B: 0, D: 0]
 
-##  affinities:
-##    RowVisualizer:
-##      input_mapping:
-##        global: [B: 0]
-##        affinities: ''
-##      visualizers:
-##        RiffleVisualizer:
-##          riffle_dim: 'C'
-##          colorize: True
-##          colorize_jointly: ['H', 'W', 'D', 'C']
-##          visualizers:
-##            - ImageVisualizer:
-##                colorize: False
-##                input: ['affinities_stage_0', pre: ['softplus', {normalize: {p: 1}}]]
-##            - ImageVisualizer:
-##                colorize: False
-##                input: ['affinities_stage_1', pre: ['softplus', {normalize: {p: 1}}]]
-#
-#  visualization_grid:
-#    ImageGridVisualizer:
-#      input_mapping:
-#        global: [B: 0, D: ':']
-#        input: ['inputs', index: 0]
-#        segmentation: ['target', index: 0]
-#        embedding: ['prediction', C: '1:']
-#        handcrafted_tags: ['prediction', C: *TagSlice]
-#
-#      row_specs: ['H', 'S', 'C', 'V']
-#      column_specs: ['W', 'D', 'B']
-#      pad_value: [0, .1, .2]
-#
-#      upsampling_factor: 1
-#
-#      visualizers:
-#
-#        # visualize raw input
-#        - InputVisualizer:
-#            cmap: inferno
-#
-#        # visualize GT segmentation
-#        - SegmentationVisualizer:
-#            background_label: 0
-#
-#        # visualize predicted segmentation
-#        - SegmentationVisualizer:
-#            input: 'hdbscan_segmentation'
-#            background_label: 0
-#
-#        # visualize semantic segmentation predictions
-#        - PredictionVisualizer:
-#            input: [C: '0', pre: 'sigmoid']
-#            value_range: [0, 1]
-#
-#        # visualize predicted embeddings
-#        - MaskedPcaVisualizer:
-#            ignore_label: 0
-#            n_components: 3
-#
-#        - PcaVisualizer:
-#            input: ['prediction', C: '1:']
-#            n_components: 6
-#
-#        # visualize hierarchical averaging
-##        - PcaVisualizer:
-##            joint_specs: ['S', 'D', 'H', 'W']
-##            n_components: 3
-##            input:
-##              StackVisualizer:
-##                stack_dim: 'S'
-##                visualizers:
-##                  - ImageVisualizer:
-##                      colorize: False
-##                      input: ['embedding_stage_0']
-##                  - ImageVisualizer:
-##                      colorize: False
-##                      input: ['embedding_stage_1']
-##                  - ImageVisualizer:
-##                      colorize: False
-##                      input: ['prediction', C: '1:']
-#
-##        # same, but only the free ones
-##        - MaskedPcaVisualizer:
-##            input_mapping:
-##              embedding: ['prediction', C: '5:']
-##            ignore_label: 0
-##            n_components: 3
-##
-##        - PcaVisualizer:
-##            input: ['prediction', C: '5:']
-##            n_components: 3
-##
-#         #Handcrafted Tags
-#        - OverlayVisualizer:
-#            visualizers:
-#              - StackVisualizer:
-#                  stack_dim: 'S'
-#                  visualizers:
-#                    - MaskVisualizer:
-#                        input: 'segmentation'
-#                        mask_label: 0
-#                    - MaskVisualizer:
-#                        input: 'segmentation'
-#                        mask_label: 0
-#                        opacity: 0.5
-#              - StackVisualizer:
-#                  stack_dim: 'S'
-#                  colorize: True
-#                  colorize_jointly: 'HWDS'
-#                  cmap: 'Spectral'
-#                  visualizers:
-#                    # visualize ground-truth tags
-#                    - ImageVisualizer:
-#                        input: ['target', index: 2]
-#                        colorize: False
-#
-#                    # visualize predicted tags
-#                    - ImageVisualizer:
-#                        input: 'handcrafted_tags'
-#                        colorize: False
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 3  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'D', 'V']
+      column_specs: ['W', 'C', 'B']
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        # visualize raw input
+        - IdentityVisualizer:
+            input: 'input'
+            cmap: gray
+
+        - IdentityVisualizer:
+            input: 'target'
+            cmap: gray
