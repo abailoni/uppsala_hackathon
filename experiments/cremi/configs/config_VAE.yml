@@ -89,7 +89,7 @@ loaders:
     slicing_config:
       # Sliding window size
       window_size:
-        A: &shape [1, 87, 87]
+        A: &shape [1, 141, 141]
         B: *shape
         C: *shape
       # Sliding window stride
@@ -174,7 +174,7 @@ model:
 #      - [1, 3, 3]
 #      - [1, 1, 1]
     final_activation: Sigmoid
-    latent_variable_size: 12
+    latent_variable_size: 24
     unfold_size: 27
 #    max_pool_factor: 8
 

@@ -15,7 +15,7 @@ from neurofire.transform.artifact_source import RejectNonZeroThreshold
 from neurofire.transform.volume import RandomSlide
 
 from quantizedVDT.transforms import LabelToDirections
-from ..transforms import SetVAETarget, RemoveThirdDimension, RemoveInvalidAffs
+from ..transforms import SetVAETarget, RemoveThirdDimension, RemoveInvalidAffs, RandomlyDownscale
 import numpy as np
 
 
@@ -112,6 +112,7 @@ class CremiDataset(ZipReject):
             # computation being warped into the FOV.
             transforms.add(VolumeAsymmetricCrop(**crop_config))
 
+        transforms.add(RandomlyDownscale(downscale_factor=3))
         transforms.add(RemoveInvalidAffs(apply_to=[0]))
         transforms.add(SetVAETarget())
 
