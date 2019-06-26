@@ -323,13 +323,17 @@ class AutoEncoderSkeleton(nn.Module):
         eps = torch.randn_like(std)
         return mu + eps * std
 
+    def generate(self, shape):
+        return torch.randn(shape)
+
     def forward(self, input_):
         # encoded_variable = self.encode(input_)
         mu, logvar = self.encode(input_)
 
         z = self.reparameterize(mu, logvar)
+        z2 = self.reparameterize(mu, logvar)
 
-        return [self.decode(z), mu, logvar]
+        return [self.decode(z), self.decode(z2), mu, logvar]
 
 
 class AutoEncoder(AutoEncoderSkeleton):
@@ -449,6 +453,7 @@ class AE_loss(nn.Module):
         # return BCE + KLD
 
 
+
 class VAE_loss(nn.Module):
     # def __init__(self):
     #     super(VAE_loss, self).__init__()
@@ -459,7 +464,7 @@ class VAE_loss(nn.Module):
 
     def forward(self, predictions, target):
         # x = target[:, :, 0]
-        recon_x, mu, logvar = predictions
+        recon_x, _, mu, logvar = predictions
 
         # Reconstruction loss:
         BCE = nn.functional.binary_cross_entropy(recon_x, target, reduction='sum')

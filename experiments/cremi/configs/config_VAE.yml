@@ -253,6 +253,7 @@ firelight:
         input: ['inputs', index: 0, B: 0, D: 0]
         target: ['target', index: 0, B: 0, D: 0]
         preds: ['prediction', index: 0, B: 0, D: 0]
+        preds2: ['prediction', index: 1, B: 0, D: 0]
 
       pad_width: 1  # width of the border between images in pixels
       pad_value: .2  # intensity of the border pixels
@@ -268,6 +269,10 @@ firelight:
         - IdentityVisualizer:
             input: 'preds'
             cmap: gray
+        - IdentityVisualizer:
+            input: 'preds2'
+            cmap: gray
+
 
         - IdentityVisualizer:
             input: 'target'

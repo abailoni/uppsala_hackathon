@@ -40,19 +40,27 @@ class EncodingLoss(nn.Module):
         patch_slice = (slice(None), slice(None), slice(0,1), slice(27,54), slice(27,54))
         patch_slice = (slice(None), slice(None), slice(0,1), slice(27,54), slice(27,54))
         target_patch = target
-        with torch.no_grad():
-            target_embedded_patch = self.AE_model.encode(target_patch)[...,0]
-        predicted_embedded_patch = predictions[:, :, 0, 13, 13]
+        # with torch.no_grad():
+        #     target_embedded_patch = self.AE_model.encode(target_patch)[...,0]
+        predicted_embedded_patch = predictions[:, :, [0], 13, 13]
 
         # with torch.no_grad():
-        self.emb_prediction = self.AE_model.decode(predicted_embedded_patch.unsqueeze(2))
+        assert predictions.shape[1] % 2 == 0
+        emb_vect_size = int(predictions.shape[1] / 2)
+        z = self.AE_model.reparameterize(predicted_embedded_patch[:,:emb_vect_size], predicted_embedded_patch[:,emb_vect_size:])
+        self.emb_prediction = self.AE_model.decode(z)
 
         # target_embedded_patch = target_embedded_patch.repeat(27, 27, 1, 1)
         # target_embedded_patch = target_embedded_patch.permute(2,3,0,1)
         # MSE = self.loss(predictions[:,:,0], target_embedded_patch)
         loss = self.soresen_loss(self.emb_prediction, target)
 
+        # # Generate a random patch:
+        self.random_prediction = self.AE_model.decode(torch.randn(predicted_embedded_patch[:,:emb_vect_size].shape).cuda())
+
+
         return loss
+
 
 
 def unfold_3d(x, *args, **kwargs):

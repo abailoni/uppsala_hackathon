@@ -64,7 +64,7 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
     def build_model(self, model_config=None):
         model_config = self.get('model') if model_config is None else model_config
         model_class = list(model_config.keys())[0]
-        out_channels = self.get("autoencoder/latent_variable_size")
+        out_channels = self.get("autoencoder/latent_variable_size") * 2
         model_config[model_class]['out_channels'] = out_channels
         self.set('model/{}/out_channels'.format(model_class), out_channels)
 

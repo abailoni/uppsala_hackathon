@@ -179,8 +179,9 @@ model:
 #      out_channels: *tot_directions
 #      kernel_size: 3
 autoencoder:
-  latent_variable_size: 128
-  path: "/home/abailoni_local/hci_home/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/Conv3DAutoEnc_Soresen_27_fc_noDownscale/model.pytorch"
+  latent_variable_size: 24
+  path: "/home/abailoni_local/hci_home/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE_27fc_24/model.pytorch"
+#  path: "/home/abailoni_local/hci_home/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/Conv3DAutoEnc_Soresen_27_fc_noDownscale/model.pytorch"
 
 trainer:
   max_epochs: 10 # basically infinite
