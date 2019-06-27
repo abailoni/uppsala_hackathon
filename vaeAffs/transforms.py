@@ -8,6 +8,11 @@ class SetVAETarget(Transform):
     def batch_function(self, batch):
         return [batch[0], np.copy(batch[0])]
 
+class HackyHacky(Transform):
+    def batch_function(self, batch):
+        return [batch[0], np.concatenate([np.expand_dims(batch[0],0), batch[1]], axis=0)]
+
+
 
 class RemoveThirdDimension(Transform):
     def tensor_function(self, tensor):

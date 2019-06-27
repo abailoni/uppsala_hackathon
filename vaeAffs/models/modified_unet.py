@@ -62,6 +62,116 @@ class EncodingLoss(nn.Module):
         return loss
 
 
+from speedrun.log_anywhere import log_image, log_embedding
+
+class PatchLoss(nn.Module):
+    def __init__(self, path_autoencoder_model):
+        super(PatchLoss, self).__init__()
+        self.loss = nn.MSELoss()
+        self.soresen_loss = SorensenDiceLoss()
+
+        assert isinstance(path_autoencoder_model, str)
+        AE_model = torch.load(path_autoencoder_model)
+        self.AE_model = AE_model
+        # Freeze the auto-encoder model:
+        # for param in self.AE_model.parameters():
+        #     param.requires_grad = False
+
+
+    def forward(self, predictions, target):
+        patch_shape = (1, 27, 27)
+        number_patches = 60
+        # Extract random patch:
+        pred_shape = predictions.shape[-3:]
+
+        raw = target[:,[0]]
+        target = target[:,1:]
+
+        assert all(i % 2 ==  1 for i in patch_shape), "Patch should be odd"
+        assert all([i <= j for i, j in zip(patch_shape, pred_shape)]), "Prediction is too small"
+
+        max_offsets = [ j-i for i, j in zip(patch_shape, pred_shape)]
+        all_emb_vectors, all_target_patches = [], []
+        all_raw_patches = []
+        for n in range(number_patches):
+            random_offset = [np.random.randint(max_off+1) for max_off in max_offsets]
+            target_slice = (slice(None), slice(None)) + tuple( slice(random_offset[i], random_offset[i]+patch_shape[i]) for i in range(len(random_offset)))
+            vect_slice = (slice(None), slice(None)) + tuple( slice(random_offset[i]+int(patch_shape[i]/2), random_offset[i]+int(patch_shape[i]/2)+1) for i in range(len(random_offset)))
+            all_emb_vectors.append(predictions[vect_slice])
+            all_target_patches.append(target[target_slice])
+            all_raw_patches.append(raw[target_slice])
+
+        # with torch.no_grad():
+        #     target_embedded_patch = self.AE_model.encode(target_patch)[...,0]
+
+        # with torch.no_grad():
+        assert predictions.shape[1] % 2 == 0
+        emb_vect_size = int(predictions.shape[1] / 2)
+        # all_predicted_patches = [self.AE_model.decode(self.AE_model.reparameterize(vect[:,:emb_vect_size,:,0,0], vect[:,emb_vect_size:,:,0,0])) for vect in all_emb_vectors]
+        all_predicted_patches = [self.AE_model.decode(vect[:,:emb_vect_size,:,0,0]) for vect in all_emb_vectors]
+
+        self.all_pred_poatch = all_predicted_patches
+        self.all_targets = all_target_patches
+
+        # target_embedded_patch = target_embedded_patch.repeat(27, 27, 1, 1)
+        # target_embedded_patch = target_embedded_patch.permute(2,3,0,1)
+        # MSE = self.loss(predictions[:,:,0], target_embedded_patch)
+        loss = torch.stack([self.soresen_loss(pred, trg)  for pred, trg in zip(all_predicted_patches, all_target_patches)]).sum()
+
+        # # # Generate a random patch:
+        # self.random_prediction = self.AE_model.decode(torch.randn(predicted_embedded_patch[:,:emb_vect_size].shape).cuda())
+        # FIXME: understand how embedding work (only accept 2D tensor...)
+        # log_embedding("patch_target_new", all_target_patches[0][:,:,:])
+        log_image("ptc_trg", all_target_patches[0][0,:,0])
+        log_image("ptc_pred", all_predicted_patches[0][0,:,0])
+        log_image("ptc_raw", all_raw_patches[0][0,:,0].repeat(4,1,1))
+
+
+        # Make full prediction:
+        # FIXME:
+        full_prediction = predict_full_image(predictions[:1,:emb_vect_size,0], self.AE_model.decode)
+        log_image("full_pred", full_prediction[0])
+
+        return loss
+
+
+def predict_full_image(embeddings, decoder, patch_shape=(27, 27), stride=3):
+    assert len(patch_shape) == 2
+    assert len(embeddings.shape) == 4
+    pred_shape = embeddings.shape[-2:]
+
+    assert all(i % 2 == 1 for i in patch_shape), "Patch should be odd"
+    assert all([i <= j for i, j in zip(patch_shape, pred_shape)]), "Prediction is too small"
+
+    def unfold_and_refold(input, normalize=True):
+        # For the moment we do not overlap them:
+        assert all([j % i == 0 for i, j in zip(patch_shape, pred_shape)]), "Patch should fit the image!"
+        nb_channels = input.shape[1]
+        unfolded = nn.functional.unfold(input[:,:,13:-13,13:-13], kernel_size=(1,1), stride=stride) # (N, C, nb_patches)
+        batch_size = unfolded.shape[0]
+        nb_patches = unfolded.shape[2]
+        unfolded = unfolded.permute(0,2,1).contiguous().view(-1, nb_channels, 1)
+
+        with torch.no_grad():
+            decoded = decoder(unfolded)
+        # Get rid of Z dim:
+        decoded = decoded[:,:,0]
+        decoded_shape = decoded.shape # (N * nb_patches, C, X, Y)
+        # Bring it to the shape expected by fold:
+        decoded_reshaped = decoded.view(batch_size, nb_patches, *decoded_shape[1:]).permute(0,2,3,4,1).view(batch_size,-1,nb_patches)
+        refolded = nn.functional.fold(decoded_reshaped, kernel_size=(27, 27), output_size=pred_shape, stride=stride)
+
+        if normalize:
+            normalization = nn.functional.fold(torch.ones_like(decoded_reshaped), kernel_size=(27, 27), output_size=pred_shape, stride=stride)
+            refolded /= normalization
+        return refolded
+
+
+    folded = unfold_and_refold(embeddings)
+    return folded
+
+
+
 
 def unfold_3d(x, *args, **kwargs):
     unfolded = []
