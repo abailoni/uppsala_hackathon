@@ -58,8 +58,7 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         self.set('loaders/general/volume_config/segmentation/affinity_config/offsets', offsets)
 
     def get_default_offsets(self):
-        return [[0, -4, +4],
-                [0, -4, -4], [0, -4, 0], [0, 0, -4]]
+        return [[0, -2, 0], [0, 0, -2], [0, 2, 0], [0, 0, 2]]
 
     def build_model(self, model_config=None):
         model_config = self.get('model') if model_config is None else model_config

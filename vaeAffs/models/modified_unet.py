@@ -85,20 +85,39 @@ class PatchLoss(nn.Module):
         pred_shape = predictions.shape[-3:]
 
         raw = target[:,[0]]
-        target = target[:,1:]
+        gt_segm = -target[:,1]
+        target_affs = target[:,2:]
+
+        boundary_mask, _ = target_affs.max(dim=1)
 
         assert all(i % 2 ==  1 for i in patch_shape), "Patch should be odd"
         assert all([i <= j for i, j in zip(patch_shape, pred_shape)]), "Prediction is too small"
 
         max_offsets = [ j-i for i, j in zip(patch_shape, pred_shape)]
         all_emb_vectors, all_target_patches = [], []
+        all_ignore_masks = []
         all_raw_patches = []
         for n in range(number_patches):
             random_offset = [np.random.randint(max_off+1) for max_off in max_offsets]
             target_slice = (slice(None), slice(None)) + tuple( slice(random_offset[i], random_offset[i]+patch_shape[i]) for i in range(len(random_offset)))
             vect_slice = (slice(None), slice(None)) + tuple( slice(random_offset[i]+int(patch_shape[i]/2), random_offset[i]+int(patch_shape[i]/2)+1) for i in range(len(random_offset)))
+            center_labels = gt_segm[vect_slice[1:]]
+            is_on_boundary = boundary_mask[vect_slice[1:]]
+            is_on_boundary_repeated = is_on_boundary.repeat(1, *patch_shape)
+            center_labels_repeated = center_labels.repeat(1, *patch_shape)
+            cropped_gt_segm = gt_segm[target_slice[1:]]
+            me_masks = cropped_gt_segm != center_labels_repeated
+
+            # Build ignore masks:
+            # TODO: it would be nice to exclude fully-ignored patches...
+            ignore_masks = (cropped_gt_segm == 0) | (center_labels_repeated == 0) | (is_on_boundary_repeated == 1)
+
+            # Add channel dimension:
+            all_target_patches.append(me_masks.unsqueeze(1))
+            all_ignore_masks.append(ignore_masks.unsqueeze(1))
+
+            # Add data:
             all_emb_vectors.append(predictions[vect_slice])
-            all_target_patches.append(target[target_slice])
             all_raw_patches.append(raw[target_slice])
 
         # with torch.no_grad():
@@ -108,29 +127,36 @@ class PatchLoss(nn.Module):
         assert predictions.shape[1] % 2 == 0
         emb_vect_size = int(predictions.shape[1] / 2)
         # all_predicted_patches = [self.AE_model.decode(self.AE_model.reparameterize(vect[:,:emb_vect_size,:,0,0], vect[:,emb_vect_size:,:,0,0])) for vect in all_emb_vectors]
-        all_predicted_patches = [self.AE_model.decode(vect[:,:emb_vect_size,:,0,0]) for vect in all_emb_vectors]
 
-        self.all_pred_poatch = all_predicted_patches
-        self.all_targets = all_target_patches
+        # Take only first channel, since now we predict masks:
+        all_predicted_patches = [self.AE_model.decode(vect[:,:emb_vect_size,:,0,0])[:,[0]] for vect in all_emb_vectors]
 
-        # target_embedded_patch = target_embedded_patch.repeat(27, 27, 1, 1)
-        # target_embedded_patch = target_embedded_patch.permute(2,3,0,1)
-        # MSE = self.loss(predictions[:,:,0], target_embedded_patch)
-        loss = torch.stack([self.soresen_loss(pred, trg)  for pred, trg in zip(all_predicted_patches, all_target_patches)]).sum()
+        loss = 0
+        for i, [pred, trg, ign] in enumerate(zip(all_predicted_patches, all_target_patches, all_ignore_masks)):
+            if i == 0:
+                log_image("ptc_trg", trg[:4, 0, 0])
+                log_image("ptc_pred", pred[:4, 0, 0])
+                log_image("ptc_raw", all_raw_patches[0][:4, 0, 0])
+                log_image("ptc_ign", ign[:4, 0, 0])
+
+            # Apply ignore mask:
+            pred[ign] = 0
+            trg[ign] = 0
+            loss += self.soresen_loss(pred, trg.float())
+
+
+        # loss = torch.stack([self.soresen_loss(pred, trg)  for pred, trg in zip(all_predicted_patches, all_target_patches)]).sum()
 
         # # # Generate a random patch:
         # self.random_prediction = self.AE_model.decode(torch.randn(predicted_embedded_patch[:,:emb_vect_size].shape).cuda())
         # FIXME: understand how embedding work (only accept 2D tensor...)
         # log_embedding("patch_target_new", all_target_patches[0][:,:,:])
-        log_image("ptc_trg", all_target_patches[0][0,:,0])
-        log_image("ptc_pred", all_predicted_patches[0][0,:,0])
-        log_image("ptc_raw", all_raw_patches[0][0,:,0].repeat(4,1,1))
 
 
-        # Make full prediction:
-        # FIXME:
-        full_prediction = predict_full_image(predictions[:1,:emb_vect_size,0], self.AE_model.decode)
-        log_image("full_pred", full_prediction[0])
+
+        # # Make full prediction:
+        # full_prediction = predict_full_image(predictions[:1,:emb_vect_size,0], self.AE_model.decode)
+        # log_image("full_pred", full_prediction[0])
 
         return loss
 

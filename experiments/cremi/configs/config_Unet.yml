@@ -15,7 +15,7 @@ loaders:
       segmentation:
         affinity_config:
           retain_mask: False # This keep a mask of the valid affinities (not involving the ignore-label)
-          retain_segmentation: False # This keeps the label image in the inputs
+          retain_segmentation: True # This keeps the label image in the inputs
           ignore_label: 0
 
     defect_augmentation_config:
@@ -28,7 +28,7 @@ loaders:
         artifact_source:
             min_masking_ratio: .5
             slicing_config:
-              window_size: &shape [1, 168, 168] # 87, 141
+              window_size: [1, 168, 168] # 87, 141
               stride: &stride [1, 40, 40]
               downsampling_ratio: [1, 1, 1]
             volume_config:
@@ -69,7 +69,7 @@ loaders:
       # Number of processes to use for loading data. Set to (say) 10 if you wish to
       # use 10 CPU cores, or to 0 if you wish to use the same process for training and
       # data-loading (generally not recommended).
-      batch_size: 10
+      batch_size: 20
       num_workers: 1
       drop_last: True
       pin_memory: False
@@ -89,7 +89,7 @@ loaders:
     slicing_config:
       # Sliding window size
       window_size:
-        A: *shape
+        A: &shape [3, 168, 168] # 87, 141
         B: *shape
         C: *shape
       # Sliding window stride
@@ -213,7 +213,7 @@ trainer:
 
   tensorboard:
     log_scalars_every: [1, 'iterations']
-    log_images_every: [100, 'iterations']
+    log_images_every: [50, 'iterations']
     log_histograms_every: 'never'
     send_image_at_batch_indices: [0]
     send_image_at_channel_indices: [0]
@@ -279,9 +279,9 @@ firelight:
             input: 'target'
             cmap: gray
 
-        - IdentityVisualizer:
-            input: ['full_pred', B: 0, C: 0]
-            cmap: gray
+#        - IdentityVisualizer:
+#            input: ['full_pred', B: 0, C: 0]
+#            cmap: gray
 
         - IdentityVisualizer:
             input: ['prediction', index: 0, B: 0, D: 0, C: 0]
@@ -310,8 +310,8 @@ firelight:
       pad_value: .2  # intensity of the border pixels
       upsampling_factor: 3  # the whole grid is upsampled by this factor
 
-      row_specs: ['H', 'S', 'D', 'V']
-      column_specs: ['W', 'C', 'B']
+      row_specs: ['H', 'S', 'D', 'C', 'B']
+      column_specs: ['W', 'V']
 
       # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
       visualizers:
@@ -334,5 +334,9 @@ firelight:
         - IdentityVisualizer:
             input: ['ptc_raw']
             cmap: gray
+        - IdentityVisualizer:
+            input: ['ptc_ign']
+            cmap: gray
+
 
 
