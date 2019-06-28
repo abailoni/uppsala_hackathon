@@ -1,5 +1,7 @@
 import vaeAffs
 
+from vaeAffs.utils.path_utils import change_paths_config_file
+
 from speedrun import BaseExperiment, TensorboardMixin, InfernoMixin
 from speedrun.log_anywhere import register_logger, log_image, log_scalar
 from speedrun.py_utils import locate
@@ -132,12 +134,12 @@ if __name__ == '__main__':
     if '--inherit' in sys.argv:
         i = sys.argv.index('--inherit') + 1
         if sys.argv[i].endswith(('.yml', '.yaml')):
-            sys.argv[i] = os.path.join(config_path, sys.argv[i])
+            sys.argv[i] = change_paths_config_file(os.path.join(config_path, sys.argv[i]))
         else:
             sys.argv[i] = os.path.join(experiments_path, sys.argv[i])
     if '--update' in sys.argv:
         i = sys.argv.index('--update') + 1
-        sys.argv[i] = os.path.join(config_path, sys.argv[i])
+        sys.argv[i] = change_paths_config_file(os.path.join(config_path, sys.argv[i]))
     i = 0
     while True:
         if f'--update{i}' in sys.argv:

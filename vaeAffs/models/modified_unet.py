@@ -71,7 +71,10 @@ class PatchLoss(nn.Module):
         self.soresen_loss = SorensenDiceLoss()
 
         assert isinstance(path_autoencoder_model, str)
-        self.AE_model = torch.load(path_autoencoder_model)
+        # FIXME: this should be moved to the model, otherwise it's not saved!
+        self.AE_model = [torch.load(path_autoencoder_model),
+                           torch.load(path_autoencoder_model),
+                           torch.load(path_autoencoder_model),]
 
         # from vaeAffs.models.vanilla_vae import AutoEncoder
 
@@ -101,13 +104,17 @@ class PatchLoss(nn.Module):
 
         assert all(i % 2 ==  1 for i in patch_shape_orig), "Patch should be odd"
 
-        all_emb_vectors, all_target_patches = [], []
-        all_ignore_masks = []
-        all_raw_patches = []
+        all_emb_vectors = {0: [],
+                           1: [],
+                           2: []}
+        from copy import deepcopy
+        all_target_patches = deepcopy(all_emb_vectors)
+        all_ignore_masks = deepcopy(all_emb_vectors)
+        all_raw_patches = deepcopy(all_emb_vectors)
 
         all_patch_scale_fct = [(1,1,1), (1,2,2), (1,4,4)]
         all_prediction_scale_fct = [(1,2,2), (1,4,4), (1,8,8)]
-        all_number_patches = [40, 40, 14]
+        all_number_patches = [30, 30, 10]
 
 
 
@@ -152,8 +159,8 @@ class PatchLoss(nn.Module):
 
 
                 # Add channel dimension:
-                all_target_patches.append(me_masks[valid_batch_indices][dw_slice[1:]].unsqueeze(1))
-                all_ignore_masks.append(ignore_masks[valid_batch_indices][dw_slice[1:]].unsqueeze(1))
+                all_target_patches[level].append(me_masks[valid_batch_indices][dw_slice[1:]].unsqueeze(1))
+                all_ignore_masks[level].append(ignore_masks[valid_batch_indices][dw_slice[1:]].unsqueeze(1))
 
                 # Add data:
                 center_in_pred = [int((random_offset[i] + int(patch_shape[i] / 2))/prediction_scale_fct[i]) for i in range(len(random_offset))]
@@ -161,8 +168,8 @@ class PatchLoss(nn.Module):
                     slice(center_in_pred[i], center_in_pred[i] + 1)
                     for i in range(len(random_offset)))
 
-                all_emb_vectors.append(pred[valid_batch_indices][vect_slice_pred])
-                all_raw_patches.append(raw[valid_batch_indices][target_slice][dw_slice])
+                all_emb_vectors[level].append(pred[valid_batch_indices][vect_slice_pred])
+                all_raw_patches[level].append(raw[valid_batch_indices][target_slice][dw_slice])
 
             # batch_size = predictions.shape[0]
             # todo_valid_slices = [number_patches for _ in range(batch_size)]
@@ -190,23 +197,24 @@ class PatchLoss(nn.Module):
         # all_predicted_patches = [self.AE_model.decode(self.AE_model.reparameterize(vect[:,:emb_vect_size,:,0,0], vect[:,emb_vect_size:,:,0,0])) for vect in all_emb_vectors]
 
         # Take only first channel, since now we predict masks:
-        all_predicted_patches = [self.AE_model.decode(vect[:,:emb_vect_size,:,0,0])[:,[0]] for vect in all_emb_vectors]
+        all_predicted_patches = [[self.AE_model[lvl].decode(vect[:,:emb_vect_size,:,0,0])[:,[0]] for vect in all_emb_vectors[lvl]] for lvl in range(3)]
 
         loss = 0
-        random_plot = np.random.randint(len(all_predicted_patches))
-        for i, [pred, trg, ign] in enumerate(zip(all_predicted_patches, all_target_patches, all_ignore_masks)):
-            if i == random_plot:
-                btch_slc = slice(0,4) if trg.shape[0] >= 4 else slice(0, 1)
-                # btch_slc = slice(0, 1)
-                log_image("ptc_trg", trg[btch_slc, 0, 2])
-                log_image("ptc_pred", pred[btch_slc, 0, 2])
-                log_image("ptc_raw", all_raw_patches[i][btch_slc, 0, 2])
-                log_image("ptc_ign", ign[btch_slc, 0, 2])
+        for lvl in range(3):
+            random_plot = np.random.randint(len(all_predicted_patches[lvl]))
+            for i, [pred, trg, ign] in enumerate(zip(all_predicted_patches[lvl], all_target_patches[lvl], all_ignore_masks[lvl])):
+                if i == random_plot:
+                    btch_slc = slice(0,4) if trg.shape[0] >= 4 else slice(0, 1)
+                    # btch_slc = slice(0, 1)
+                    log_image("ptc_trg_l{}".format(lvl), trg[btch_slc, 0, 2])
+                    log_image("ptc_pred_l{}".format(lvl), pred[btch_slc, 0, 2])
+                    log_image("ptc_raw_l{}".format(lvl), all_raw_patches[lvl][i][btch_slc, 0, 2])
+                    log_image("ptc_ign_l{}".format(lvl), ign[btch_slc, 0, 2])
 
-            # Apply ignore mask:
-            pred[ign] = 0
-            trg[ign] = 0
-            loss += self.soresen_loss(pred, trg.float())
+                # Apply ignore mask:
+                pred[ign] = 0
+                trg[ign] = 0
+                loss += self.soresen_loss(pred, trg.float())
 
 
         # loss = torch.stack([self.soresen_loss(pred, trg)  for pred, trg in zip(all_predicted_patches, all_target_patches)]).sum()

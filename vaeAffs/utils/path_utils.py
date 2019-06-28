@@ -44,3 +44,19 @@ def get_source_dir():
         return os.path.join('/export/home/claun/', 'PycharmProjects/quantized_vector_DT')
     else:
         raise NotImplementedError("Set up your source_dir path for more hard-coded fun!")
+
+
+import os
+import socket
+import getpass
+
+
+def change_paths_config_file(template_path):
+    output_path = template_path.replace(".yml", "_temp.yml")
+    path_placeholder = "$HCI_HOME\/"
+    real_home_path = get_abailoni_hci_home_path().replace("/", "\/")
+    cmd_string = "sed 's/{}/{}/g' {} > {}".format(path_placeholder, real_home_path,
+                                                      template_path,
+                                                      output_path)
+    os.system(cmd_string)
+    return output_path

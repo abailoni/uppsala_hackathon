@@ -33,11 +33,11 @@ loaders:
               downsampling_ratio: [1, 1, 1]
             volume_config:
               artifacts:
-                path: '/home/abailoni_local/hci_home/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
+                path: '$HCI_HOME/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
                 path_in_h5_dataset: 'defect_sections/raw'
                 dtype: float32
               alpha_mask:
-                path: '/home/abailoni_local/hci_home/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
+                path: '$HCI_HOME/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
                 path_in_h5_dataset: 'defect_sections/mask'
             master_config:
               elastic_transform:
@@ -108,9 +108,9 @@ loaders:
       # Raw data
       raw:
         path:
-          A: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleA_train.h5'
-          B: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleB_train.h5'
-          C: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleC_train.h5'
+          A: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleA_train.h5'
+          B: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleB_train.h5'
+          C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
           A: 'raw'
           B: 'raw'
@@ -120,9 +120,9 @@ loaders:
       # Segmentation
       segmentation:
         path:
-          A: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleA_train.h5'
-          B: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleB_train.h5'
-          C: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleC_train.h5'
+          A: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleA_train.h5'
+          B: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleB_train.h5'
+          C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
           A: 'segmentations/groundtruth_fixed'
           B: 'segmentations/groundtruth_fixed'
@@ -146,14 +146,14 @@ loaders:
     volume_config:
       raw:
         path:
-          C: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleC_train.h5'
+          C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
           C: 'raw'
         dtype: float32
         sigma: 0.025
       segmentation:
         path:
-          C: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleC_train.h5'
+          C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
           C: 'segmentations/groundtruth_fixed'
         dtype: float32
@@ -180,13 +180,13 @@ model:
 #      in_channels: *tot_directions
 #      out_channels: *tot_directions
 #      kernel_size: 3
-    loadfrom: "/home/abailoni_local/hci_home/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/train_PyrUNetMultiScale_meMasks/best_checkpoint.pytorch"
+#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/train_PyrUNetMultiScale_meMasks/best_checkpoint.pytorch"
 
 autoencoder:
   latent_variable_size: 64
-  path: "/home/abailoni_local/hci_home/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE64_3D_5_29_29_DS1/model.pytorch"
-#  path: "/home/abailoni_local/hci_home/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE_27fc_24/model.pytorch"
-#  path: "/home/abailoni_local/hci_home/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/Conv3DAutoEnc_Soresen_27_fc_noDownscale/model.pytorch"
+  path: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE64_3D_5_29_29_DS1/model.pytorch"
+#  path: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE_27fc_24/model.pytorch"
+#  path: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/Conv3DAutoEnc_Soresen_27_fc_noDownscale/model.pytorch"
 
 trainer:
   max_epochs: 10 # basically infinite
@@ -314,16 +314,8 @@ firelight:
 
 
 
-  new_patches:
+  ptch_l0:
     ImageGridVisualizer:
-
-      input_mapping:
-#        global: [B: 0] # the mapping specified in 'global' is applied to all keys
-        input: ['inputs', index: 0, B: 0, D: 0]
-        target: ['target', index: 0, B: 0, D: 0, C: 0]
-        preds: ['prediction', index: 0, B: 0, D: 0, C: 0]
-#        emb_pred: ["emb_pred", index: 0, B: 0, D: 0]
-
       pad_width: 1  # width of the border between images in pixels
       pad_value: .2  # intensity of the border pixels
       upsampling_factor: 5  # the whole grid is upsampled by this factor
@@ -334,27 +326,70 @@ firelight:
       # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
       visualizers:
 
-        # visualize raw input
-#        - IdentityVisualizer:
-#            input: 'input'
-#            cmap: gray
-#
-#        - IdentityVisualizer:
-#            input: 'target'
-#            cmap: gray
+        - IdentityVisualizer:
+            input: ['ptc_trg_l0']
+            cmap: gray
+        - IdentityVisualizer:
+            input: ['ptc_pred_l0']
+            cmap: gray
+        - IdentityVisualizer:
+            input: ['ptc_raw_l0']
+            cmap: gray
+        - IdentityVisualizer:
+            input: ['ptc_ign_l0']
+            cmap: gray
+
+  ptch_l1:
+    ImageGridVisualizer:
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 5  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'D', 'C', 'B']
+      column_specs: ['W', 'V']
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
 
         - IdentityVisualizer:
-            input: ['ptc_trg']
+            input: ['ptc_trg_l1']
             cmap: gray
         - IdentityVisualizer:
-            input: ['ptc_pred']
+            input: ['ptc_pred_l1']
             cmap: gray
         - IdentityVisualizer:
-            input: ['ptc_raw']
+            input: ['ptc_raw_l1']
             cmap: gray
         - IdentityVisualizer:
-            input: ['ptc_ign']
+            input: ['ptc_ign_l1']
             cmap: gray
+
+  ptch_l2:
+    ImageGridVisualizer:
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 5  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'D', 'C', 'B']
+      column_specs: ['W', 'V']
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        - IdentityVisualizer:
+            input: ['ptc_trg_l2']
+            cmap: gray
+        - IdentityVisualizer:
+            input: ['ptc_pred_l2']
+            cmap: gray
+        - IdentityVisualizer:
+            input: ['ptc_raw_l2']
+            cmap: gray
+        - IdentityVisualizer:
+            input: ['ptc_ign_l2']
+            cmap: gray
+
+
 
 
 
