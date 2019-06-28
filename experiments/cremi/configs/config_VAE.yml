@@ -177,6 +177,7 @@ model:
     final_activation: Sigmoid
     latent_variable_size: 64
     patch_size: [5,29,29]
+    loadfrom: "/home/abailoni_local/hci_home/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE64_3D_5_29_29_DS1/best_checkpoint.pytorch"
 #    unfold_size: 27
 #    max_pool_factor: 8
 

@@ -82,94 +82,126 @@ class PatchLoss(nn.Module):
 
 
     def forward(self, predictions, target):
-        predictions = predictions[-1]
-
         # Crop some z-slice to assure some context:
-        predictions = predictions[:,:,1:-1]
+        # TODO: remove
+        predictions = [prd[:,:,1:-1] for prd in predictions]
         target = target[:,:,1:-1]
 
-        patch_shape = (5, 29, 29)
-        number_patches = 60
+        # TODO: parametrize
+        patch_shape_orig = (5, 29, 29)
         # Extract random patch:
-        pred_shape = predictions.shape[-3:]
+        full_target_shape = target.shape[-3:]
 
         raw = target[:,[0]]
         gt_segm = target[:,1]
         target_affs = target[:,2:]
 
-        boundary_mask, _ = target_affs.max(dim=1)
+        boundary_mask, _ = target_affs[:,:4].max(dim=1)
+        boundary_mask_large, _ = target_affs[:,4:].max(dim=1)
 
-        assert all(i % 2 ==  1 for i in patch_shape), "Patch should be odd"
-        assert all([i <= j for i, j in zip(patch_shape, pred_shape)]), "Prediction is too small"
+        assert all(i % 2 ==  1 for i in patch_shape_orig), "Patch should be odd"
 
-        max_offsets = [ j-i for i, j in zip(patch_shape, pred_shape)]
         all_emb_vectors, all_target_patches = [], []
         all_ignore_masks = []
         all_raw_patches = []
 
-        # batch_size = predictions.shape[0]
-        # todo_valid_slices = [number_patches for _ in range(batch_size)]
-        # while True:
-        #     random_offset = [np.random.randint(max_off + 1, size=(number_patches,)) for max_off in max_offsets]
-        #     target_slice = [(slice(None), slice(None), slice(None)) + tuple(
-        #         slice(random_offset[i][n], random_offset[i][n] + patch_shape[i]) for i in range(len(random_offset)))
-        #                     for n in range(number_patches)]
-        #     vect_slice = [(slice(None), slice(None), slice(None)) + tuple(
-        #             slice(random_offset[i][n] + int(patch_shape[i] / 2), random_offset[i][n] + int(patch_shape[i] / 2) + 1) for i
-        #             in range(len(random_offset)))
-        #         for n in range(number_patches)]
-        #     indx = np.indices(predictions.shape)
-        #     target_idx = np.stack([indx[targ_slc] for targ_slc in target_slice], axis=1)
-        #     predictions[target_idx]
-        #
-        #     break
+        all_patch_scale_fct = [(1,1,1), (1,2,2), (1,4,4)]
+        all_prediction_scale_fct = [(1,2,2), (1,4,4), (1,8,8)]
+        all_number_patches = [40, 40, 14]
 
 
-        for n in range(number_patches):
-            random_offset = [np.random.randint(max_off+1) for max_off in max_offsets]
-            target_slice = (slice(None), slice(None)) + tuple( slice(random_offset[i], random_offset[i]+patch_shape[i]) for i in range(len(random_offset)))
-            vect_slice = (slice(None), slice(None)) + tuple( slice(random_offset[i]+int(patch_shape[i]/2), random_offset[i]+int(patch_shape[i]/2)+1) for i in range(len(random_offset)))
-            center_labels = gt_segm[vect_slice[1:]]
-            is_on_boundary = boundary_mask[vect_slice[1:]]
 
-            # is_on_boundary_repeated = is_on_boundary.repeat(1, *patch_shape)
-            center_labels_repeated = center_labels.repeat(1, *patch_shape)
-            cropped_gt_segm = gt_segm[target_slice[1:]]
-            me_masks = cropped_gt_segm != center_labels_repeated
+        for level, patch_scale_fct, prediction_scale_fct, number_patches, pred in zip(range(3), all_patch_scale_fct, all_prediction_scale_fct, all_number_patches,
+                                                                         [predictions[-1], predictions[-2], predictions[-3]]):
+            patch_shape = tuple(pt*fc for pt, fc in zip(patch_shape_orig, patch_scale_fct))
 
-            # Ignore some additional pixels:
-            ignore_masks = (cropped_gt_segm == 0)
+            # TODO assert dims!
+            assert all([i <= j for i, j in zip(patch_shape, full_target_shape)]), "Prediction is too small"
 
-            # Reject some patches:
-            valid_patches = (center_labels != 0) & (is_on_boundary != 1)
-            valid_batch_indices = np.argwhere(valid_patches[:, 0, 0, 0].cpu().detach().numpy())[:, 0]
+            # TODO: get rid of this
+            # assert all(i % 2 == 1 for i in patch_shape), "Patch should be odd"
 
-            # Add channel dimension:
-            all_target_patches.append(me_masks[valid_batch_indices].unsqueeze(1))
-            all_ignore_masks.append(ignore_masks[valid_batch_indices].unsqueeze(1))
+            max_offsets = [ j-i for i, j in zip(patch_shape, full_target_shape)]
 
-            # Add data:
-            all_emb_vectors.append(predictions[valid_batch_indices][vect_slice])
-            all_raw_patches.append(raw[valid_batch_indices][target_slice])
+
+            for n in range(number_patches):
+                random_offset = [np.random.randint(max_off+1) for max_off in max_offsets]
+                target_slice = (slice(None), slice(None)) + tuple( slice(random_offset[i], random_offset[i]+patch_shape[i]) for i in range(len(random_offset)))
+                vect_slice = (slice(None), slice(None)) + tuple( slice(random_offset[i]+int(patch_shape[i]/2), random_offset[i]+int(patch_shape[i]/2)+1) for i in range(len(random_offset)))
+
+                center_labels = gt_segm[vect_slice[1:]]
+                is_on_boundary = boundary_mask[vect_slice[1:]] if level <=1 else boundary_mask_large[vect_slice[1:]]
+
+                # is_on_boundary_repeated = is_on_boundary.repeat(1, *patch_shape)
+                center_labels_repeated = center_labels.repeat(1, *patch_shape)
+                cropped_gt_segm = gt_segm[target_slice[1:]]
+                me_masks = cropped_gt_segm != center_labels_repeated
+
+                # Ignore some additional pixels:
+                ignore_masks = (cropped_gt_segm == 0)
+
+                # Reject some patches:
+                valid_patches = (center_labels != 0) & (is_on_boundary != 1)
+                valid_batch_indices = np.argwhere(valid_patches[:, 0, 0, 0].cpu().detach().numpy())[:, 0]
+
+                if valid_batch_indices.shape[0] == 0:
+                    continue
+
+                # Downscale masks:
+                dw_slice = (slice(None), slice(None)) + tuple(slice(None,None,dw_fct) for dw_fct in patch_scale_fct)
+
+
+                # Add channel dimension:
+                all_target_patches.append(me_masks[valid_batch_indices][dw_slice[1:]].unsqueeze(1))
+                all_ignore_masks.append(ignore_masks[valid_batch_indices][dw_slice[1:]].unsqueeze(1))
+
+                # Add data:
+                center_in_pred = [int((random_offset[i] + int(patch_shape[i] / 2))/prediction_scale_fct[i]) for i in range(len(random_offset))]
+                vect_slice_pred = (slice(None), slice(None)) + tuple(
+                    slice(center_in_pred[i], center_in_pred[i] + 1)
+                    for i in range(len(random_offset)))
+
+                all_emb_vectors.append(pred[valid_batch_indices][vect_slice_pred])
+                all_raw_patches.append(raw[valid_batch_indices][target_slice][dw_slice])
+
+            # batch_size = predictions.shape[0]
+            # todo_valid_slices = [number_patches for _ in range(batch_size)]
+            # while True:
+            #     random_offset = [np.random.randint(max_off + 1, size=(number_patches,)) for max_off in max_offsets]
+            #     target_slice = [(slice(None), slice(None), slice(None)) + tuple(
+            #         slice(random_offset[i][n], random_offset[i][n] + patch_shape[i]) for i in range(len(random_offset)))
+            #                     for n in range(number_patches)]
+            #     vect_slice = [(slice(None), slice(None), slice(None)) + tuple(
+            #             slice(random_offset[i][n] + int(patch_shape[i] / 2), random_offset[i][n] + int(patch_shape[i] / 2) + 1) for i
+            #             in range(len(random_offset)))
+            #         for n in range(number_patches)]
+            #     indx = np.indices(predictions.shape)
+            #     target_idx = np.stack([indx[targ_slc] for targ_slc in target_slice], axis=1)
+            #     predictions[target_idx]
+            #
+            #     break
 
         # with torch.no_grad():
         #     target_embedded_patch = self.AE_model.encode(target_patch)[...,0]
 
         # with torch.no_grad():
-        assert predictions.shape[1] % 2 == 0
-        emb_vect_size = int(predictions.shape[1])
+        assert predictions[0].shape[1] % 2 == 0
+        emb_vect_size = int(predictions[0].shape[1])
         # all_predicted_patches = [self.AE_model.decode(self.AE_model.reparameterize(vect[:,:emb_vect_size,:,0,0], vect[:,emb_vect_size:,:,0,0])) for vect in all_emb_vectors]
 
         # Take only first channel, since now we predict masks:
         all_predicted_patches = [self.AE_model.decode(vect[:,:emb_vect_size,:,0,0])[:,[0]] for vect in all_emb_vectors]
 
         loss = 0
+        random_plot = np.random.randint(len(all_predicted_patches))
         for i, [pred, trg, ign] in enumerate(zip(all_predicted_patches, all_target_patches, all_ignore_masks)):
-            if i == 0:
-                log_image("ptc_trg", trg[:4, 0, 2])
-                log_image("ptc_pred", pred[:4, 0, 2])
-                log_image("ptc_raw", all_raw_patches[0][:4, 0, 2])
-                log_image("ptc_ign", ign[:4, 0, 2])
+            if i == random_plot:
+                btch_slc = slice(0,4) if trg.shape[0] >= 4 else slice(0, 1)
+                # btch_slc = slice(0, 1)
+                log_image("ptc_trg", trg[btch_slc, 0, 2])
+                log_image("ptc_pred", pred[btch_slc, 0, 2])
+                log_image("ptc_raw", all_raw_patches[i][btch_slc, 0, 2])
+                log_image("ptc_ign", ign[btch_slc, 0, 2])
 
             # Apply ignore mask:
             pred[ign] = 0

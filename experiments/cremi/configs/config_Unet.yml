@@ -165,24 +165,26 @@ model:
 #    conv_type: 'conv_bn' # ConvELU3D
     in_channels: 1
 #    encoder_fmaps: [80, 160, 320, 640] #[80, 160, 320, 640]
-    encoder_fmaps: [50, 120, 240, 500] #[80, 160, 320, 640]
-    pyramid_fmaps: 24
+    encoder_fmaps: [50, 120, 240, 450] #[80, 160, 320, 640]
+    pyramid_fmaps: 64
     out_channels: null
     depth: 3
     upsampling_mode: 'nearest'
     scale_factor:
       - [1, 2, 2]
       - [1, 2, 2]
-      - [1, 3, 3]
+      - [1, 2, 2]
 #    final_activation: 'ReLU'
 #    final_activation: !Obj:Conv3D
 #      import_from: inferno.extensions.layers.convolutional
 #      in_channels: *tot_directions
 #      out_channels: *tot_directions
 #      kernel_size: 3
+    loadfrom: "/home/abailoni_local/hci_home/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/train_PyrUNetMultiScale_meMasks/best_checkpoint.pytorch"
+
 autoencoder:
-  latent_variable_size: 24
-  path: "/home/abailoni_local/hci_home/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE24_3D_5_29_29_DS1/model.pytorch"
+  latent_variable_size: 64
+  path: "/home/abailoni_local/hci_home/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE64_3D_5_29_29_DS1/model.pytorch"
 #  path: "/home/abailoni_local/hci_home/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE_27fc_24/model.pytorch"
 #  path: "/home/abailoni_local/hci_home/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/Conv3DAutoEnc_Soresen_27_fc_noDownscale/model.pytorch"
 
@@ -258,8 +260,8 @@ firelight:
 
       input_mapping:
 #        global: [B: 0] # the mapping specified in 'global' is applied to all keys
-        input: ['inputs', index: 0, B: 0, D: 0]
-        target: ['target', index: 0, B: 0, D: 0, C: 2]
+        input: ['inputs', index: 0, B: 0, D: 0, W: "::2", H: "::2"]
+        target: ['target', index: 0, B: 0, D: 0, C: 2, W: "::2", H: "::2"]
 #        preds: ['prediction', index: 0, B: 0, D: 0, C: 0]
 #        emb_pred: ["emb_pred", index: 0, B: 0, D: 0]
 
@@ -286,17 +288,30 @@ firelight:
 #            input: ['full_pred', B: 0, C: 0]
 #            cmap: gray
 
-        - IdentityVisualizer:
-            input: ['prediction', index: 3, B: 0, D: 0, C: 0]
-            cmap: gray
+        - PcaVisualizer:
+            input: ['prediction', index: 2, B: 0, D: 0]
 
-        - IdentityVisualizer:
-            input: ['prediction', index: 3, B: 0, D: 0, C: 1]
-            cmap: gray
+        - PcaVisualizer:
+            input: ['prediction', pre: {vaeAffs.utils.various.torch_tensor_zoom: {zoom: [1,1,1,2,2], order: 0}}, index: 1, B: 0, D: 0]
 
-        - IdentityVisualizer:
-            input: ['prediction', index: 3, B: 0, D: 0, C: 2]
-            cmap: gray
+        - PcaVisualizer:
+            input: ['prediction', pre: {vaeAffs.utils.various.torch_tensor_zoom: {zoom: [1,1,1,4,4], order: 0}}, index: 0, B: 0, D: 0]
+
+#  UNet_bottom_layers:
+#    ImageGridVisualizer:
+#        pad_width: 1  # width of the border between images in pixels
+#        pad_value: .2  # intensity of the border pixels
+#        upsampling_factor: 3  # the whole grid is upsampled by this factor
+#        row_specs: ['H', 'S', 'D']
+#        column_specs: ['W', 'C', 'B', 'V']
+#
+#        visualizers:
+#          - PcaVisualizer:
+#            input: ['prediction', index: 1, B: 0, D: 0, W: "::2", H: "::2"]
+#
+#          - PcaVisualizer:
+#            input: ['prediction', index: 0, B: 0, D: 0]
+
 
 
   new_patches:
@@ -311,7 +326,7 @@ firelight:
 
       pad_width: 1  # width of the border between images in pixels
       pad_value: .2  # intensity of the border pixels
-      upsampling_factor: 3  # the whole grid is upsampled by this factor
+      upsampling_factor: 5  # the whole grid is upsampled by this factor
 
       row_specs: ['H', 'S', 'D', 'C', 'B']
       column_specs: ['W', 'V']

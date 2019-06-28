@@ -1,6 +1,8 @@
 import numpy as np
 
 
+
+
 def reorder_and_invert(affinities, offsets, number_of_attractive_channels, dist_per_dir=4):
 
     nr_offsets = len(offsets)
