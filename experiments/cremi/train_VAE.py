@@ -72,9 +72,9 @@ class VaeCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
     def build_model(self, model_config=None):
         model_config = self.get('model') if model_config is None else model_config
         model_class = list(model_config.keys())[0]
-        n_channels = len(self.get('global/offsets'))
-        model_config[model_class]['in_channels'] = n_channels
-        self.set('model/{}/in_channels'.format(model_class), n_channels)
+        # n_channels = len(self.get('global/offsets'))
+        # model_config[model_class]['in_channels'] = n_channels
+        # self.set('model/{}/in_channels'.format(model_class), n_channels)
 
         return super(VaeCremiExperiment, self).build_model(model_config) #parse_model(model_config)
 
@@ -82,7 +82,7 @@ class VaeCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
     def inferno_build_criterion(self):
         print("Building criterion")
         # loss = nn.MSELoss()
-        loss = SorensenDiceLoss()
+        # loss = SorensenDiceLoss()
         loss = VAE_loss()
 
         self._trainer.build_criterion(loss)

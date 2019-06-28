@@ -12,7 +12,19 @@ class HackyHacky(Transform):
     def batch_function(self, batch):
         return [batch[0], np.concatenate([np.expand_dims(batch[0],0), batch[1]], axis=0)]
 
+class ComputeMeMask(Transform):
+    def tensor_function(self, tensor):
+        assert tensor.ndim == 3
+        patch_shape = tensor.shape
 
+        center_coord = tuple(
+            int(patch_shape[i] / 2) for i in
+            range(3))
+        center_label = tensor[center_coord]
+        # center_labels_repeated = np.tile(center_labels, patch_shape)
+        me_masks = tensor != center_label
+
+        return me_masks.astype(np.float32)
 
 class RemoveThirdDimension(Transform):
     def tensor_function(self, tensor):

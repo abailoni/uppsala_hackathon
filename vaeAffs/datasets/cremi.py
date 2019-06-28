@@ -14,8 +14,7 @@ from neurofire.transform.affinities import affinity_config_to_transform
 from neurofire.transform.artifact_source import RejectNonZeroThreshold
 from neurofire.transform.volume import RandomSlide
 
-from quantizedVDT.transforms import LabelToDirections
-from ..transforms import SetVAETarget, RemoveThirdDimension, RemoveInvalidAffs, RandomlyDownscale
+from ..transforms import SetVAETarget, RemoveThirdDimension, RemoveInvalidAffs, RandomlyDownscale, ComputeMeMask
 import numpy as np
 
 
@@ -100,8 +99,8 @@ class CremiDataset(ZipReject):
         # affinity transforms for affinity targets
         # we apply the affinity target calculation only to the segmentation (1)
         assert self.affinity_config is not None
-        transforms.add(affinity_config_to_transform(apply_to=[0], **self.affinity_config))
-
+        # transforms.add(affinity_config_to_transform(apply_to=[0], **self.affinity_config))
+        transforms.add(ComputeMeMask(apply_to=[0]))
 
         # TODO: add clipping transformation
 
@@ -113,7 +112,7 @@ class CremiDataset(ZipReject):
             transforms.add(VolumeAsymmetricCrop(**crop_config))
 
         # transforms.add(RandomlyDownscale(downscale_factor=3))
-        transforms.add(RemoveInvalidAffs(apply_to=[0]))
+        # transforms.add(RemoveInvalidAffs(apply_to=[0]))
         transforms.add(SetVAETarget())
 
         return transforms

@@ -262,7 +262,8 @@ def fold_3d(x, *args, **kwargs):
 
 class AutoEncoderSkeleton(nn.Module):
     def __init__(self, encoders, base, decoders, output,
-                 unfold_size=1,
+                 # patch_shape=(1,27,27),
+                 latent_variable_size=24,
                  final_activation=None):
         super(AutoEncoderSkeleton, self).__init__()
         assert isinstance(encoders, list)
@@ -284,8 +285,12 @@ class AutoEncoderSkeleton(nn.Module):
         else:
             raise NotImplementedError
 
-        assert isinstance(unfold_size, int)
-        self.unfold_size = unfold_size
+        # assert isinstance(patch_shape, tuple)
+        # assert len(patch_shape) == 3
+        self._min_patch_shape = None
+
+        assert isinstance(latent_variable_size, int)
+        self.latent_variable_size = latent_variable_size
 
     def encode(self, input_):
         x = input_
@@ -295,16 +300,31 @@ class AutoEncoderSkeleton(nn.Module):
             x = encoder(x)
             encoder_out.append(x)
 
-        x = unfold_3d(x, kernel_size=self.unfold_size)
+        N = x.shape[0]
+        self.set_min_patch_shape(x.shape[2:])
+        x = x.view(N, -1, 1)
+
+        # x = unfold_3d(x, kernel_size=self.unfold_size)
 
         encoded_variable = self.base[0](x)
 
-        # FIXME: temp hack
-        return encoded_variable[:,:24], encoded_variable[:,24:]
+        return encoded_variable[:,:self.latent_variable_size], encoded_variable[:,self.latent_variable_size:]
+
+    def set_min_patch_shape(self, shape):
+        if self._min_patch_shape is None:
+            self._min_patch_shape = shape
+        else:
+            assert self._min_patch_shape == shape
 
     def decode(self, encoded_variable):
+        assert self._min_patch_shape is not None
+
         x = self.base[1](encoded_variable)
-        x = fold_3d(x, output_size=(self.unfold_size, self.unfold_size), kernel_size=self.unfold_size)
+        N = x.shape[0]
+        assert x.shape[-1] == 1
+        x = x.view(N, -1, *self._min_patch_shape)
+
+        # x = fold_3d(x, output_size=(self.unfold_size, self.unfold_size), kernel_size=self.unfold_size)
 
         # apply decoders
         max_level = len(self.decoders) - 1
@@ -349,7 +369,7 @@ class AutoEncoder(AutoEncoderSkeleton):
                  scale_factor=2,
                  final_activation='auto',
                  conv_type_key='vanilla',
-                 unfold_size=1,
+                 patch_size=(3,27,27),
                  add_residual_connections=False):
         """
         Parameter:
@@ -398,8 +418,10 @@ class AutoEncoder(AutoEncoderSkeleton):
         # Build base
         # number of base output feature maps
         # f0b = initial_num_fmaps * fmap_growth ** 3
-        base_pre = nn.Conv1d(f0e * unfold_size * unfold_size, latent_variable_size * 2, 1, 1, 0)
-        base_post = nn.Conv1d(latent_variable_size, f0e * unfold_size * unfold_size, 1, 1, 0)
+        # TODO: can I get rid of this ugly shape?
+        folded_shape = np.array(patch_size).prod()
+        base_pre = nn.Conv1d(f0e * folded_shape, latent_variable_size * 2, 1, 1, 0)
+        base_post = nn.Conv1d(latent_variable_size, f0e * folded_shape, 1, 1, 0)
         base = [base_pre, base_post]
 
         # Build decoders (same number of feature maps as MALA)
@@ -424,7 +446,7 @@ class AutoEncoder(AutoEncoderSkeleton):
                                           decoders=decoders,
                                           output=output,
                                           final_activation=final_activation,
-                                          unfold_size=unfold_size)
+                                          latent_variable_size=latent_variable_size)
 
 
 

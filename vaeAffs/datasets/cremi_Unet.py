@@ -21,15 +21,18 @@ from neurofire.criteria.loss_transforms import InvertTarget
 
 
 class RejectSingleLabelVolumes(object):
-    def __init__(self, threshold):
+    def __init__(self, threshold, threshold_zero_label=1.):
         """
         :param threshold: If the biggest segment takes more than 'threshold', batch is rejected
+        : param threshold_zero_label: if the percentage of non-zero-labels is less than this, reject
         """
         self.threshold = threshold
+        self.threshold_zero_label = threshold_zero_label
 
     def __call__(self, fetched):
         _, counts = np.unique(fetched, return_counts=True)
-        return ((float(np.max(counts)) / fetched.size) > self.threshold) or ((np.count_nonzero(fetched) / fetched.size) != 1.)
+        # Check if we should reject:
+        return ((float(np.max(counts)) / fetched.size) > self.threshold) or ((np.count_nonzero(fetched) / fetched.size) < self.threshold_zero_label)
 
 
 class CremiDataset(ZipReject):
@@ -68,7 +71,7 @@ class CremiDataset(ZipReject):
         rejection_threshold = volume_config.get('rejection_threshold', 0.92)
         super().__init__(self.raw_volume, self.segmentation_volume,
                          sync=True, rejection_dataset_indices=1,
-                         rejection_criterion=RejectSingleLabelVolumes(rejection_threshold))
+                         rejection_criterion=RejectSingleLabelVolumes(1.0, 1.))
         # Set master config (for transforms)
         self.master_config = {} if master_config is None else master_config
         # Get transforms
@@ -113,7 +116,7 @@ class CremiDataset(ZipReject):
             # computation being warped into the FOV.
             transforms.add(VolumeAsymmetricCrop(**crop_config))
 
-        transforms.add(InvertTarget())
+        transforms.add(InvertTarget(self.affinity_config.get("retain_segmentation", False)))
         transforms.add(HackyHacky())
         #transforms.add(SetVAETarget()), HackyHacky
 

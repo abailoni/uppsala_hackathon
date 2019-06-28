@@ -71,21 +71,30 @@ class PatchLoss(nn.Module):
         self.soresen_loss = SorensenDiceLoss()
 
         assert isinstance(path_autoencoder_model, str)
-        AE_model = torch.load(path_autoencoder_model)
-        self.AE_model = AE_model
+        self.AE_model = torch.load(path_autoencoder_model)
+
+        # from vaeAffs.models.vanilla_vae import AutoEncoder
+
+        # self.AE_model = AutoEncoder(**autoencoder_kwargs)
         # Freeze the auto-encoder model:
         # for param in self.AE_model.parameters():
         #     param.requires_grad = False
 
 
     def forward(self, predictions, target):
-        patch_shape = (1, 27, 27)
+        predictions = predictions[-1]
+
+        # Crop some z-slice to assure some context:
+        predictions = predictions[:,:,1:-1]
+        target = target[:,:,1:-1]
+
+        patch_shape = (5, 29, 29)
         number_patches = 60
         # Extract random patch:
         pred_shape = predictions.shape[-3:]
 
         raw = target[:,[0]]
-        gt_segm = -target[:,1]
+        gt_segm = target[:,1]
         target_affs = target[:,2:]
 
         boundary_mask, _ = target_affs.max(dim=1)
@@ -97,35 +106,58 @@ class PatchLoss(nn.Module):
         all_emb_vectors, all_target_patches = [], []
         all_ignore_masks = []
         all_raw_patches = []
+
+        # batch_size = predictions.shape[0]
+        # todo_valid_slices = [number_patches for _ in range(batch_size)]
+        # while True:
+        #     random_offset = [np.random.randint(max_off + 1, size=(number_patches,)) for max_off in max_offsets]
+        #     target_slice = [(slice(None), slice(None), slice(None)) + tuple(
+        #         slice(random_offset[i][n], random_offset[i][n] + patch_shape[i]) for i in range(len(random_offset)))
+        #                     for n in range(number_patches)]
+        #     vect_slice = [(slice(None), slice(None), slice(None)) + tuple(
+        #             slice(random_offset[i][n] + int(patch_shape[i] / 2), random_offset[i][n] + int(patch_shape[i] / 2) + 1) for i
+        #             in range(len(random_offset)))
+        #         for n in range(number_patches)]
+        #     indx = np.indices(predictions.shape)
+        #     target_idx = np.stack([indx[targ_slc] for targ_slc in target_slice], axis=1)
+        #     predictions[target_idx]
+        #
+        #     break
+
+
         for n in range(number_patches):
             random_offset = [np.random.randint(max_off+1) for max_off in max_offsets]
             target_slice = (slice(None), slice(None)) + tuple( slice(random_offset[i], random_offset[i]+patch_shape[i]) for i in range(len(random_offset)))
             vect_slice = (slice(None), slice(None)) + tuple( slice(random_offset[i]+int(patch_shape[i]/2), random_offset[i]+int(patch_shape[i]/2)+1) for i in range(len(random_offset)))
             center_labels = gt_segm[vect_slice[1:]]
             is_on_boundary = boundary_mask[vect_slice[1:]]
-            is_on_boundary_repeated = is_on_boundary.repeat(1, *patch_shape)
+
+            # is_on_boundary_repeated = is_on_boundary.repeat(1, *patch_shape)
             center_labels_repeated = center_labels.repeat(1, *patch_shape)
             cropped_gt_segm = gt_segm[target_slice[1:]]
             me_masks = cropped_gt_segm != center_labels_repeated
 
-            # Build ignore masks:
-            # TODO: it would be nice to exclude fully-ignored patches...
-            ignore_masks = (cropped_gt_segm == 0) | (center_labels_repeated == 0) | (is_on_boundary_repeated == 1)
+            # Ignore some additional pixels:
+            ignore_masks = (cropped_gt_segm == 0)
+
+            # Reject some patches:
+            valid_patches = (center_labels != 0) & (is_on_boundary != 1)
+            valid_batch_indices = np.argwhere(valid_patches[:, 0, 0, 0].cpu().detach().numpy())[:, 0]
 
             # Add channel dimension:
-            all_target_patches.append(me_masks.unsqueeze(1))
-            all_ignore_masks.append(ignore_masks.unsqueeze(1))
+            all_target_patches.append(me_masks[valid_batch_indices].unsqueeze(1))
+            all_ignore_masks.append(ignore_masks[valid_batch_indices].unsqueeze(1))
 
             # Add data:
-            all_emb_vectors.append(predictions[vect_slice])
-            all_raw_patches.append(raw[target_slice])
+            all_emb_vectors.append(predictions[valid_batch_indices][vect_slice])
+            all_raw_patches.append(raw[valid_batch_indices][target_slice])
 
         # with torch.no_grad():
         #     target_embedded_patch = self.AE_model.encode(target_patch)[...,0]
 
         # with torch.no_grad():
         assert predictions.shape[1] % 2 == 0
-        emb_vect_size = int(predictions.shape[1] / 2)
+        emb_vect_size = int(predictions.shape[1])
         # all_predicted_patches = [self.AE_model.decode(self.AE_model.reparameterize(vect[:,:emb_vect_size,:,0,0], vect[:,emb_vect_size:,:,0,0])) for vect in all_emb_vectors]
 
         # Take only first channel, since now we predict masks:
@@ -134,10 +166,10 @@ class PatchLoss(nn.Module):
         loss = 0
         for i, [pred, trg, ign] in enumerate(zip(all_predicted_patches, all_target_patches, all_ignore_masks)):
             if i == 0:
-                log_image("ptc_trg", trg[:4, 0, 0])
-                log_image("ptc_pred", pred[:4, 0, 0])
-                log_image("ptc_raw", all_raw_patches[0][:4, 0, 0])
-                log_image("ptc_ign", ign[:4, 0, 0])
+                log_image("ptc_trg", trg[:4, 0, 2])
+                log_image("ptc_pred", pred[:4, 0, 2])
+                log_image("ptc_raw", all_raw_patches[0][:4, 0, 2])
+                log_image("ptc_ign", ign[:4, 0, 2])
 
             # Apply ignore mask:
             pred[ign] = 0
