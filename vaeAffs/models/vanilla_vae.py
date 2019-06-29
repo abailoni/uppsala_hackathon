@@ -308,9 +308,11 @@ class AutoEncoderSkeleton(nn.Module):
 
         encoded_variable = self.base[0](x)
 
-        return encoded_variable[:,:self.latent_variable_size], encoded_variable[:,self.latent_variable_size:]
+        mu, log_var = encoded_variable[:,:self.latent_variable_size], encoded_variable[:,self.latent_variable_size:]
+        return mu, log_var
 
     def set_min_patch_shape(self, shape):
+        # TODO: assert tuple and not list
         if self._min_patch_shape is None:
             self._min_patch_shape = shape
         else:
@@ -351,9 +353,9 @@ class AutoEncoderSkeleton(nn.Module):
         mu, logvar = self.encode(input_)
 
         z = self.reparameterize(mu, logvar)
-        z2 = self.reparameterize(mu, logvar)
+        # z2 = self.reparameterize(mu, logvar)
 
-        return [self.decode(z), self.decode(z2), mu, logvar]
+        return [self.decode(z), mu, logvar]
 
 
 class AutoEncoder(AutoEncoderSkeleton):
@@ -479,17 +481,20 @@ class AE_loss(nn.Module):
 class VAE_loss(nn.Module):
     def __init__(self):
         super(VAE_loss, self).__init__()
-        # self.reconstruction_function = nn.BCELoss()
+        self.reconstruction_loss = nn.BCELoss(reduction="sum")
         # self.reconstruction_function.size_average = False
-        self.reconstruction_function = SorensenDiceLoss()
+        # self.reconstruction_function = SorensenDiceLoss()
         # self.reconstruction_function = nn.MSELoss()
 
     def forward(self, predictions, target):
         # x = target[:, :, 0]
-        recon_x, _, mu, logvar = predictions
+        recon_x, mu, logvar = predictions
 
         # Reconstruction loss:
-        BCE = nn.functional.binary_cross_entropy(recon_x, target, reduction='sum')
+        # BCE = 0
+        BCE = self.reconstruction_loss(recon_x, target)
+
+
         # BCE = self.reconstruction_function(recon_x, target)
 
         # see Appendix B from VAE paper:

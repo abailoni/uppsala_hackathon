@@ -94,6 +94,7 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
 
     def set_devices(self):
         self.trainer.cuda([0,1])
+        # self.trainer.cuda()
 
     def inferno_build_criterion(self):
         print("Building criterion")

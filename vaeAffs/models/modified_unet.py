@@ -72,6 +72,8 @@ class PatchLoss(nn.Module):
             self.loss = SorensenDiceLoss()
         elif loss_type == "MSE":
             self.loss = nn.MSELoss()
+        elif loss_type == "BCE":
+            self.loss = nn.BCELoss()
         else:
             raise ValueError
 
@@ -80,6 +82,9 @@ class PatchLoss(nn.Module):
         # TODO: use nn.BCEWithLogitsLoss()
         self.BCE = nn.BCELoss()
         self.soresen_loss = SorensenDiceLoss()
+
+        from vaeAffs.models.vanilla_vae import VAE_loss
+        self.VAE_loss = VAE_loss()
 
         self.model = model
         # assert isinstance(path_autoencoder_model, str)
@@ -110,7 +115,7 @@ class PatchLoss(nn.Module):
         # target = target[:,:,1:-1]
 
         # TODO: parametrize
-        patch_shape_orig = (5, 29, 29)
+        patch_shape_orig = (5,15,15)
         # Extract random patch:
         full_target_shape = target.shape[-3:]
 
@@ -195,7 +200,7 @@ class PatchLoss(nn.Module):
                      padding=0)
 
             # Save data:
-            all_target_patches[level] = maxpool(me_masks[valid_batch_indices].float())
+            all_target_patches[level] = maxpool(me_masks[valid_batch_indices].float()).float()
             all_ignore_masks[level] = maxpool(ignore_masks[valid_batch_indices].float())
 
             # Compute patches for prediction (possibly downscaled):
@@ -232,19 +237,24 @@ class PatchLoss(nn.Module):
         loss = 0
         for lvl in range(3):
             # with torch.no_grad():
-            #     target_mu, target_log_var  = self.model.AE_model[0].encode(concatenated_trg[lvl].float())
+            cloned_trg = all_target_patches[lvl].clone()
+            outputs_VAE  = self.model.AE_model[lvl].forward(cloned_trg)
+
+            loss = loss + self.VAE_loss(outputs_VAE, cloned_trg.clone()) / all_target_patches[lvl].shape[0]
+
             #
             # loss1 = self.MSE_loss(mu[lvl], target_mu)
             # loss2 = self.MSE_loss(log_var[lvl], target_log_var)
             # loss += loss1 + loss2
 
             pred, trg, ign = all_pred_patches[lvl], all_target_patches[lvl], all_ignore_masks[lvl].byte()
-            if lvl == 2:
-                pred = 1 - pred
-                trg = 1 - trg
+            # if lvl == 2:
+            #     pred = 1 - pred
+            #     trg = 1 - trg
             btch_slc = list(np.random.randint(trg.shape[0], size=4)) if trg.shape[0] >= 4 else slice(0, 1)
             # btch_slc = slice(0, 1)
             log_image("ptc_trg_l{}".format(lvl), trg[btch_slc][:, 0, 2])
+            log_image("ptc_pred_trg_l{}".format(lvl), outputs_VAE[0][btch_slc][:, 0, 2])
             log_image("ptc_pred_l{}".format(lvl), pred[btch_slc][:, 0, 2])
             log_image("ptc_raw_l{}".format(lvl), all_raw_patches[lvl][btch_slc][:, 0, 2])
             log_image("ptc_ign_l{}".format(lvl), ign[btch_slc][:, 0, 2])
