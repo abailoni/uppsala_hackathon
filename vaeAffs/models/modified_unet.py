@@ -65,29 +65,39 @@ class EncodingLoss(nn.Module):
 from speedrun.log_anywhere import log_image, log_embedding
 
 class PatchLoss(nn.Module):
-    def __init__(self, path_autoencoder_model):
+    def __init__(self, model):
         super(PatchLoss, self).__init__()
-        self.loss = nn.MSELoss()
+        self.MSE_loss = nn.MSELoss()
+        self.smoothL1_loss = nn.SmoothL1Loss()
+        # TODO: use nn.BCEWithLogitsLoss()
+        self.BCE = nn.BCELoss()
         self.soresen_loss = SorensenDiceLoss()
 
-        assert isinstance(path_autoencoder_model, str)
-        # FIXME: this should be moved to the model, otherwise it's not saved!
-        self.AE_model = [torch.load(path_autoencoder_model),
-                           torch.load(path_autoencoder_model),
-                           torch.load(path_autoencoder_model),]
+        self.model = model
+        # assert isinstance(path_autoencoder_model, str)
+        # # FIXME: this should be moved to the model, otherwise it's not saved!
+        # self.AE_model = [torch.load(path_autoencoder_model),
+        #                    torch.load(path_autoencoder_model),
+        #                    torch.load(path_autoencoder_model),]
+        #
+        # for i in range(3):
+        #     self.AE_model[i].set_min_patch_shape((5,29,29))
+        #     # Freeze the auto-encoder model:
+        #     # for param in self.AE_model[i].parameters():
+        #     #     param.requires_grad = False
+        #
+        # # from vaeAffs.models.vanilla_vae import AutoEncoder
+        # # self.AE_model = AutoEncoder(**autoencoder_kwargs)
 
-        # from vaeAffs.models.vanilla_vae import AutoEncoder
-
-        # self.AE_model = AutoEncoder(**autoencoder_kwargs)
-        # Freeze the auto-encoder model:
-        # for param in self.AE_model.parameters():
-        #     param.requires_grad = False
 
 
-    def forward(self, predictions, target):
+    def forward(self, all_predictions, target):
         # Crop some z-slice to assure some context:
         # TODO: remove
-        predictions = [prd[:,:,1:-1] for prd in predictions]
+        pred_affs = all_predictions[0]
+        feat_pyr = all_predictions[1:]
+        pred_affs = pred_affs[:,:,1:-1]
+        feat_pyr = [prd[:,:,1:-1] for prd in feat_pyr]
         target = target[:,:,1:-1]
 
         # TODO: parametrize
@@ -97,10 +107,24 @@ class PatchLoss(nn.Module):
 
         raw = target[:,[0]]
         gt_segm = target[:,1]
-        target_affs = target[:,2:]
+        all_affs = target[:,2:]
 
-        boundary_mask, _ = target_affs[:,:4].max(dim=1)
-        boundary_mask_large, _ = target_affs[:,4:].max(dim=1)
+        nb_offsets = int(all_affs.shape[1] / 2)
+        boundary_affs, target_affs, ignore_affs_mask = all_affs[:,:nb_offsets-1], all_affs[:,[nb_offsets-1]], all_affs[:,[-1]]
+
+        # First compute dense-affinity loss:
+        ignore_affs_mask = 1 - ignore_affs_mask # Zero when ignored
+        target_affs = target_affs * ignore_affs_mask
+        pred_affs = pred_affs * ignore_affs_mask[:,:,:,::2,::2]
+        loss = 0
+        LOSS_FACTOR = 0.0
+        # loss = self.soresen_loss(pred_affs, target_affs[:,:,:,::2,::2]) * LOSS_FACTOR
+
+        # return loss
+
+        # Now loss from random patches:
+        boundary_mask, _ = boundary_affs[:,:4].max(dim=1)
+        boundary_mask_large, _ = boundary_affs[:,4:].max(dim=1)
 
         assert all(i % 2 ==  1 for i in patch_shape_orig), "Patch should be odd"
 
@@ -114,12 +138,13 @@ class PatchLoss(nn.Module):
 
         all_patch_scale_fct = [(1,1,1), (1,2,2), (1,4,4)]
         all_prediction_scale_fct = [(1,2,2), (1,4,4), (1,8,8)]
-        all_number_patches = [30, 30, 10]
+        all_number_patches = [150, 130, 70]
+        # all_number_patches = [5, 5, 2]
 
 
 
         for level, patch_scale_fct, prediction_scale_fct, number_patches, pred in zip(range(3), all_patch_scale_fct, all_prediction_scale_fct, all_number_patches,
-                                                                         [predictions[-1], predictions[-2], predictions[-3]]):
+                                                                         [feat_pyr[0], feat_pyr[1], feat_pyr[2]]):
             patch_shape = tuple(pt*fc for pt, fc in zip(patch_shape_orig, patch_scale_fct))
 
             # TODO assert dims!
@@ -171,7 +196,7 @@ class PatchLoss(nn.Module):
                 all_emb_vectors[level].append(pred[valid_batch_indices][vect_slice_pred])
                 all_raw_patches[level].append(raw[valid_batch_indices][target_slice][dw_slice])
 
-            # batch_size = predictions.shape[0]
+            # batch_size = feat_pyr.shape[0]
             # todo_valid_slices = [number_patches for _ in range(batch_size)]
             # while True:
             #     random_offset = [np.random.randint(max_off + 1, size=(number_patches,)) for max_off in max_offsets]
@@ -182,39 +207,59 @@ class PatchLoss(nn.Module):
             #             slice(random_offset[i][n] + int(patch_shape[i] / 2), random_offset[i][n] + int(patch_shape[i] / 2) + 1) for i
             #             in range(len(random_offset)))
             #         for n in range(number_patches)]
-            #     indx = np.indices(predictions.shape)
+            #     indx = np.indices(feat_pyr.shape)
             #     target_idx = np.stack([indx[targ_slc] for targ_slc in target_slice], axis=1)
-            #     predictions[target_idx]
+            #     feat_pyr[target_idx]
             #
             #     break
 
-        # with torch.no_grad():
-        #     target_embedded_patch = self.AE_model.encode(target_patch)[...,0]
 
         # with torch.no_grad():
-        assert predictions[0].shape[1] % 2 == 0
-        emb_vect_size = int(predictions[0].shape[1])
-        # all_predicted_patches = [self.AE_model.decode(self.AE_model.reparameterize(vect[:,:emb_vect_size,:,0,0], vect[:,emb_vect_size:,:,0,0])) for vect in all_emb_vectors]
+        assert feat_pyr[0].shape[1] % 2 == 0
+        emb_vect_size = int(feat_pyr[0].shape[1]/2)
+        # all_predicted_patches = [self.model.AE_model.decode(self.model.AE_model.reparameterize(vect[:,:emb_vect_size,:,0,0], vect[:,emb_vect_size:,:,0,0])) for vect in all_emb_vectors]
 
         # Take only first channel, since now we predict masks:
-        all_predicted_patches = [[self.AE_model[lvl].decode(vect[:,:emb_vect_size,:,0,0])[:,[0]] for vect in all_emb_vectors[lvl]] for lvl in range(3)]
+        concatenated_pred =  [torch.cat(tuple(all_emb_vectors[lvl]), dim=0)[:, :, :, 0, 0] for lvl in range(3)]
+        mu =  [concatenated_pred[lvl][:,:emb_vect_size] for lvl in range(3)]
+        log_var =  [concatenated_pred[lvl][:,emb_vect_size:] for lvl in range(3)]
 
-        loss = 0
+
+        concatenated_pred = [self.model.AE_model[lvl].decode(self.model.AE_model[lvl].reparameterize(
+            mu[lvl],
+            log_var[lvl],
+        ))[:,[0]] for lvl in range(3)]
+
+        # all_predicted_patches = [[self.model.AE_model[lvl].decode(vect[:,:emb_vect_size,:,0,0])[:,[0]] for vect in all_emb_vectors[lvl]] for lvl in range(3)]
+
+        concatenated_trg = [torch.cat(tuple(all_target_patches[lvl]), dim=0) for lvl in range(3)]
+        concatenated_ign = [torch.cat(tuple(all_ignore_masks[lvl]), dim=0) for lvl in range(3)]
+        concatenated_raw = [torch.cat(tuple(all_raw_patches[lvl]), dim=0) for lvl in range(3)]
         for lvl in range(3):
-            random_plot = np.random.randint(len(all_predicted_patches[lvl]))
-            for i, [pred, trg, ign] in enumerate(zip(all_predicted_patches[lvl], all_target_patches[lvl], all_ignore_masks[lvl])):
-                if i == random_plot:
-                    btch_slc = slice(0,4) if trg.shape[0] >= 4 else slice(0, 1)
-                    # btch_slc = slice(0, 1)
-                    log_image("ptc_trg_l{}".format(lvl), trg[btch_slc, 0, 2])
-                    log_image("ptc_pred_l{}".format(lvl), pred[btch_slc, 0, 2])
-                    log_image("ptc_raw_l{}".format(lvl), all_raw_patches[lvl][i][btch_slc, 0, 2])
-                    log_image("ptc_ign_l{}".format(lvl), ign[btch_slc, 0, 2])
+            # with torch.no_grad():
+            #     target_mu, target_log_var  = self.model.AE_model[0].encode(concatenated_trg[lvl].float())
+            #
+            # loss1 = self.MSE_loss(mu[lvl], target_mu)
+            # loss2 = self.MSE_loss(log_var[lvl], target_log_var)
+            # loss += loss1 + loss2
 
-                # Apply ignore mask:
-                pred[ign] = 0
-                trg[ign] = 0
-                loss += self.soresen_loss(pred, trg.float())
+
+            pred, trg, ign = concatenated_pred[lvl], concatenated_trg[lvl], concatenated_ign[lvl]
+            if lvl == 2:
+                pred = 1 - pred
+                trg = 1 - trg
+            btch_slc = slice(0,4) if trg.shape[0] >= 4 else slice(0, 1)
+            # btch_slc = slice(0, 1)
+            log_image("ptc_trg_l{}".format(lvl), trg[btch_slc, 0, 2])
+            log_image("ptc_pred_l{}".format(lvl), pred[btch_slc, 0, 2])
+            log_image("ptc_raw_l{}".format(lvl), concatenated_raw[lvl][btch_slc, 0, 2])
+            log_image("ptc_ign_l{}".format(lvl), ign[btch_slc, 0, 2])
+
+            # Apply ignore mask:
+            pred[ign] = 0
+            trg[ign] = 0
+            loss += self.soresen_loss(pred, trg.float())
+            # loss += self.MSE_loss(pred, trg.float())
 
 
         # loss = torch.stack([self.soresen_loss(pred, trg)  for pred, trg in zip(all_predicted_patches, all_target_patches)]).sum()
@@ -227,7 +272,7 @@ class PatchLoss(nn.Module):
 
 
         # # Make full prediction:
-        # full_prediction = predict_full_image(predictions[:1,:emb_vect_size,0], self.AE_model.decode)
+        # full_prediction = predict_full_image(feat_pyr[:1,:emb_vect_size,0], self.AE_model.decode)
         # log_image("full_pred", full_prediction[0])
 
         return loss

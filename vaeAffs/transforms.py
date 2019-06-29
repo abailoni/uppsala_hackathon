@@ -9,8 +9,9 @@ class SetVAETarget(Transform):
         return [batch[0], np.copy(batch[0])]
 
 class HackyHacky(Transform):
+    # FIXME: super ugly, temp hack, add raw to target
     def batch_function(self, batch):
-        return [batch[0], np.concatenate([np.expand_dims(batch[0],0), batch[1]], axis=0)]
+        return batch[:-1] + (np.concatenate([np.expand_dims(batch[0],0), batch[-1]], axis=0), )
 
 class ComputeMeMask(Transform):
     def tensor_function(self, tensor):
@@ -43,25 +44,32 @@ class InvertTargets(Transform):
 
 
 class RandomlyDownscale(Transform):
-    def __init__(self, downscale_factor=2, *super_args, **super_kwargs):
+    def __init__(self, final_shape=(29,29),
+                 downscale_factors=(1,2,3,4,5),
+                 *super_args, **super_kwargs):
         # TODO: atm only working for 2d downscaling
         super(RandomlyDownscale, self).__init__(*super_args, **super_kwargs)
-        self.dw_fact = downscale_factor
+        self.dw_fact = downscale_factors
+        self.final_shape = final_shape
 
     def build_random_variables(self, **kwargs):
-        self.set_random_variable("DS", np.random.randint(2) == 0)
+        # self.set_random_variable("DS", np.random.randint(2) == 0)
+        self.set_random_variable("DS", np.random.choice(list(self.dw_fact)))
 
     def batch_function(self, batch):
         assert len(batch) == 1
         self.build_random_variables()
-        assert batch[0].shape[-1] % self.dw_fact == 0
-        assert batch[0].shape[-2] % self.dw_fact == 0
-        if self.get_random_variable("DS"):
-            new_batch = [batch[0][...,::self.dw_fact,::self.dw_fact]]
-        else:
-            shape0 = batch[0].shape[-2]
-            shape1 = batch[0].shape[-1]
-            off0 = np.random.randint(shape0 - shape0/self.dw_fact)
-            off1 = np.random.randint(shape1 - shape1/self.dw_fact)
-            new_batch = [batch[0][..., off0:int(off0+shape0/self.dw_fact), off1:int(off1+shape1/self.dw_fact)]]
-        return new_batch
+        DS = self.get_random_variable("DS")
+        # assert batch[0].shape[-1] % self.dw_fact == 0
+        # assert batch[0].shape[-2] % self.dw_fact == 0
+        new_batch = batch[0][...,::DS,::DS]
+        shape0 = new_batch.shape[-2]
+        shape1 = new_batch.shape[-1]
+        out_shape = self.final_shape
+        assert shape0 >= out_shape[0]
+        assert shape1 >= out_shape[1]
+        if shape0 > out_shape[0] or shape1 > out_shape[1]:
+            off0 = np.random.randint(shape0 - out_shape[0])
+            off1 = np.random.randint(shape1 - out_shape[1])
+            new_batch = new_batch[..., off0:int(off0+out_shape[0]), off1:int(off1+out_shape[1])]
+        return [new_batch]

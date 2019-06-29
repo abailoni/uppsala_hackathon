@@ -111,7 +111,7 @@ class CremiDataset(ZipReject):
             # computation being warped into the FOV.
             transforms.add(VolumeAsymmetricCrop(**crop_config))
 
-        # transforms.add(RandomlyDownscale(downscale_factor=3))
+        transforms.add(RandomlyDownscale())
         # transforms.add(RemoveInvalidAffs(apply_to=[0]))
         transforms.add(SetVAETarget())
 

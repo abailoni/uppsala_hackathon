@@ -14,9 +14,14 @@ loaders:
       rejection_threshold: 0.60
       segmentation:
         affinity_config:
-          retain_mask: False # This keep a mask of the valid affinities (not involving the ignore-label)
+          retain_mask: True # This keep a mask of the valid affinities (not involving the ignore-label)
           retain_segmentation: True # This keeps the label image in the inputs
           ignore_label: 0
+          nb_offsets: 1
+          max_offset_range:
+            - 2
+            - 45
+            - 45
 
     defect_augmentation_config:
         p_missing_slice: 0.03
@@ -69,8 +74,8 @@ loaders:
       # Number of processes to use for loading data. Set to (say) 10 if you wish to
       # use 10 CPU cores, or to 0 if you wish to use the same process for training and
       # data-loading (generally not recommended).
-      batch_size: 6
-      num_workers: 1
+      batch_size: 2
+      num_workers: 4
       drop_last: True
       pin_memory: False
       shuffle: True
@@ -166,7 +171,7 @@ model:
     in_channels: 1
 #    encoder_fmaps: [80, 160, 320, 640] #[80, 160, 320, 640]
     encoder_fmaps: [50, 120, 240, 450] #[80, 160, 320, 640]
-    pyramid_fmaps: 64
+    pyramid_fmaps: 128
     out_channels: null
     depth: 3
     upsampling_mode: 'nearest'
@@ -174,17 +179,17 @@ model:
       - [1, 2, 2]
       - [1, 2, 2]
       - [1, 2, 2]
+    path_autoencoder_model: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE64_3D_5_29_29_DS1_BCE_more/model.pytorch"
 #    final_activation: 'ReLU'
 #    final_activation: !Obj:Conv3D
 #      import_from: inferno.extensions.layers.convolutional
 #      in_channels: *tot_directions
 #      out_channels: *tot_directions
 #      kernel_size: 3
-#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/train_PyrUNetMultiScale_meMasks/best_checkpoint.pytorch"
+#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/PyrUNetMultiScale_MeMasks_newAE/best_checkpoint.pytorch"
 
 autoencoder:
-  latent_variable_size: 64
-  path: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE64_3D_5_29_29_DS1/model.pytorch"
+  latent_variable_size: 128
 #  path: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE_27fc_24/model.pytorch"
 #  path: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/Conv3DAutoEnc_Soresen_27_fc_noDownscale/model.pytorch"
 
@@ -206,7 +211,7 @@ trainer:
 
   optimizer:
     Adam:
-      lr: 1.0e-4
+      lr: 1.0e-5
       weight_decay: 0.0005
 #      betas: [0.9, 0.999]
 
@@ -218,7 +223,7 @@ trainer:
 
   tensorboard:
     log_scalars_every: [1, 'iterations']
-    log_images_every: [50, 'iterations']
+    log_images_every: [30, 'iterations']
     log_histograms_every: 'never'
     send_image_at_batch_indices: [0]
     send_image_at_channel_indices: [0]
@@ -261,7 +266,7 @@ firelight:
       input_mapping:
 #        global: [B: 0] # the mapping specified in 'global' is applied to all keys
         input: ['inputs', index: 0, B: 0, D: 0, W: "::2", H: "::2"]
-        target: ['target', index: 0, B: 0, D: 0, C: 2, W: "::2", H: "::2"]
+#        target: ['target', index: 0, B: 0, D: 0, C: 2, W: "::2", H: "::2"]
 #        preds: ['prediction', index: 0, B: 0, D: 0, C: 0]
 #        emb_pred: ["emb_pred", index: 0, B: 0, D: 0]
 
@@ -281,38 +286,20 @@ firelight:
             cmap: gray
 
         - IdentityVisualizer:
-            input: 'target'
+            input: ['target', index: 0, B: 0, D: 0, C: 10, W: "::2", H: "::2"]
+            cmap: gray
+        - IdentityVisualizer:
+            input: ['prediction', index: 0, B: 0, D: 0, C: 0]
             cmap: gray
 
-#        - IdentityVisualizer:
-#            input: ['full_pred', B: 0, C: 0]
-#            cmap: gray
+        - PcaVisualizer:
+            input: ['prediction', index: 1, B: 0, D: 0]
 
         - PcaVisualizer:
-            input: ['prediction', index: 2, B: 0, D: 0]
+            input: ['prediction', pre: {vaeAffs.utils.various.torch_tensor_zoom: {zoom: [1,1,1,2,2], order: 0}}, index: 2, B: 0, D: 0]
 
         - PcaVisualizer:
-            input: ['prediction', pre: {vaeAffs.utils.various.torch_tensor_zoom: {zoom: [1,1,1,2,2], order: 0}}, index: 1, B: 0, D: 0]
-
-        - PcaVisualizer:
-            input: ['prediction', pre: {vaeAffs.utils.various.torch_tensor_zoom: {zoom: [1,1,1,4,4], order: 0}}, index: 0, B: 0, D: 0]
-
-#  UNet_bottom_layers:
-#    ImageGridVisualizer:
-#        pad_width: 1  # width of the border between images in pixels
-#        pad_value: .2  # intensity of the border pixels
-#        upsampling_factor: 3  # the whole grid is upsampled by this factor
-#        row_specs: ['H', 'S', 'D']
-#        column_specs: ['W', 'C', 'B', 'V']
-#
-#        visualizers:
-#          - PcaVisualizer:
-#            input: ['prediction', index: 1, B: 0, D: 0, W: "::2", H: "::2"]
-#
-#          - PcaVisualizer:
-#            input: ['prediction', index: 0, B: 0, D: 0]
-
-
+            input: ['prediction', pre: {vaeAffs.utils.various.torch_tensor_zoom: {zoom: [1,1,1,4,4], order: 0}}, index: 3, B: 0, D: 0]
 
   ptch_l0:
     ImageGridVisualizer:

@@ -4,6 +4,8 @@ from speedrun import BaseExperiment, TensorboardMixin, InfernoMixin
 from speedrun.log_anywhere import register_logger, log_image, log_scalar
 from speedrun.py_utils import locate
 
+from vaeAffs.utils.path_utils import change_paths_config_file
+
 from copy import deepcopy
 import vaeAffs
 
@@ -58,6 +60,10 @@ class VaeCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         self.set('global/offsets', offsets)
         self.set('loaders/general/volume_config/segmentation/affinity_config/offsets', offsets)
 
+        self.set_devices()
+
+    def set_devices(self):
+        self.trainer.cuda([0,1])
 
     def get_default_offsets(self):
         return [[0, -4, +4],
@@ -123,12 +129,12 @@ if __name__ == '__main__':
     if '--inherit' in sys.argv:
         i = sys.argv.index('--inherit') + 1
         if sys.argv[i].endswith(('.yml', '.yaml')):
-            sys.argv[i] = os.path.join(config_path, sys.argv[i])
+            sys.argv[i] = change_paths_config_file(os.path.join(config_path, sys.argv[i]))
         else:
             sys.argv[i] = os.path.join(experiments_path, sys.argv[i])
     if '--update' in sys.argv:
         i = sys.argv.index('--update') + 1
-        sys.argv[i] = os.path.join(config_path, sys.argv[i])
+        sys.argv[i] = change_paths_config_file(os.path.join(config_path, sys.argv[i]))
     i = 0
     while True:
         if f'--update{i}' in sys.argv:

@@ -59,6 +59,8 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         self.set('global/offsets', offsets)
         self.set('loaders/general/volume_config/segmentation/affinity_config/offsets', offsets)
 
+        self.set_devices()
+
     def get_default_offsets(self):
         return [[0, -2, 0], [0, 0, -2], [0, 2, 0], [0, 0, 2],
                 [0, -4, 0], [0, 0, -4], [0, 4, 0], [0, 0, 4]]
@@ -90,12 +92,14 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
     #     model_config[model_class]['final_activation'] = \
     #         final_activation
 
+    def set_devices(self):
+        self.trainer.cuda([0,1])
 
     def inferno_build_criterion(self):
         print("Building criterion")
-        path = self.get("autoencoder/path")
+        # path = self.get("autoencoder/path")
         from vaeAffs.models.modified_unet import EncodingLoss, PatchLoss
-        loss = PatchLoss(path)
+        loss = PatchLoss(model=self.model)
         self._trainer.build_criterion(loss)
         self._trainer.build_validation_criterion(loss)
     #

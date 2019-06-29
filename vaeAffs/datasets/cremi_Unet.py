@@ -10,7 +10,7 @@ from inferno.utils.io_utils import yaml2dict
 from torch.utils.data.dataloader import DataLoader
 
 from neurofire.datasets.loader import RawVolume, SegmentationVolume, RawVolumeWithDefectAugmentation
-from neurofire.transform.affinities import affinity_config_to_transform
+from neurofire.transform.affinities import Segmentation2AffinitiesDynamicOffsets
 from neurofire.transform.artifact_source import RejectNonZeroThreshold
 from neurofire.transform.volume import RandomSlide
 
@@ -104,7 +104,7 @@ class CremiDataset(ZipReject):
         # affinity transforms for affinity targets
         # we apply the affinity target calculation only to the segmentation (1)
         assert self.affinity_config is not None
-        transforms.add(affinity_config_to_transform(apply_to=[1], **self.affinity_config))
+        transforms.add(Segmentation2AffinitiesDynamicOffsets(apply_to=[1], **self.affinity_config))
 
 
         # TODO: add clipping transformation

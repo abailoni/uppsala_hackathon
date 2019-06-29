@@ -33,11 +33,11 @@ loaders:
               downsampling_ratio: [1, 1, 1]
             volume_config:
               artifacts:
-                path: '/home/abailoni_local/hci_home/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
+                path: '$HCI_HOME/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
                 path_in_h5_dataset: 'defect_sections/raw'
                 dtype: float32
               alpha_mask:
-                path: '/home/abailoni_local/hci_home/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
+                path: '$HCI_HOME/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
                 path_in_h5_dataset: 'defect_sections/mask'
             master_config:
               elastic_transform:
@@ -69,8 +69,8 @@ loaders:
       # Number of processes to use for loading data. Set to (say) 10 if you wish to
       # use 10 CPU cores, or to 0 if you wish to use the same process for training and
       # data-loading (generally not recommended).
-      batch_size: 64
-      num_workers: 1
+      batch_size: 128
+      num_workers: 14
       drop_last: True
       pin_memory: False
       shuffle: True
@@ -89,7 +89,7 @@ loaders:
     slicing_config:
       # Sliding window size
       window_size:
-        A: &shape [5, 89, 89] # 141
+        A: &shape [5, 205, 205] # 141
         B: *shape
         C: *shape
       # Sliding window stride
@@ -108,9 +108,9 @@ loaders:
       # Raw data
       raw:
         path:
-          A: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleA_train.h5'
-          B: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleB_train.h5'
-          C: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleC_train.h5'
+          A: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleA_train.h5'
+          B: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleB_train.h5'
+          C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
           A: 'raw'
           B: 'raw'
@@ -120,9 +120,9 @@ loaders:
       # Segmentation
       segmentation:
         path:
-          A: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleA_train.h5'
-          B: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleB_train.h5'
-          C: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleC_train.h5'
+          A: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleA_train.h5'
+          B: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleB_train.h5'
+          C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
           A: 'segmentations/groundtruth_fixed'
           B: 'segmentations/groundtruth_fixed'
@@ -146,14 +146,14 @@ loaders:
     volume_config:
       raw:
         path:
-          C: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleC_train.h5'
+          C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
           C: 'raw'
         dtype: float32
         sigma: 0.025
       segmentation:
         path:
-          C: '/home/abailoni_local/hci_home/datasets/cremi/SOA_affinities/sampleC_train.h5'
+          C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
           C: 'segmentations/groundtruth_fixed'
         dtype: float32
@@ -177,12 +177,12 @@ model:
     final_activation: Sigmoid
     latent_variable_size: 64
     patch_size: [5,29,29]
-    loadfrom: "/home/abailoni_local/hci_home/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE64_3D_5_29_29_DS1/best_checkpoint.pytorch"
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE64_3D_5_29_29_DS1_BCE/best_checkpoint.pytorch"
 #    unfold_size: 27
 #    max_pool_factor: 8
 
 trainer:
-  max_epochs: 10 # basically infinite
+  max_epochs: 10000 # basically infinite
 #  TODO: increase this if we need both affinity targets and directional DT targets
   num_targets: 1
 
@@ -199,7 +199,8 @@ trainer:
 
   optimizer:
     Adam:
-      lr: 1.0e-4
+#      lr: 1.0e-4
+      lr: 5.0e-5
       weight_decay: 0.0005
 #      betas: [0.9, 0.999]
 

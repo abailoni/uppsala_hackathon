@@ -477,11 +477,11 @@ class AE_loss(nn.Module):
 
 
 class VAE_loss(nn.Module):
-    # def __init__(self):
-    #     super(VAE_loss, self).__init__()
+    def __init__(self):
+        super(VAE_loss, self).__init__()
         # self.reconstruction_function = nn.BCELoss()
         # self.reconstruction_function.size_average = False
-        # self.reconstruction_function = SorensenDiceLoss()
+        self.reconstruction_function = SorensenDiceLoss()
         # self.reconstruction_function = nn.MSELoss()
 
     def forward(self, predictions, target):
@@ -490,6 +490,7 @@ class VAE_loss(nn.Module):
 
         # Reconstruction loss:
         BCE = nn.functional.binary_cross_entropy(recon_x, target, reduction='sum')
+        # BCE = self.reconstruction_function(recon_x, target)
 
         # see Appendix B from VAE paper:
         # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
