@@ -62,8 +62,8 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         self.set_devices()
 
     def get_default_offsets(self):
-        return [[0, -2, 0], [0, 0, -2], [0, 2, 0], [0, 0, 2],
-                [0, -4, 0], [0, 0, -4], [0, 4, 0], [0, 0, 4]]
+        return [[0, -1, 0], [0, 0, -1], [0, 2, 0], [0, 0, 2],
+                [0, -3, 0], [0, 0, -3], [0, 3, 0], [0, 0, 3]]
 
     def build_model(self, model_config=None):
         model_config = self.get('model') if model_config is None else model_config
@@ -98,8 +98,9 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
     def inferno_build_criterion(self):
         print("Building criterion")
         # path = self.get("autoencoder/path")
+        loss_kwargs = self.get("trainer/criterion/kwargs")
         from vaeAffs.models.modified_unet import EncodingLoss, PatchLoss
-        loss = PatchLoss(model=self.model)
+        loss = PatchLoss(model=self.model, **loss_kwargs)
         self._trainer.build_criterion(loss)
         self._trainer.build_validation_criterion(loss)
     #

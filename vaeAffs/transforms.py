@@ -13,6 +13,17 @@ class HackyHacky(Transform):
     def batch_function(self, batch):
         return batch[:-1] + (np.concatenate([np.expand_dims(batch[0],0), batch[-1]], axis=0), )
 
+
+class RandomZCrop(Transform):
+    def build_random_variables(self):
+        np.random.seed()
+        self.set_random_variable('gamma',
+                                 np.random.uniform(low=self.gamma_between[0],
+                                                   high=self.gamma_between[1]))
+
+    def batch_function(self, batch):
+        return [self.random_crop(b) for b in batch]
+
 class ComputeMeMask(Transform):
     def tensor_function(self, tensor):
         assert tensor.ndim == 3
@@ -45,7 +56,7 @@ class InvertTargets(Transform):
 
 class RandomlyDownscale(Transform):
     def __init__(self, final_shape=(29,29),
-                 downscale_factors=(1,2,3,4,5),
+                 downscale_factors=(1,2,4),
                  *super_args, **super_kwargs):
         # TODO: atm only working for 2d downscaling
         super(RandomlyDownscale, self).__init__(*super_args, **super_kwargs)
@@ -72,4 +83,7 @@ class RandomlyDownscale(Transform):
             off0 = np.random.randint(shape0 - out_shape[0])
             off1 = np.random.randint(shape1 - out_shape[1])
             new_batch = new_batch[..., off0:int(off0+out_shape[0]), off1:int(off1+out_shape[1])]
+
+        if DS == 1:
+            new_batch[:4]
         return [new_batch]

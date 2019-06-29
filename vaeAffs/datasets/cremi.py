@@ -17,17 +17,8 @@ from neurofire.transform.volume import RandomSlide
 from ..transforms import SetVAETarget, RemoveThirdDimension, RemoveInvalidAffs, RandomlyDownscale, ComputeMeMask
 import numpy as np
 
+from .cremi_Unet import RejectSingleLabelVolumes
 
-class RejectSingleLabelVolumes(object):
-    def __init__(self, threshold):
-        """
-        :param threshold: If the biggest segment takes more than 'threshold', batch is rejected
-        """
-        self.threshold = threshold
-
-    def __call__(self, fetched):
-        _, counts = np.unique(fetched, return_counts=True)
-        return ((float(np.max(counts)) / fetched.size) > self.threshold) or ((np.count_nonzero(fetched) / fetched.size) < 0.95)
 
 
 class CremiDataset(ZipReject):
@@ -63,7 +54,7 @@ class CremiDataset(ZipReject):
         self.segmentation_volume = SegmentationVolume(name=name,
                                                       **segmentation_volume_kwargs)
 
-        rejection_threshold = volume_config.get('rejection_threshold', 0.92)
+        rejection_threshold = volume_config.get('rejection_threshold', 1.)
         super().__init__(self.segmentation_volume,
                          sync=True, rejection_dataset_indices=0,
                          rejection_criterion=RejectSingleLabelVolumes(rejection_threshold))
@@ -99,8 +90,8 @@ class CremiDataset(ZipReject):
         # affinity transforms for affinity targets
         # we apply the affinity target calculation only to the segmentation (1)
         assert self.affinity_config is not None
-        # transforms.add(affinity_config_to_transform(apply_to=[0], **self.affinity_config))
-        transforms.add(ComputeMeMask(apply_to=[0]))
+        transforms.add(affinity_config_to_transform(apply_to=[0], **self.affinity_config))
+        # transforms.add(ComputeMeMask(apply_to=[0]))
 
         # TODO: add clipping transformation
 
@@ -111,7 +102,7 @@ class CremiDataset(ZipReject):
             # computation being warped into the FOV.
             transforms.add(VolumeAsymmetricCrop(**crop_config))
 
-        transforms.add(RandomlyDownscale())
+        transforms.add(RandomlyDownscale(final_shape=(15,15), downscale_factors=(1,2,4)))
         # transforms.add(RemoveInvalidAffs(apply_to=[0]))
         transforms.add(SetVAETarget())
 
