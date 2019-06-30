@@ -184,7 +184,7 @@ model:
     path_autoencoder_model: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE64_3D_5_29_29_DS1_BCE_more/model.pytorch"
     AE_kwargs:
       add_residual_connections: true
-      conv_type_key: conv_bn
+      conv_type_key: "vanilla" # conv_bn
       fmap_growth: 3
       in_channels: 1
       #    out_channels: 1

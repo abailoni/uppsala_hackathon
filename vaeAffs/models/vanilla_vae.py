@@ -17,227 +17,227 @@ from inferno.extensions.criteria.set_similarity_measures import SorensenDiceLoss
 from inferno.extensions.layers.reshape import GlobalMeanPooling
 
 
-class VAE(nn.Module):
-    def __init__(self, nc, ngf, ndf, latent_variable_size):
-        super(VAE, self).__init__()
-
-        self.nc = nc
-        self.ngf = ngf
-        self.ndf = ndf
-        self.latent_variable_size = latent_variable_size
-
-        # encoder
-        self.e1 = nn.Conv2d(nc, ndf, 4, 2, 1)
-        self.bn1 = nn.BatchNorm2d(ndf)
-
-        self.e2 = nn.Conv2d(ndf, ndf * 2, 4, 2, 1)
-        self.bn2 = nn.BatchNorm2d(ndf * 2)
-
-        self.e3 = nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1)
-        self.bn3 = nn.BatchNorm2d(ndf * 4)
-
-        self.e4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1)
-        self.bn4 = nn.BatchNorm2d(ndf * 8)
-
-        self.e5 = nn.Conv2d(ndf * 8, ndf * 8, 4, 2, 1)
-        self.bn5 = nn.BatchNorm2d(ndf * 8)
-        self.global_pool = GlobalMeanPooling()
-
-        self.fc1 = nn.Conv2d(ndf * 8, latent_variable_size, 1, 1, 0)
-        self.fc2 = nn.Conv2d(ndf * 8, latent_variable_size, 1, 1, 0)
-
-        # decoder
-        self.d1 = nn.Conv2d(latent_variable_size, ngf * 8 * 2, 1, 1, 0)
-
-        self.up1 = nn.UpsamplingNearest2d(scale_factor=2)
-        self.pd1 = nn.ReplicationPad2d(1)
-        self.d2 = nn.Conv2d(ngf * 8 * 2, ngf * 8, 3, 1)
-        self.bn6 = nn.BatchNorm2d(ngf * 8, 1.e-3)
-
-        self.up2 = nn.UpsamplingNearest2d(scale_factor=2)
-        self.pd2 = nn.ReplicationPad2d(1)
-        self.d3 = nn.Conv2d(ngf * 8, ngf * 4, 3, 1)
-        self.bn7 = nn.BatchNorm2d(ngf * 4, 1.e-3)
-
-        self.up3 = nn.UpsamplingNearest2d(scale_factor=2)
-        self.pd3 = nn.ReplicationPad2d(1)
-        self.d4 = nn.Conv2d(ngf * 4, ngf * 2, 3, 1)
-        self.bn8 = nn.BatchNorm2d(ngf * 2, 1.e-3)
-
-        self.up4 = nn.UpsamplingNearest2d(scale_factor=2)
-        self.pd4 = nn.ReplicationPad2d(1)
-        self.d5 = nn.Conv2d(ngf * 2, ngf, 3, 1)
-        self.bn9 = nn.BatchNorm2d(ngf, 1.e-3)
-
-        self.up5 = nn.UpsamplingNearest2d(scale_factor=2)
-        self.pd5 = nn.ReplicationPad2d(1)
-        self.d6 = nn.Conv2d(ngf, nc, 3, 1)
-
-        self.leakyrelu = nn.LeakyReLU(0.2)
-        self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
-
-    def encode(self, x):
-        h1 = self.leakyrelu(self.bn1(self.e1(x)))
-        h2 = self.leakyrelu(self.bn2(self.e2(h1)))
-        h3 = self.leakyrelu(self.bn3(self.e3(h2)))
-        h4 = self.leakyrelu(self.bn4(self.e4(h3)))
-        h5 = self.leakyrelu(self.e5(h4))
-
-        spatial_size = h5.size()[2]
-
-        # h5 = self.global_pool(h5)
-
-        return self.fc1(h5), self.fc2(h5)
-
-    def reparametrize(self, mu, logvar):
-        std = logvar.mul(0.5).exp_()
-        # if args.cuda:
-        eps = torch.cuda.FloatTensor(std.size()).normal_()
-        # else:
-        #     eps = torch.FloatTensor(std.size()).normal_()
-        eps = Variable(eps)
-        return eps.mul(std).add_(mu)
-
-    def check_dim(self, x):
-        if x.dim() != 4:
-            assert x.dim() == 5
-            # Get rid of third dimension:
-            x = x[:, :, 0]
-        return x
-
-    def decode(self, z):
-        h1 = self.relu(self.d1(z))
-        # h1 = h1.view(-1, self.ngf*8*2, 4, 4)
-        h2 = self.leakyrelu(self.bn6(self.d2(self.pd1(self.up1(h1)))))
-        h3 = self.leakyrelu(self.bn7(self.d3(self.pd2(self.up2(h2)))))
-        h4 = self.leakyrelu(self.bn8(self.d4(self.pd3(self.up3(h3)))))
-        h5 = self.leakyrelu(self.bn9(self.d5(self.pd4(self.up4(h4)))))
-
-        return self.sigmoid(self.d6(self.pd5(self.up5(h5))))
-
-    def get_latent_var(self, x):
-        x = self.check_dim(x)
-        mu, logvar = self.encode(x)
-        z = self.reparametrize(mu, logvar)
-        return z
-
-    def forward(self, x):
-        x_shape = x.size()
-        x = self.check_dim(x)
-        mu, logvar = self.encode(x)
-        z = self.reparametrize(mu, logvar)
-        res = self.decode(z)
-        res = res.view(*x_shape)
-        return [res, mu, logvar]
-
-
-class VAE_debug(VAE):
-    def __init__(self, nc, ngf, ndf, latent_variable_size, unfold_size=6):
-        super(VAE_debug, self).__init__(nc, ngf, ndf, latent_variable_size)
-
-        # encoder
-        self.e1 = nn.Conv2d(nc, ndf, kernel_size=3, stride=1, dilation=2)
-        self.bn1 = nn.BatchNorm2d(ndf)
-
-        self.e2 = nn.Conv2d(ndf, ndf * 2, kernel_size=3, stride=1, dilation=2)
-        self.bn2 = nn.BatchNorm2d(ndf * 2)
-
-        # self.e3 = nn.Conv2d(ndf*2, ndf*4, kernel_size=3, stride=1, dilation=2)
-        # self.bn3 = nn.BatchNorm2d(ndf*4)
-        #
-        # self.e4 = nn.Conv2d(ndf*4, ndf*8, kernel_size=3, stride=1, dilation=2)
-        # self.bn4 = nn.BatchNorm2d(ndf*8)
-        #
-        # self.e5 = nn.Conv2d(ndf*8, ndf*8, kernel_size=3, stride=1, dilation=2)
-        # self.bn5 = nn.BatchNorm2d(ndf*8)
-
-        self.unfold = nn.Unfold(kernel_size=unfold_size)
-
-        self.fc1 = nn.Conv1d(ndf * 2 * unfold_size * unfold_size, latent_variable_size, 1, 1, 0)
-        self.fc2 = nn.Conv1d(ndf * 2 * unfold_size * unfold_size, latent_variable_size, 1, 1, 0)
-
-        # decoder
-        self.d1 = nn.Conv1d(latent_variable_size, ngf * 2 * unfold_size * unfold_size, 1, 1, 0)
-
-        # self.up1 = nn.functional.interpolate(scale_factor=2, mode='bilinear')
-        # self.up1 = nn.UpsamplingNearest2d(scale_factor=2)
-        self.fold = nn.Fold(output_size=(unfold_size, unfold_size), kernel_size=unfold_size)
-
-        # self.pd1 = nn.ReplicationPad2d(1)
-        self.d2 = nn.ConvTranspose2d(ngf * 2, ngf, kernel_size=3, stride=1, padding=0, dilation=2)
-        self.bn6 = nn.BatchNorm2d(ngf, 1.e-3)
-
-        # self.up2 = nn.UpsamplingNearest2d(scale_factor=2)
-        # self.pd2 = nn.ReplicationPad2d(1)
-        self.d3 = nn.ConvTranspose2d(ngf, nc, kernel_size=3, stride=1, padding=0, dilation=2)
-        # self.bn7 = nn.BatchNorm2d(ngf, 1.e-3)
-
-        self.leakyrelu = nn.LeakyReLU(0.2)
-        self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
-
-    def encode(self, x):
-        h1 = self.leakyrelu(self.bn1(self.e1(x)))
-        h2 = self.leakyrelu(self.bn2(self.e2(h1)))
-
-        unfolded = self.unfold(h2)
-
-        return self.fc1(unfolded), self.fc2(unfolded)
-
-    def decode(self, z):
-        h1 = self.relu(self.d1(z))
-        nb_blocks = h1.size()[2]
-        assert nb_blocks == 1
-
-        h1 = self.fold(h1)
-        # h1 = h1.view(-1, self.ngf*8*2, 4, 4)
-        h2 = self.leakyrelu(self.bn6(self.d2(h1)))
-        h3 = self.d3(h2)
-        # h4 = self.leakyrelu(self.bn8(self.d4(self.pd3(self.up3(h3)))))
-        # h5 = self.leakyrelu(self.bn9(self.d5(self.pd4(self.up4(h4)))))
-
-        return self.sigmoid(h3)
-
-    def forward(self, x):
-        x_shape = x.size()
-        x = self.check_dim(x)
-        mu, logvar = self.encode(x)
-        # z = self.reparametrize(mu, logvar)
-        res = self.decode(mu)
-        res = res.view(*x_shape)
-        return [res, mu, logvar]
-
-
-class LeakyBatchNormConv2D(nn.Module):
-    def __init__(self, input_ch, output_ch, kernel_size=3, stride=1, dilation=1):
-        super(LeakyBatchNormConv2D, self).__init__()
-        self.conv = nn.Conv2d(input_ch, output_ch, kernel_size=kernel_size,
-                              stride=stride,
-                              dilation=dilation)
-        self.leakyrelu = nn.LeakyReLU(0.2)
-        self.bn = nn.BatchNorm2d(output_ch)
-
-    def forward(self, tensor):
-        return self.leakyrelu(self.bn(self.conv(tensor)))
-
-
-class LeakyBatchNormTraspConv2D(nn.Module):
-    def __init__(self, input_ch, output_ch, kernel_size=3, stride=1, dilation=1,
-                 apply_post_conv=True):
-        super(LeakyBatchNormTraspConv2D, self).__init__()
-        self.conv = nn.ConvTranspose2d(input_ch, output_ch, kernel_size=kernel_size,
-                                       stride=stride,
-                                       dilation=dilation)
-        self.leakyrelu = nn.LeakyReLU(0.2)
-        self.bn = nn.BatchNorm2d(output_ch)
-        self.appy_post_conv = apply_post_conv
-
-    def forward(self, tensor):
-        if self.appy_post_conv:
-            return self.leakyrelu(self.bn(self.conv(tensor)))
-        else:
-            return self.conv(tensor)
+# class VAE(nn.Module):
+#     def __init__(self, nc, ngf, ndf, latent_variable_size):
+#         super(VAE, self).__init__()
+#
+#         self.nc = nc
+#         self.ngf = ngf
+#         self.ndf = ndf
+#         self.latent_variable_size = latent_variable_size
+#
+#         # encoder
+#         self.e1 = nn.Conv2d(nc, ndf, 4, 2, 1)
+#         self.bn1 = nn.BatchNorm2d(ndf)
+#
+#         self.e2 = nn.Conv2d(ndf, ndf * 2, 4, 2, 1)
+#         self.bn2 = nn.BatchNorm2d(ndf * 2)
+#
+#         self.e3 = nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1)
+#         self.bn3 = nn.BatchNorm2d(ndf * 4)
+#
+#         self.e4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1)
+#         self.bn4 = nn.BatchNorm2d(ndf * 8)
+#
+#         self.e5 = nn.Conv2d(ndf * 8, ndf * 8, 4, 2, 1)
+#         self.bn5 = nn.BatchNorm2d(ndf * 8)
+#         self.global_pool = GlobalMeanPooling()
+#
+#         self.fc1 = nn.Conv2d(ndf * 8, latent_variable_size, 1, 1, 0)
+#         self.fc2 = nn.Conv2d(ndf * 8, latent_variable_size, 1, 1, 0)
+#
+#         # decoder
+#         self.d1 = nn.Conv2d(latent_variable_size, ngf * 8 * 2, 1, 1, 0)
+#
+#         self.up1 = nn.UpsamplingNearest2d(scale_factor=2)
+#         self.pd1 = nn.ReplicationPad2d(1)
+#         self.d2 = nn.Conv2d(ngf * 8 * 2, ngf * 8, 3, 1)
+#         self.bn6 = nn.BatchNorm2d(ngf * 8, 1.e-3)
+#
+#         self.up2 = nn.UpsamplingNearest2d(scale_factor=2)
+#         self.pd2 = nn.ReplicationPad2d(1)
+#         self.d3 = nn.Conv2d(ngf * 8, ngf * 4, 3, 1)
+#         self.bn7 = nn.BatchNorm2d(ngf * 4, 1.e-3)
+#
+#         self.up3 = nn.UpsamplingNearest2d(scale_factor=2)
+#         self.pd3 = nn.ReplicationPad2d(1)
+#         self.d4 = nn.Conv2d(ngf * 4, ngf * 2, 3, 1)
+#         self.bn8 = nn.BatchNorm2d(ngf * 2, 1.e-3)
+#
+#         self.up4 = nn.UpsamplingNearest2d(scale_factor=2)
+#         self.pd4 = nn.ReplicationPad2d(1)
+#         self.d5 = nn.Conv2d(ngf * 2, ngf, 3, 1)
+#         self.bn9 = nn.BatchNorm2d(ngf, 1.e-3)
+#
+#         self.up5 = nn.UpsamplingNearest2d(scale_factor=2)
+#         self.pd5 = nn.ReplicationPad2d(1)
+#         self.d6 = nn.Conv2d(ngf, nc, 3, 1)
+#
+#         self.leakyrelu = nn.LeakyReLU(0.2)
+#         self.relu = nn.ReLU()
+#         self.sigmoid = nn.Sigmoid()
+#
+#     def encode(self, x):
+#         h1 = self.leakyrelu(self.bn1(self.e1(x)))
+#         h2 = self.leakyrelu(self.bn2(self.e2(h1)))
+#         h3 = self.leakyrelu(self.bn3(self.e3(h2)))
+#         h4 = self.leakyrelu(self.bn4(self.e4(h3)))
+#         h5 = self.leakyrelu(self.e5(h4))
+#
+#         spatial_size = h5.size()[2]
+#
+#         # h5 = self.global_pool(h5)
+#
+#         return self.fc1(h5), self.fc2(h5)
+#
+#     def reparametrize(self, mu, logvar):
+#         std = logvar.mul(0.5).exp_()
+#         # if args.cuda:
+#         eps = torch.cuda.FloatTensor(std.size()).normal_()
+#         # else:
+#         #     eps = torch.FloatTensor(std.size()).normal_()
+#         eps = Variable(eps)
+#         return eps.mul(std).add_(mu)
+#
+#     def check_dim(self, x):
+#         if x.dim() != 4:
+#             assert x.dim() == 5
+#             # Get rid of third dimension:
+#             x = x[:, :, 0]
+#         return x
+#
+#     def decode(self, z):
+#         h1 = self.relu(self.d1(z))
+#         # h1 = h1.view(-1, self.ngf*8*2, 4, 4)
+#         h2 = self.leakyrelu(self.bn6(self.d2(self.pd1(self.up1(h1)))))
+#         h3 = self.leakyrelu(self.bn7(self.d3(self.pd2(self.up2(h2)))))
+#         h4 = self.leakyrelu(self.bn8(self.d4(self.pd3(self.up3(h3)))))
+#         h5 = self.leakyrelu(self.bn9(self.d5(self.pd4(self.up4(h4)))))
+#
+#         return self.sigmoid(self.d6(self.pd5(self.up5(h5))))
+#
+#     def get_latent_var(self, x):
+#         x = self.check_dim(x)
+#         mu, logvar = self.encode(x)
+#         z = self.reparametrize(mu, logvar)
+#         return z
+#
+#     def forward(self, x):
+#         x_shape = x.size()
+#         x = self.check_dim(x)
+#         mu, logvar = self.encode(x)
+#         z = self.reparametrize(mu, logvar)
+#         res = self.decode(z)
+#         res = res.view(*x_shape)
+#         return [res, mu, logvar]
+#
+#
+# class VAE_debug(VAE):
+#     def __init__(self, nc, ngf, ndf, latent_variable_size, unfold_size=6):
+#         super(VAE_debug, self).__init__(nc, ngf, ndf, latent_variable_size)
+#
+#         # encoder
+#         self.e1 = nn.Conv2d(nc, ndf, kernel_size=3, stride=1, dilation=2)
+#         self.bn1 = nn.BatchNorm2d(ndf)
+#
+#         self.e2 = nn.Conv2d(ndf, ndf * 2, kernel_size=3, stride=1, dilation=2)
+#         self.bn2 = nn.BatchNorm2d(ndf * 2)
+#
+#         # self.e3 = nn.Conv2d(ndf*2, ndf*4, kernel_size=3, stride=1, dilation=2)
+#         # self.bn3 = nn.BatchNorm2d(ndf*4)
+#         #
+#         # self.e4 = nn.Conv2d(ndf*4, ndf*8, kernel_size=3, stride=1, dilation=2)
+#         # self.bn4 = nn.BatchNorm2d(ndf*8)
+#         #
+#         # self.e5 = nn.Conv2d(ndf*8, ndf*8, kernel_size=3, stride=1, dilation=2)
+#         # self.bn5 = nn.BatchNorm2d(ndf*8)
+#
+#         self.unfold = nn.Unfold(kernel_size=unfold_size)
+#
+#         self.fc1 = nn.Conv1d(ndf * 2 * unfold_size * unfold_size, latent_variable_size, 1, 1, 0)
+#         self.fc2 = nn.Conv1d(ndf * 2 * unfold_size * unfold_size, latent_variable_size, 1, 1, 0)
+#
+#         # decoder
+#         self.d1 = nn.Conv1d(latent_variable_size, ngf * 2 * unfold_size * unfold_size, 1, 1, 0)
+#
+#         # self.up1 = nn.functional.interpolate(scale_factor=2, mode='bilinear')
+#         # self.up1 = nn.UpsamplingNearest2d(scale_factor=2)
+#         self.fold = nn.Fold(output_size=(unfold_size, unfold_size), kernel_size=unfold_size)
+#
+#         # self.pd1 = nn.ReplicationPad2d(1)
+#         self.d2 = nn.ConvTranspose2d(ngf * 2, ngf, kernel_size=3, stride=1, padding=0, dilation=2)
+#         self.bn6 = nn.BatchNorm2d(ngf, 1.e-3)
+#
+#         # self.up2 = nn.UpsamplingNearest2d(scale_factor=2)
+#         # self.pd2 = nn.ReplicationPad2d(1)
+#         self.d3 = nn.ConvTranspose2d(ngf, nc, kernel_size=3, stride=1, padding=0, dilation=2)
+#         # self.bn7 = nn.BatchNorm2d(ngf, 1.e-3)
+#
+#         self.leakyrelu = nn.LeakyReLU(0.2)
+#         self.relu = nn.ReLU()
+#         self.sigmoid = nn.Sigmoid()
+#
+#     def encode(self, x):
+#         h1 = self.leakyrelu(self.bn1(self.e1(x)))
+#         h2 = self.leakyrelu(self.bn2(self.e2(h1)))
+#
+#         unfolded = self.unfold(h2)
+#
+#         return self.fc1(unfolded), self.fc2(unfolded)
+#
+#     def decode(self, z):
+#         h1 = self.relu(self.d1(z))
+#         nb_blocks = h1.size()[2]
+#         assert nb_blocks == 1
+#
+#         h1 = self.fold(h1)
+#         # h1 = h1.view(-1, self.ngf*8*2, 4, 4)
+#         h2 = self.leakyrelu(self.bn6(self.d2(h1)))
+#         h3 = self.d3(h2)
+#         # h4 = self.leakyrelu(self.bn8(self.d4(self.pd3(self.up3(h3)))))
+#         # h5 = self.leakyrelu(self.bn9(self.d5(self.pd4(self.up4(h4)))))
+#
+#         return self.sigmoid(h3)
+#
+#     def forward(self, x):
+#         x_shape = x.size()
+#         x = self.check_dim(x)
+#         mu, logvar = self.encode(x)
+#         # z = self.reparametrize(mu, logvar)
+#         res = self.decode(mu)
+#         res = res.view(*x_shape)
+#         return [res, mu, logvar]
+#
+#
+# class LeakyBatchNormConv2D(nn.Module):
+#     def __init__(self, input_ch, output_ch, kernel_size=3, stride=1, dilation=1):
+#         super(LeakyBatchNormConv2D, self).__init__()
+#         self.conv = nn.Conv2d(input_ch, output_ch, kernel_size=kernel_size,
+#                               stride=stride,
+#                               dilation=dilation)
+#         self.leakyrelu = nn.LeakyReLU(0.2)
+#         self.bn = nn.BatchNorm2d(output_ch)
+#
+#     def forward(self, tensor):
+#         return self.leakyrelu(self.bn(self.conv(tensor)))
+#
+#
+# class LeakyBatchNormTraspConv2D(nn.Module):
+#     def __init__(self, input_ch, output_ch, kernel_size=3, stride=1, dilation=1,
+#                  apply_post_conv=True):
+#         super(LeakyBatchNormTraspConv2D, self).__init__()
+#         self.conv = nn.ConvTranspose2d(input_ch, output_ch, kernel_size=kernel_size,
+#                                        stride=stride,
+#                                        dilation=dilation)
+#         self.leakyrelu = nn.LeakyReLU(0.2)
+#         self.bn = nn.BatchNorm2d(output_ch)
+#         self.appy_post_conv = apply_post_conv
+#
+#     def forward(self, tensor):
+#         if self.appy_post_conv:
+#             return self.leakyrelu(self.bn(self.conv(tensor)))
+#         else:
+#             return self.conv(tensor)
 
 
 from neurofire.models.unet.unet_3d import CONV_TYPES, Decoder, DecoderResidual, BaseResidual, Base, Output, Encoder, \
