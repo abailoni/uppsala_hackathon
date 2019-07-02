@@ -62,6 +62,33 @@ class EncodingLoss(nn.Module):
 
         return loss
 
+class AffLoss(nn.Module):
+    def __init__(self, loss_type="Dice"):
+        super(AffLoss, self).__init__()
+        if loss_type == "Dice":
+            self.loss = SorensenDiceLoss()
+        elif loss_type == "MSE":
+            self.loss = nn.MSELoss()
+        elif loss_type == "BCE":
+            self.loss = nn.BCELoss()
+        else:
+            raise ValueError
+
+    def forward(self, affinities, target):
+        # gt_segm = target[:,0]
+        all_affs = target[:,1:]
+        nb_offsets = int(all_affs.shape[1] / 2)
+        target_affs, ignore_affs_mask = all_affs[:,:nb_offsets], all_affs[:,nb_offsets:]
+
+        # Apply ignore mask:
+        target_affs = 1 - target_affs
+        affinities = 1 - affinities
+        ignore_affs_mask = ignore_affs_mask == 0
+        affinities[ignore_affs_mask] = 0
+        target_affs[ignore_affs_mask] = 0
+        return self.loss(affinities, target_affs)
+
+
 
 from speedrun.log_anywhere import log_image, log_embedding
 
