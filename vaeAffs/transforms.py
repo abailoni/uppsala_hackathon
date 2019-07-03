@@ -14,6 +14,56 @@ class HackyHacky(Transform):
         return batch[:-1] + (np.concatenate([np.expand_dims(batch[0],0), batch[-1]], axis=0), )
 
 
+class CreateMaskSeed(Transform):
+    def batch_function(self, batch):
+        assert len(batch) == 2
+        raw, gt_segm = batch
+
+        gt_shape = gt_segm.shape[-3:]
+        # center_coord = [int(shp/2) for shp in gt_shape]
+        seed_padding = (0,10,10)
+        center_coord = [int(gt_shape[0]/2), seed_padding[1]+10, seed_padding[2]+10]
+
+        # Look for point far away from boundary:
+        # FIXME: change this shit to some DT stuff
+        from copy import deepcopy
+        current_pos = deepcopy(center_coord)
+        while True:
+            gt_slice = tuple(slice(pos-pad, pos+pad+1) for pos, pad in zip(current_pos, seed_padding))
+            labels = np.unique(gt_segm[gt_slice])
+            # TODO: generalize ignore label
+            if labels.shape[0] == 1 and labels[0] != 0:
+                break
+            else:
+                current_pos[1] += 1
+                if current_pos[1]+seed_padding[1] > gt_shape[1]:
+                    current_pos[1] = center_coord[1]
+                    current_pos[2] += 1
+                    if current_pos[2] + seed_padding[2] > gt_shape[2]:
+                        raise RuntimeError("Seed not available...")
+
+        input_mask = np.zeros_like(raw)
+        gt_mask = np.zeros_like(raw)
+        ignore_mask = np.zeros_like(raw)
+        input_mask[gt_slice] = 1
+
+        # Create GT Mask:
+        gt_mask[gt_segm == labels[0]] = 1
+        ignore_mask[gt_segm == 0] = 1
+        return [raw, input_mask, gt_mask, ignore_mask]
+
+class ApplyIgnoreMask(Transform):
+    def batch_function(self, inputs_):
+        pred, targets = inputs_
+        assert len(targets) == 2
+        mask = 1 - targets[1]
+        pred = pred * mask
+        targets[0] = targets[0] * mask
+        return pred, targets[0]
+
+
+
+
 class RandomZCrop(Transform):
     def build_random_variables(self):
         np.random.seed()

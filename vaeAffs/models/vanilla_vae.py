@@ -16,7 +16,6 @@ from inferno.extensions.criteria.set_similarity_measures import SorensenDiceLoss
 
 from inferno.extensions.layers.reshape import GlobalMeanPooling
 
-
 # class VAE(nn.Module):
 #     def __init__(self, nc, ngf, ndf, latent_variable_size):
 #         super(VAE, self).__init__()
@@ -243,22 +242,27 @@ from inferno.extensions.layers.reshape import GlobalMeanPooling
 from neurofire.models.unet.unet_3d import CONV_TYPES, Decoder, DecoderResidual, BaseResidual, Base, Output, Encoder, \
     EncoderResidual
 
+
 def unfold_3d(x, *args, **kwargs):
     unfolded = []
     for z in range(x.shape[2]):
-        unfolded_slice = nn.functional.unfold(x[:,:,z], *args, **kwargs)
-        assert unfolded_slice.shape[-1] == 1, "kernel size does not match! Trying to unfold a patch of size {} with kernel {}".format(x.shape[-1], kwargs["kernel_size"])
+        unfolded_slice = nn.functional.unfold(x[:, :, z], *args, **kwargs)
+        assert unfolded_slice.shape[
+                   -1] == 1, "kernel size does not match! Trying to unfold a patch of size {} with kernel {}".format(
+            x.shape[-1], kwargs["kernel_size"])
         unfolded.append(unfolded_slice)
     x = torch.cat(unfolded, dim=2)
     return x
 
+
 def fold_3d(x, *args, **kwargs):
     folded = []
     for z in range(x.shape[2]):
-        folded_slice = nn.functional.fold(x[:,:,[z]], *args, **kwargs)
+        folded_slice = nn.functional.fold(x[:, :, [z]], *args, **kwargs)
         folded.append(folded_slice)
     x = torch.stack(folded, dim=2)
     return x
+
 
 class AutoEncoderSkeleton(nn.Module):
     def __init__(self, encoders, base, decoders, output,
@@ -308,7 +312,7 @@ class AutoEncoderSkeleton(nn.Module):
 
         encoded_variable = self.base[0](x)
 
-        mu, log_var = encoded_variable[:,:self.latent_variable_size], encoded_variable[:,self.latent_variable_size:]
+        mu, log_var = encoded_variable[:, :self.latent_variable_size], encoded_variable[:, self.latent_variable_size:]
         return mu, log_var
 
     def set_min_patch_shape(self, shape):
@@ -348,14 +352,24 @@ class AutoEncoderSkeleton(nn.Module):
     def generate(self, shape):
         return torch.randn(shape)
 
-    def forward(self, input_):
-        # encoded_variable = self.encode(input_)
-        mu, logvar = self.encode(input_)
+    # def forward(self, input_):
+    #     # encoded_variable = self.encode(input_)
+    #     mu, logvar = self.encode(input_)
+    #
+    #     z = self.reparameterize(mu, logvar)
+    #     # z2 = self.reparameterize(mu, logvar)
+    #
+    #     return [self.decode(z), mu, logvar]
 
-        z = self.reparameterize(mu, logvar)
-        # z2 = self.reparameterize(mu, logvar)
+    def forward(self, z):
+        # # encoded_variable = self.encode(input_)
+        # mu, logvar = self.encode(input_)
+        #
+        # z = self.reparameterize(mu, logvar)
+        # # z2 = self.reparameterize(mu, logvar)
+        #
+        return self.decode(z)
 
-        return [self.decode(z), mu, logvar]
 
 
 class AutoEncoder(AutoEncoderSkeleton):
@@ -371,7 +385,7 @@ class AutoEncoder(AutoEncoderSkeleton):
                  scale_factor=2,
                  final_activation='auto',
                  conv_type_key='vanilla',
-                 patch_size=(3,27,27),
+                 patch_size=(3, 27, 27),
                  add_residual_connections=False):
         """
         Parameter:
@@ -407,12 +421,20 @@ class AutoEncoder(AutoEncoderSkeleton):
         encoder_type = EncoderResidual if add_residual_connections else Encoder
         base_type = BaseResidual if add_residual_connections else Base
 
+        from embeddingutils.models.submodules import ResBlockAdvanced
+
         # Build encoders with proper number of feature maps
         f0e = initial_num_fmaps
         f1e = initial_num_fmaps * fmap_growth
         f2e = initial_num_fmaps * fmap_growth ** 2
         encoders = [
-            encoder_type(in_channels, f0e, 3, self.scale_factor[0], conv_type=conv_type),
+            ResBlockAdvanced(in_channels, f_inner=f0e, pre_kernel_size=(1, 3, 3),
+                             inner_kernel_size=(3, 3, 3),
+                             activation="ReLU",
+                             normalization="GroupNorm",
+                             num_groups_norm=2, #TODO: generalize
+                             stride=self.scale_factor[0])
+            # encoder_type(in_channels, f0e, 3, self.scale_factor[0], conv_type=conv_type),
             # encoder_type(f0e, f1e, 3, self.scale_factor[1], conv_type=conv_type),
             # encoder_type(f1e, f2e, 3, self.scale_factor[2], conv_type=conv_type)
         ]
@@ -433,7 +455,13 @@ class AutoEncoder(AutoEncoderSkeleton):
         decoders = [
             # decoder_type(f2e, f2d, 3, self.scale_factor[2], conv_type=conv_type),
             # decoder_type(f1d, f1d, 3, self.scale_factor[1], conv_type=conv_type),
-            decoder_type(f0d, f0d, 3, self.scale_factor[0], conv_type=conv_type)
+            ResBlockAdvanced(f0d, f_inner=f0d, pre_kernel_size=(1, 3, 3),
+                             inner_kernel_size=(3, 3, 3),
+                             activation="ReLU",
+                             normalization="GroupNorm",
+                             num_groups_norm=2,
+                             upsampling_factor=self.scale_factor[0])
+            # decoder_type(f0d, f0d, 3, self.scale_factor[0], conv_type=conv_type)
         ]
 
         # Build output
@@ -449,8 +477,6 @@ class AutoEncoder(AutoEncoderSkeleton):
                                           output=output,
                                           final_activation=final_activation,
                                           latent_variable_size=latent_variable_size)
-
-
 
 
 class AE_loss(nn.Module):
@@ -477,7 +503,6 @@ class AE_loss(nn.Module):
         # return BCE + KLD
 
 
-
 class VAE_loss(nn.Module):
     def __init__(self):
         super(VAE_loss, self).__init__()
@@ -494,7 +519,6 @@ class VAE_loss(nn.Module):
         # BCE = 0
         BCE = self.reconstruction_loss(recon_x, target)
 
-
         # BCE = self.reconstruction_function(recon_x, target)
 
         # see Appendix B from VAE paper:
@@ -502,7 +526,6 @@ class VAE_loss(nn.Module):
         # https://arxiv.org/abs/1312.6114
         # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-
 
         return BCE + KLD
 

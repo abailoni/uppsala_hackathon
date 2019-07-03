@@ -12,6 +12,8 @@ import time
 from glob import glob
 from .util import *
 import numpy as np
+from torch.nn.parallel.data_parallel import data_parallel
+
 from inferno.extensions.criteria.set_similarity_measures import SorensenDiceLoss
 
 from inferno.extensions.layers.reshape import GlobalMeanPooling
@@ -93,7 +95,7 @@ class AffLoss(nn.Module):
 from speedrun.log_anywhere import log_image, log_embedding, log_scalar
 
 class PatchLoss(nn.Module):
-    def __init__(self, model, loss_type="Dice"):
+    def __init__(self, model, loss_type="Dice", devices=(0,1)):
         super(PatchLoss, self).__init__()
         if loss_type == "Dice":
             self.loss = SorensenDiceLoss()
@@ -104,6 +106,8 @@ class PatchLoss(nn.Module):
         else:
             raise ValueError
 
+        # TODO: generalize
+        self.devices = devices
         self.MSE_loss = nn.MSELoss()
         self.smoothL1_loss = nn.SmoothL1Loss()
         # TODO: use nn.BCEWithLogitsLoss()
@@ -260,15 +264,20 @@ class PatchLoss(nn.Module):
         #     mu[lvl],
         #     log_var[lvl],
         # ))[:,[0]] for lvl in range(3)]
-        all_pred_patches = [self.model.AE_model[lvl].decode(all_emb_vectors[lvl][:,:, 0, 0])[:, [0]] for lvl in range(3)]
+
+        # for lvl in range(3):
+        #     data_parallel()
+
+        all_pred_patches = [data_parallel(self.model.AE_model[lvl], all_emb_vectors[lvl][:,:, 0, 0], self.devices) for lvl in range(3)]
+        all_pred_patches = [all_pred_patches[lvl][:, [0]] for lvl in range(3)]
 
         loss = 0
         for lvl in range(3):
             # with torch.no_grad():
-            cloned_trg = all_target_patches[lvl].clone()
-            outputs_VAE  = self.model.AE_model[lvl].forward(cloned_trg)
+            # cloned_trg = all_target_patches[lvl].clone()
+            # outputs_VAE  = self.model.AE_model[lvl].forward(cloned_trg)
 
-            loss = loss + self.VAE_loss(outputs_VAE, cloned_trg.clone()) / all_target_patches[lvl].shape[0]
+            # loss = loss + self.VAE_loss(outputs_VAE, cloned_trg.clone()) / all_target_patches[lvl].shape[0]
 
             #
             # loss1 = self.MSE_loss(mu[lvl], target_mu)
@@ -282,7 +291,7 @@ class PatchLoss(nn.Module):
             btch_slc = list(np.random.randint(trg.shape[0], size=4)) if trg.shape[0] >= 4 else slice(0, 1)
             # btch_slc = slice(0, 1)
             log_image("ptc_trg_l{}".format(lvl), trg[btch_slc][:, 0, 2])
-            log_image("ptc_pred_trg_l{}".format(lvl), outputs_VAE[0][btch_slc][:, 0, 2])
+            # log_image("ptc_pred_trg_l{}".format(lvl), outputs_VAE[0][btch_slc][:, 0, 2])
             log_image("ptc_pred_l{}".format(lvl), pred[btch_slc][:, 0, 2])
             log_image("ptc_raw_l{}".format(lvl), all_raw_patches[lvl][btch_slc][:, 0, 2])
             log_image("ptc_ign_l{}".format(lvl), ign[btch_slc][:, 0, 2])
@@ -290,8 +299,9 @@ class PatchLoss(nn.Module):
             # Apply ignore mask:
             pred[ign] = 0
             trg[ign] = 0
-            loss_unet = self.loss(pred, trg.float())
+            loss_unet = data_parallel(self.loss, (pred, trg.float()), self.devices).mean()
             loss += loss_unet
+            # print(loss_unet)
             log_scalar("loss_l{}".format(lvl), loss_unet)
             # loss += self.MSE_loss(pred, trg.float())
 
