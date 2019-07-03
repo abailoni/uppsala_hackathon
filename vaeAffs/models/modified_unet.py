@@ -90,7 +90,7 @@ class AffLoss(nn.Module):
 
 
 
-from speedrun.log_anywhere import log_image, log_embedding
+from speedrun.log_anywhere import log_image, log_embedding, log_scalar
 
 class PatchLoss(nn.Module):
     def __init__(self, model, loss_type="Dice"):
@@ -251,15 +251,16 @@ class PatchLoss(nn.Module):
         emb_vect_size = int(feat_pyr[0].shape[1]/2)
         # all_predicted_patches = [self.model.AE_model.decode(self.model.AE_model.reparameterize(vect[:,:emb_vect_size,:,0,0], vect[:,emb_vect_size:,:,0,0])) for vect in all_emb_vectors]
 
-        # Take only first channel, since now we predict masks:
-        mu =  [all_emb_vectors[lvl][:,:emb_vect_size, 0, 0] for lvl in range(3)]
-        log_var =  [all_emb_vectors[lvl][:,emb_vect_size:, 0, 0] for lvl in range(3)]
+        # # Take only first channel, since now we predict masks:
+        # mu =  [all_emb_vectors[lvl][:,:emb_vect_size, 0, 0] for lvl in range(3)]
+        # log_var =  [all_emb_vectors[lvl][:,emb_vect_size:, 0, 0] for lvl in range(3)]
 
 
-        all_pred_patches = [self.model.AE_model[lvl].decode(self.model.AE_model[lvl].reparameterize(
-            mu[lvl],
-            log_var[lvl],
-        ))[:,[0]] for lvl in range(3)]
+        # all_pred_patches = [self.model.AE_model[lvl].decode(self.model.AE_model[lvl].reparameterize(
+        #     mu[lvl],
+        #     log_var[lvl],
+        # ))[:,[0]] for lvl in range(3)]
+        all_pred_patches = [self.model.AE_model[lvl].decode(all_emb_vectors[lvl][:,:, 0, 0])[:, [0]] for lvl in range(3)]
 
         loss = 0
         for lvl in range(3):
@@ -289,7 +290,9 @@ class PatchLoss(nn.Module):
             # Apply ignore mask:
             pred[ign] = 0
             trg[ign] = 0
-            loss += self.loss(pred, trg.float())
+            loss_unet = self.loss(pred, trg.float())
+            loss += loss_unet
+            log_scalar("loss_l{}".format(lvl), loss_unet)
             # loss += self.MSE_loss(pred, trg.float())
 
 
