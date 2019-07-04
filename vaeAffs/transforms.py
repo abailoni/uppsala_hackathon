@@ -2,7 +2,7 @@ import numpy as np
 
 from inferno.io.transform import Transform
 from vaeAffs.utils.affinitiy_utils import get_offset_locations
-
+from scipy.ndimage import zoom
 
 class SetVAETarget(Transform):
     def batch_function(self, batch):
@@ -13,6 +13,16 @@ class HackyHacky(Transform):
     def batch_function(self, batch):
         return batch[:-1] + (np.concatenate([np.expand_dims(batch[0],0), batch[-1]], axis=0), )
 
+
+class Downsample(Transform):
+    def __init__(self, order=3,**super_kwargs):
+        super(Downsample, self).__init__(**super_kwargs)
+        self.order = order
+
+    def image_function(self, image):
+        # TODO: generalize factor
+        image = zoom(image, 0.25, order=self.order)
+        return image
 
 class CreateMaskSeed(Transform):
     def batch_function(self, batch):

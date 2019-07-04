@@ -14,7 +14,7 @@ from neurofire.transform.affinities import Segmentation2AffinitiesDynamicOffsets
 from neurofire.transform.artifact_source import RejectNonZeroThreshold
 from neurofire.transform.volume import RandomSlide
 
-from ..transforms import SetVAETarget, RemoveThirdDimension, RemoveInvalidAffs, HackyHacky
+from ..transforms import SetVAETarget, RemoveThirdDimension, RemoveInvalidAffs, HackyHacky, Downsample
 import numpy as np
 
 from neurofire.criteria.loss_transforms import InvertTarget
@@ -79,6 +79,9 @@ class CremiDataset(ZipReject):
 
     def get_transforms(self):
         transforms = Compose()
+
+        transforms.add(Downsample(apply_to=[0], order=2))
+        transforms.add(Downsample(apply_to=[1], order=0))
 
         if self.master_config.get('random_flip', False):
             transforms.add(RandomFlip3D())

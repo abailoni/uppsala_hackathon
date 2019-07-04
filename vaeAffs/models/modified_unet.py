@@ -23,6 +23,9 @@ from inferno.extensions.containers.graph import Identity
 from neurofire.models.unet.unet_3d import CONV_TYPES, Decoder, DecoderResidual, BaseResidual, Base, Output, Encoder, \
     EncoderResidual
 
+import warnings
+warnings.filterwarnings("ignore", message="UserWarning: Was asked to gather along dimension 0")
+
 
 class EncodingLoss(nn.Module):
     def __init__(self, path_autoencoder_model):
@@ -285,9 +288,9 @@ class PatchLoss(nn.Module):
             # loss += loss1 + loss2
 
             pred, trg, ign = all_pred_patches[lvl], all_target_patches[lvl], all_ignore_masks[lvl].byte()
-            # if lvl == 2:
-            #     pred = 1 - pred
-            #     trg = 1 - trg
+            if lvl == 2 or lvl == 1:
+                pred = 1 - pred
+                trg = 1 - trg
             btch_slc = list(np.random.randint(trg.shape[0], size=4)) if trg.shape[0] >= 4 else slice(0, 1)
             # btch_slc = slice(0, 1)
             log_image("ptc_trg_l{}".format(lvl), trg[btch_slc][:, 0, 2])

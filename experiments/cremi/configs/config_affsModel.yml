@@ -33,7 +33,7 @@ loaders:
         artifact_source:
             min_masking_ratio: .5
             slicing_config:
-              window_size: [1, 336, 336] # 87, 141
+              window_size: [1, 240, 240] # 87, 141
               stride: &stride [1, 100, 100]
               downsampling_ratio: [1, 1, 1]
             volume_config:
@@ -94,7 +94,7 @@ loaders:
     slicing_config:
       # Sliding window size
       window_size:
-        A: &shape [5, 336, 336] # 87, 141
+        A: &shape [5, 240, 240] # 87, 141
         B: *shape
         C: *shape
       # Sliding window stride
@@ -167,7 +167,7 @@ loaders:
 
 model:
   embeddingutils.models.unet.AffinityNet:
-    path_PyrUNet: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/PyrUNetMultScFullRes_MeMasks_AEnoBN_Dice/best_checkpoint.pytorch"
+    path_PyrUNet: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/PyrUNetMultScFullRes_MeMasks_AE128noBN_Dice/best_checkpoint.pytorch"
     nb_offsets: 17
 #    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/UNETaffs_first/best_checkpoint.pytorch"
 
