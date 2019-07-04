@@ -13,16 +13,75 @@ class HackyHacky(Transform):
     def batch_function(self, batch):
         return batch[:-1] + (np.concatenate([np.expand_dims(batch[0],0), batch[-1]], axis=0), )
 
+class ReplicateBatch(Transform):
+    def __init__(self,
+                 num_replica,
+                 **super_kwargs):
+        super(ReplicateBatch, self).__init__(**super_kwargs)
+        self.num_replica = num_replica
 
-class Downsample(Transform):
-    def __init__(self, order=3,**super_kwargs):
-        super(Downsample, self).__init__(**super_kwargs)
+    def batch_function(self, batch):
+        assert len(batch) == 2
+
+        new_batch = [np.copy(batch[0]) for _ in range(self.num_replica)]
+        new_batch += [np.copy(batch[1]) for _ in range(self.num_replica)]
+
+        return new_batch
+
+
+
+class DownsampleAndCrop3D(Transform):
+    def __init__(self,
+                 zoom_factor=(1, 2, 2),
+                 crop_factor=(1, 2, 2),
+                 order=3,
+                 **super_kwargs):
+        """
+        :param zoom_factor: If factor is 2, then downscaled to half-resolution
+        :param crop_factor: If factor is 2, the central crop of half-size is taken
+        :param order: downscaling order
+        """
+        super(DownsampleAndCrop3D, self).__init__(**super_kwargs)
         self.order = order
+        self.zoom_factor = zoom_factor
+        self.crop_factor = crop_factor
 
-    def image_function(self, image):
-        # TODO: generalize factor
-        image = zoom(image, 0.25, order=self.order)
-        return image
+    def volume_function(self, volume):
+        # Downscale the volume:
+        downscaled =  volume
+        if (np.array(self.zoom_factor) != 1).any():
+            downscaled = zoom(volume, tuple(1./fct for fct in self.zoom_factor), order=self.order)
+
+        # Crop at the center:
+        shape = downscaled.shape
+        cropped_shape = [int(shp/crp_fct) for shp, crp_fct in zip(shape, self.crop_factor)]
+        offsets = [int((shp-crp_shp)/2) for shp, crp_shp in zip(shape, cropped_shape)]
+        crop_slc = tuple(slice(off, off+crp_shp) for off, crp_shp in zip(offsets, cropped_shape))
+        cropped = downscaled[crop_slc]
+        return cropped
+
+    def apply_to_torch_tensor(self, tensor):
+        assert tensor.ndimension() == 5
+        assert (np.array(self.zoom_factor) == 1).all(), "Zoom not applicable to tensors"
+
+        # Crop at the center:
+        shape = tensor.shape[-3:]
+        cropped_shape = [int(shp/crp_fct) for shp, crp_fct in zip(shape, self.crop_factor)]
+        offsets = [int((shp-crp_shp)/2) for shp, crp_shp in zip(shape, cropped_shape)]
+        crop_slc = (slice(None), slice(None)) + tuple(slice(off, off+crp_shp) for off, crp_shp in zip(offsets, cropped_shape))
+        cropped = tensor[crop_slc]
+        return cropped
+
+
+# class Downsample(Transform):
+#     def __init__(self, order=3,**super_kwargs):
+#         super(Downsample, self).__init__(**super_kwargs)
+#         self.order = order
+#
+#     def image_function(self, image):
+#         # TODO: generalize factor
+#         image = zoom(image, 0.25, order=self.order)
+#         return image
 
 class CreateMaskSeed(Transform):
     def batch_function(self, batch):

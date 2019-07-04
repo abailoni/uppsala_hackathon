@@ -371,7 +371,6 @@ class AutoEncoderSkeleton(nn.Module):
         return self.decode(z)
 
 
-
 class AutoEncoder(AutoEncoderSkeleton):
     """
     3D U-Net architecture.
@@ -432,7 +431,7 @@ class AutoEncoder(AutoEncoderSkeleton):
                              inner_kernel_size=(3, 3, 3),
                              activation="ReLU",
                              normalization="GroupNorm",
-                             num_groups_norm=2, #TODO: generalize
+                             num_groups_norm=2,  # TODO: generalize
                              stride=self.scale_factor[0])
             # encoder_type(in_channels, f0e, 3, self.scale_factor[0], conv_type=conv_type),
             # encoder_type(f0e, f1e, 3, self.scale_factor[1], conv_type=conv_type),
@@ -477,6 +476,10 @@ class AutoEncoder(AutoEncoderSkeleton):
                                           output=output,
                                           final_activation=final_activation,
                                           latent_variable_size=latent_variable_size)
+
+
+
+
 
 
 class AE_loss(nn.Module):
