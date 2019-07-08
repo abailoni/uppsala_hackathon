@@ -73,15 +73,15 @@ class DownsampleAndCrop3D(Transform):
         return cropped
 
 
-# class Downsample(Transform):
-#     def __init__(self, order=3,**super_kwargs):
-#         super(Downsample, self).__init__(**super_kwargs)
-#         self.order = order
-#
-#     def image_function(self, image):
-#         # TODO: generalize factor
-#         image = zoom(image, 0.25, order=self.order)
-#         return image
+class Downsample(Transform):
+    def __init__(self, order=3,**super_kwargs):
+        super(Downsample, self).__init__(**super_kwargs)
+        self.order = order
+
+    def image_function(self, image):
+        # TODO: generalize factor
+        image = zoom(image, 0.25, order=self.order)
+        return image
 
 class CreateMaskSeed(Transform):
     def batch_function(self, batch):

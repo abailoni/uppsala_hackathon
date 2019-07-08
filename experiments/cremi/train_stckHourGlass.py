@@ -80,6 +80,8 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         gpu_list = range(n_gpus)
         self.set("gpu_list", gpu_list)
         self.trainer.cuda(gpu_list)
+        # self.set("gpu_list", [0])
+        # self.trainer.cuda([0])
         # self.trainer.cuda()
 
     def inferno_build_criterion(self):
@@ -88,7 +90,8 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         loss_kwargs = self.get("trainer/criterion/kwargs")
         from vaeAffs.models.modified_unet import EncodingLoss, PatchLoss, StackedPyrHourGlassLoss
         model_kwargs = self.get('model/{}'.format(self.model_class))
-        loss = StackedPyrHourGlassLoss(model=self.model, model_kwargs=model_kwargs, devices=tuple(self.get("gpu_list")),
+        loss = StackedPyrHourGlassLoss(model=self.model, model_kwargs=model_kwargs,
+                                       devices=tuple(self.get("gpu_list")),
                                        **loss_kwargs)
         self._trainer.build_criterion(loss)
         self._trainer.build_validation_criterion(loss)

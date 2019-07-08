@@ -168,6 +168,10 @@ model:
     nb_stacked: 3
     pyramid_fmaps: 128
     in_channels: 1
+    trained_depths:
+      - 2
+      - 0
+      - 0
     stack_scaling_factors:
       - [1, 2, 2]
       - [1, 2, 2]
@@ -186,19 +190,19 @@ model:
         - [1, 3, 3]
     patchNet_kwargs:
       feature_maps: 16
-      downscaling_factor: [1, 2, 2] # Inside patchNet, to reduce memory
+      downscaling_factor: [1, 1, 1] # Inside patchNet, to reduce memory
     scale_spec_patchNet_kwargs:
       0:
-        patch_size: [5,29,29]
-        patch_dws_fact: [1, 2, 2]
+        patch_size: [5,15,15]
+        patch_dws_fact: [1, 1, 1]
         patch_stride: [1, 15, 15]
       1:
-        patch_size: [5,29,29]
-        patch_dws_fact: [1, 2, 2]
+        patch_size: [5,15,15]
+        patch_dws_fact: [1, 1, 1]
         patch_stride: [1, 15, 15]
       2:
-        patch_size: [5,29,29]
-        patch_dws_fact: [1, 2, 2]
+        patch_size: [5,15,15]
+        patch_dws_fact: [1, 1, 1]
         patch_stride: [1, 15, 15]
 
 #    final_activation: 'ReLU'
@@ -315,16 +319,19 @@ firelight:
             cmap: gray
         - PcaVisualizer:
             input: ['prediction', index: 0 ]
-#        - IdentityVisualizer:
-#            input: ['inputs', index: 1]
-#            cmap: gray
-#        - PcaVisualizer:
-#            input: ['prediction', index: 1]
-#        - IdentityVisualizer:
-#            input: ['inputs', index: 2]
-#            cmap: gray
-#        - PcaVisualizer:
-#            input: ['prediction', index: 2]
+        - PcaVisualizer:
+            input: ['prediction', index: 1, pre: {vaeAffs.utils.various.torch_tensor_zoom: {zoom: [1,1,1,2,2], order: 0}},]
+
+        - IdentityVisualizer:
+            input: ['inputs', index: 1]
+            cmap: gray
+        - PcaVisualizer:
+            input: ['prediction', index: 3]
+        - IdentityVisualizer:
+            input: ['inputs', index: 2]
+            cmap: gray
+        - PcaVisualizer:
+            input: ['prediction', index: 6]
 
   ptch_l0:
     ImageGridVisualizer:
@@ -354,64 +361,64 @@ firelight:
 #            input: ['ptc_pred_trg_l0']
 #            cmap: gray
 
-#  ptch_l1:
-#    ImageGridVisualizer:
-#      pad_width: 1  # width of the border between images in pixels
-#      pad_value: .2  # intensity of the border pixels
-#      upsampling_factor: 5  # the whole grid is upsampled by this factor
-#
-#      row_specs: ['H', 'S', 'D', 'C', 'B']
-#      column_specs: ['W', 'V']
-#
-#      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
-#      visualizers:
-#
+  ptch_l1:
+    ImageGridVisualizer:
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 5  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'D', 'C', 'B']
+      column_specs: ['W', 'V']
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        - IdentityVisualizer:
+            input: ['ptc_trg_l1']
+            cmap: gray
+        - IdentityVisualizer:
+            input: ['ptc_pred_l1']
+            cmap: gray
 #        - IdentityVisualizer:
-#            input: ['ptc_trg_l1']
+#            input: ['ptc_raw_l1']
 #            cmap: gray
+        - IdentityVisualizer:
+            input: ['ptc_ign_l1']
+            cmap: gray
 #        - IdentityVisualizer:
-#            input: ['ptc_pred_l1']
+#            input: ['ptc_pred_trg_l1']
 #            cmap: gray
-##        - IdentityVisualizer:
-##            input: ['ptc_raw_l1']
-##            cmap: gray
+
+
+  ptch_l2:
+    ImageGridVisualizer:
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 5  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'D', 'C', 'B']
+      column_specs: ['W', 'V']
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        - IdentityVisualizer:
+            input: ['ptc_trg_l2']
+            cmap: gray
+        - IdentityVisualizer:
+            input: ['ptc_pred_l2']
+            cmap: gray
 #        - IdentityVisualizer:
-#            input: ['ptc_ign_l1']
+#            input: ['ptc_raw_l2']
 #            cmap: gray
-##        - IdentityVisualizer:
-##            input: ['ptc_pred_trg_l1']
-##            cmap: gray
-#
-#
-#  ptch_l2:
-#    ImageGridVisualizer:
-#      pad_width: 1  # width of the border between images in pixels
-#      pad_value: .2  # intensity of the border pixels
-#      upsampling_factor: 5  # the whole grid is upsampled by this factor
-#
-#      row_specs: ['H', 'S', 'D', 'C', 'B']
-#      column_specs: ['W', 'V']
-#
-#      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
-#      visualizers:
-#
+        - IdentityVisualizer:
+            input: ['ptc_ign_l2']
+            cmap: gray
 #        - IdentityVisualizer:
-#            input: ['ptc_trg_l2']
+#            input: ['ptc_pred_trg_l2']
 #            cmap: gray
-#        - IdentityVisualizer:
-#            input: ['ptc_pred_l2']
-#            cmap: gray
-##        - IdentityVisualizer:
-##            input: ['ptc_raw_l2']
-##            cmap: gray
-#        - IdentityVisualizer:
-#            input: ['ptc_ign_l2']
-#            cmap: gray
-##        - IdentityVisualizer:
-##            input: ['ptc_pred_trg_l2']
-##            cmap: gray
-#
-#
-#
+
+
+
 
 

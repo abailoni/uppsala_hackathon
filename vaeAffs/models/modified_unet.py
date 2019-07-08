@@ -12,6 +12,7 @@ import time
 from glob import glob
 from .util import *
 import numpy as np
+from copy import deepcopy
 from torch.nn.parallel.data_parallel import data_parallel
 
 from inferno.extensions.criteria.set_similarity_measures import SorensenDiceLoss
@@ -337,7 +338,6 @@ class StackedPyrHourGlassLoss(nn.Module):
         else:
             raise ValueError
 
-        # TODO: generalize
         self.devices = devices
         self.model_kwargs = model_kwargs
         self.MSE_loss = nn.MSELoss()
@@ -358,11 +358,14 @@ class StackedPyrHourGlassLoss(nn.Module):
         ptch_kwargs = mdl_kwargs["scale_spec_patchNet_kwargs"]
         nb_stacked = mdl_kwargs["nb_stacked"]
 
+        # FIXME: temp hadk
+        all_predictions = [all_predictions[:3], all_predictions[3:6], all_predictions[6:]]
+
         # Collect some patches:
         loss = 0
-        LIMIT_STACK = 1
+        LIMIT_STACK = 5
         for lvl in range(3):
-            pred = all_predictions[lvl]
+            pred_lvl = all_predictions[lvl]
             target = all_targets[lvl]
 
             full_target_shape = target.shape[-3:]
@@ -378,91 +381,106 @@ class StackedPyrHourGlassLoss(nn.Module):
             # For the moment all the predictions are at full-res:
             patch_shape_orig = ptch_kwargs[lvl]["patch_size"]
             assert all(i % 2 ==  1 for i in patch_shape_orig), "Patch should be odd"
-            pred_dws_fctr = (1, 1, 1)
-            patch_dws_fcts = tuple(ptch_kwargs[lvl]["patch_dws_fact"])
             stride = tuple(ptch_kwargs[lvl]["patch_stride"])
 
-            patch_shape = tuple(pt*fc for pt, fc in zip(patch_shape_orig, patch_dws_fcts))
 
-            # TODO assert dims!
-            assert all([i <= j for i, j in zip(patch_shape, full_target_shape)]), "Prediction is too small"
+            patch_dws_fact = deepcopy(ptch_kwargs[lvl]["patch_dws_fact"])
+            pred_dws_fact = [1, 1, 1]
 
-            gt_patches, crop_offsets, nb_patches = extract_patches_torch(gt_segm, patch_shape, stride=stride,
-                                  max_random_crop=(0,5,5))
-            crop_offsets_emb = tuple( off+int(sh/2) for off, sh in zip(crop_offsets, patch_shape))
+            pred_lvl = pred_lvl if isinstance(pred_lvl, list) else [pred_lvl]
+            DOWNSCALING_FACT_BETWEEN_DEPTHS = 2
+            for depth_factor, pred in zip(range(1,len(pred_lvl)+1), pred_lvl):
+                patch_shape = tuple(pt*fc for pt, fc in zip(patch_shape_orig, patch_dws_fact))
 
-            center_labels, _, _ = extract_patches_torch(gt_segm, (1,1,1), stride=stride,
-                                                        fixed_crop=crop_offsets_emb,
+                # TODO assert dims!
+                assert all([i <= j for i, j in zip(patch_shape, full_target_shape)]), "Prediction is too small"
+
+                gt_patches, crop_offsets, nb_patches = extract_patches_torch(gt_segm, patch_shape, stride=stride,
+                                      max_random_crop=(0,5,5))
+                crop_offsets_emb = tuple( off+int(sh/2) for off, sh in zip(crop_offsets, patch_shape))
+
+                center_labels, _, _ = extract_patches_torch(gt_segm, (1,1,1), stride=stride,
+                                                            fixed_crop=crop_offsets_emb,
+                                                            limit_patches_to=nb_patches)
+
+                is_on_boundary, _, _ = extract_patches_torch(boundary_mask, (1, 1, 1), stride=stride,
+                                                         fixed_crop=crop_offsets_emb,
+                                                         limit_patches_to=nb_patches)
+
+                center_labels_repeated = center_labels.repeat(1, 1, *patch_shape)
+                me_masks = gt_patches != center_labels_repeated
+
+                # max_offsets = [ j-i for i, j in zip(patch_shape, full_target_shape)]
+
+                # Ignore some additional pixels:
+                ignore_masks = (gt_patches == 0)
+
+                # Reject some patches:
+                valid_patches = (center_labels != 0) & (is_on_boundary != 1)
+                valid_batch_indices = np.argwhere(valid_patches[:, 0, 0, 0, 0].cpu().detach().numpy())[:, 0]
+
+                if valid_batch_indices.shape[0] == 0:
+                    continue
+
+                # Downscale masks:
+                # Make sure that the me-mask is zero (better split than merge)
+                if all(fctr == 1 for fctr in patch_dws_fact):
+                    maxpool = Identity()
+                else:
+                    maxpool = nn.MaxPool3d(kernel_size=patch_dws_fact,
+                         stride=patch_dws_fact,
+                         padding=0)
+
+                # Final targets:
+                patch_targets = maxpool(me_masks[valid_batch_indices].float()).float()
+                patch_ignore_masks = maxpool(ignore_masks[valid_batch_indices].float()).byte()
+
+                # Compute patches for prediction (possibly downscaled):
+                # TODO: is there something smarter to do here? ROIAlign style
+                # The problem is that the CNN does not know exactly which of the targets patches to expect
+                # (but if we stay away from boundary it should be fine...)
+                pred_crop_offsets = tuple(int(off/pred_fctr) for off, pred_fctr in zip(crop_offsets_emb, pred_dws_fact))
+                pred_strides = tuple(int(strd/pred_fctr) for strd, pred_fctr in zip(stride, pred_dws_fact))
+                pred_patches, _, _ = extract_patches_torch(pred, (1, 1, 1), stride=pred_strides,
+                                                         fixed_crop=pred_crop_offsets,
                                                         limit_patches_to=nb_patches)
+                pred_embed = pred_patches[valid_batch_indices][:, :, 0, 0, 0]
 
-            is_on_boundary, _, _ = extract_patches_torch(boundary_mask, (1, 1, 1), stride=stride,
-                                                     fixed_crop=crop_offsets_emb,
-                                                     limit_patches_to=nb_patches)
+                # raw_patches, _, _ = extract_patches_torch(raw, patch_shape, stride=stride,
+                #                                                              fixed_crop=crop_offsets)
+                # all_raw_patches[level] = maxpool(raw_patches[valid_batch_indices])
 
-            center_labels_repeated = center_labels.repeat(1, 1, *patch_shape)
-            me_masks = gt_patches != center_labels_repeated
+                # Compute predicted patches:
+                pred_patches = data_parallel(self.model.patch_models[lvl], pred_embed, self.devices)[:, [0]]
+                # pred_patches = self.model.patch_models[lvl](pred_embed)[:, [0]]
 
-            # max_offsets = [ j-i for i, j in zip(patch_shape, full_target_shape)]
+                if lvl == 0 and depth_factor > 1:
+                    pred_patches = 1 - pred_patches
+                    patch_targets = 1 - patch_targets
 
-            # Ignore some additional pixels:
-            ignore_masks = (gt_patches == 0)
+                if depth_factor == 1:
+                    btch_slc = list(np.random.randint(patch_targets.shape[0], size=4)) if patch_targets.shape[0] >= 4 else slice(0, 1)
+                    log_image("ptc_trg_l{}".format(lvl), patch_targets[btch_slc][:, 0, 2])
+                    log_image("ptc_pred_l{}".format(lvl), pred_patches[btch_slc][:, 0, 2])
+                    log_image("ptc_ign_l{}".format(lvl), patch_ignore_masks[btch_slc][:, 0, 2])
 
-            # Reject some patches:
-            valid_patches = (center_labels != 0) & (is_on_boundary != 1)
-            valid_batch_indices = np.argwhere(valid_patches[:, 0, 0, 0, 0].cpu().detach().numpy())[:, 0]
+                # Apply ignore mask:
+                pred_patches[patch_ignore_masks] = 0
+                patch_targets[patch_ignore_masks] = 0
+                # loss_unet = data_parallel(self.loss, (pred_patches, patch_targets.float()), self.devices).mean()
+                loss_unet = self.loss(pred_patches, patch_targets.float())
+                # if lvl == 0:
+                loss += loss_unet
+                # else:
+                #     loss += 0.00000001 * loss_unet
+                if depth_factor == 1:
+                    log_scalar("loss_l{}".format(lvl), loss_unet)
 
-            if valid_batch_indices.shape[0] == 0:
-                continue
-
-            # Downscale masks:
-            # Make sure that the me-mask is zero (better split than merge)
-            if all(fctr == 1 for fctr in patch_dws_fcts):
-                maxpool = Identity()
-            else:
-                maxpool = nn.MaxPool3d(kernel_size=patch_dws_fcts,
-                     stride=patch_dws_fcts,
-                     padding=0)
-
-            # Final targets:
-            patch_targets = maxpool(me_masks[valid_batch_indices].float()).float()
-            patch_ignore_masks = maxpool(ignore_masks[valid_batch_indices].float()).byte()
-
-            # Compute patches for prediction (possibly downscaled):
-            # TODO: is there something smarter to do here? ROIAlign style
-            # The problem is that the CNN does not know exactly which of the targets patches to expect
-            # (but if we stay away from boundary it should be fine...)
-            pred_crop_offsets = tuple(int(off/pred_fctr) for off, pred_fctr in zip(crop_offsets_emb, pred_dws_fctr))
-            pred_strides = tuple(int(strd/pred_fctr) for strd, pred_fctr in zip(stride, pred_dws_fctr))
-            pred_patches, _, _ = extract_patches_torch(pred, (1, 1, 1), stride=pred_strides,
-                                                     fixed_crop=pred_crop_offsets,
-                                                    limit_patches_to=nb_patches)
-            pred_embed = pred_patches[valid_batch_indices][:, :, 0, 0, 0]
-
-            # raw_patches, _, _ = extract_patches_torch(raw, patch_shape, stride=stride,
-            #                                                              fixed_crop=crop_offsets)
-            # all_raw_patches[level] = maxpool(raw_patches[valid_batch_indices])
-
-            # Compute predicted patches:
-            pred_patches = data_parallel(self.model.patch_models[lvl], pred_embed, self.devices)[:, [0]]
-
-            if lvl == 0:
-                pred_patches = 1 - pred_patches
-                patch_targets = 1 - patch_targets
-            btch_slc = list(np.random.randint(patch_targets.shape[0], size=4)) if patch_targets.shape[0] >= 4 else slice(0, 1)
-            log_image("ptc_trg_l{}".format(lvl), patch_targets[btch_slc][:, 0, 2])
-            log_image("ptc_pred_l{}".format(lvl), pred_patches[btch_slc][:, 0, 2])
-            log_image("ptc_ign_l{}".format(lvl), patch_ignore_masks[btch_slc][:, 0, 2])
-
-            # Apply ignore mask:
-            pred_patches[patch_ignore_masks] = 0
-            patch_targets[patch_ignore_masks] = 0
-            # loss_unet = data_parallel(self.loss, (pred_patches, patch_targets.float()), self.devices).mean()
-            loss_unet = self.loss(pred_patches, patch_targets.float())
-            # if lvl == 0:
-            loss += loss_unet
-            # else:
-            #     loss += 0.00000001 * loss_unet
-            log_scalar("loss_l{}".format(lvl), loss_unet)
+                # Increase/decrease the size of the patches and the prediction for the next eventual
+                # depth level in the pyramid:
+                patch_dws_fact = (patch_dws_fact[0], patch_dws_fact[1]*DOWNSCALING_FACT_BETWEEN_DEPTHS, patch_dws_fact[2]*DOWNSCALING_FACT_BETWEEN_DEPTHS,)
+                pred_dws_fact = (pred_dws_fact[0], pred_dws_fact[1]*DOWNSCALING_FACT_BETWEEN_DEPTHS,
+                                  pred_dws_fact[2]*DOWNSCALING_FACT_BETWEEN_DEPTHS)
 
             if lvl + 1 >= LIMIT_STACK:
                 break
