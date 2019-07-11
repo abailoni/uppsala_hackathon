@@ -7,14 +7,15 @@ from inferno.io.transform.volume import RandomFlip3D, VolumeAsymmetricCrop
 from inferno.io.transform.image import RandomRotate, ElasticTransform
 from inferno.utils.io_utils import yaml2dict
 
-from torch.utils.data.dataloader import DataLoader
+from torch.utils.data.dataloader import DataLoader, default_collate
 
 from neurofire.datasets.loader import RawVolume, SegmentationVolume, RawVolumeWithDefectAugmentation
-from neurofire.transform.affinities import Segmentation2AffinitiesDynamicOffsets
+from neurofire.transform.affinities import Segmentation2AffinitiesDynamicOffsets, affinity_config_to_transform
 from neurofire.transform.artifact_source import RejectNonZeroThreshold
 from neurofire.transform.volume import RandomSlide
 
-from ..transforms import SetVAETarget, RemoveThirdDimension, RemoveInvalidAffs, HackyHacky, Downsample
+from ..transforms import SetVAETarget, RemoveThirdDimension, RemoveInvalidAffs, HackyHacky, DownsampleAndCrop3D, \
+    ReplicateBatch
 import numpy as np
 
 from neurofire.criteria.loss_transforms import InvertTarget
@@ -32,7 +33,8 @@ class RejectSingleLabelVolumes(object):
     def __call__(self, fetched):
         _, counts = np.unique(fetched, return_counts=True)
         # Check if we should reject:
-        return ((float(np.max(counts)) / fetched.size) > self.threshold) or ((np.count_nonzero(fetched) / fetched.size) < self.threshold_zero_label)
+        return ((float(np.max(counts)) / fetched.size) > self.threshold) or (
+                    (np.count_nonzero(fetched) / fetched.size) < self.threshold_zero_label)
 
 
 class CremiDataset(ZipReject):
@@ -43,6 +45,9 @@ class CremiDataset(ZipReject):
         assert isinstance(defect_augmentation_config, dict)
         assert 'raw' in volume_config
         assert 'segmentation' in volume_config
+
+        volume_config = deepcopy(volume_config)
+        self.scaling_factors = volume_config.pop("scaling_factors")
 
         # Get kwargs for raw volume
         raw_volume_kwargs = dict(volume_config.get('raw'))
@@ -71,7 +76,7 @@ class CremiDataset(ZipReject):
         rejection_threshold = volume_config.get('rejection_threshold', 0.92)
         super().__init__(self.raw_volume, self.segmentation_volume,
                          sync=True, rejection_dataset_indices=1,
-                         rejection_criterion=RejectSingleLabelVolumes(1.0, 1.))
+                         rejection_criterion=RejectSingleLabelVolumes(1.0, 0.95))
         # Set master config (for transforms)
         self.master_config = {} if master_config is None else master_config
         # Get transforms
@@ -104,21 +109,8 @@ class CremiDataset(ZipReject):
         # affinity transforms for affinity targets
         # we apply the affinity target calculation only to the segmentation (1)
         assert self.affinity_config is not None
-        transforms.add(Segmentation2AffinitiesDynamicOffsets(apply_to=[1], **self.affinity_config))
+        transforms.add(affinity_config_to_transform(apply_to=[1], **self.affinity_config))
 
-
-        # TODO: add clipping transformation
-
-        # crop invalid affinity labels and elastic augment reflection padding assymetrically
-        crop_config = self.master_config.get('crop_after_target', {})
-        if crop_config:
-            # One might need to crop after elastic transform to avoid edge artefacts of affinity
-            # computation being warped into the FOV.
-            transforms.add(VolumeAsymmetricCrop(**crop_config))
-
-        # transforms.add(InvertTarget(self.affinity_config.get("retain_segmentation", False)))
-        # transforms.add(HackyHacky())
-        #transforms.add(SetVAETarget()), HackyHacky
 
         return transforms
 
@@ -176,6 +168,51 @@ class CremiDatasets(Concatenate):
                    slicing_config=slicing_config, master_config=master_config)
 
 
+class CremiDatasetInference(RawVolume):
+    def __init__(self, transform_config, **super_kwargs):
+        super(CremiDatasetInference, self).__init__(return_index_spec=True,
+                                                    **super_kwargs)
+        self.transforms = self.get_additional_transforms(transform_config)
+
+    def get_additional_transforms(self, transform_config):
+        transforms = self.transforms if self.transforms is not None else Compose()
+
+        stack_scaling_factors = transform_config["stack_scaling_factors"]
+
+        # Replicate and downscale batch:
+        num_inputs = len(stack_scaling_factors)
+        input_indices = list(range(num_inputs))
+
+        transforms.add(ReplicateBatch(num_inputs))
+        inv_scaling_facts = deepcopy(stack_scaling_factors)
+        inv_scaling_facts.reverse()
+        for in_idx, dws_fact, crop_fact in zip(input_indices, stack_scaling_factors,
+                                                         inv_scaling_facts):
+            transforms.add(DownsampleAndCrop3D(apply_to=[in_idx], order=2, zoom_factor=dws_fact, crop_factor=crop_fact))
+
+        transforms.add(AsTorchBatch(3))
+
+        return transforms
+
+class CremiDatasetsInference(Concatenate):
+    def __init__(self, names,
+                 transform_config,
+                 raw_volume_kwargs):
+        names = [None] if names is None else names
+
+        datasets = [CremiDatasetInference(transform_config,
+                                  name=name,
+                                  **raw_volume_kwargs)
+                for name in names]
+        super().__init__(*datasets)
+        # self.transforms = self.get_transforms()
+    #
+    # def get_transforms(self):
+    #     FIXME: avoid to apply to index...
+        # transforms = AsTorchBatch(3, apply_to=[0])
+        # return transforms
+
+
 def get_cremi_loader(config):
     """
     Get Cremi loader given a the path to a configuration file.
@@ -192,6 +229,23 @@ def get_cremi_loader(config):
     """
     config = yaml2dict(config)
     loader_config = config.get('loader_config')
-    datasets = CremiDatasets.from_config(config)
+    inference_mode = config.get('inference_mode', False)
+
+    if inference_mode:
+        datasets = CremiDatasetInference(
+            config.get("transforms_config"),
+            name=config.get('name'),
+            **config.get('raw_volume_kwargs'))
+        # Avoid to wrap arrays into tensors:
+        loader_config["collate_fn"] = collate_indices
+    else:
+        datasets = CremiDatasets.from_config(config)
+    # Don't wrap stuff in tensors:
     loader = DataLoader(datasets, **loader_config)
     return loader
+
+
+def collate_indices(batch):
+    tensor_list = [itm[0] for itm in batch]
+    indices_list = [itm[1] for itm in batch]
+    return default_collate(tensor_list), indices_list
