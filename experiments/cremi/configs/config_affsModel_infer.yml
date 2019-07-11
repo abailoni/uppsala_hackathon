@@ -1,0 +1,234 @@
+global:
+  offsets: null
+
+shortcuts:
+  xy_directions: &n_directions
+  total_directions: &tot_directions 18
+
+
+device: cuda
+
+loaders:
+  infer:
+    inference_mode: True
+    loader_config:
+      # Number of processes to use for loading data. Set to (say) 10 if you wish to
+      # use 10 CPU cores, or to 0 if you wish to use the same process for training and
+      # data-loading (generally not recommended).
+      batch_size: 6
+      num_workers: 10
+      drop_last: False
+#      pin_memory: False
+      shuffle: False
+    name: C
+
+    transforms_config:
+      stack_scaling_factors: # FIXME: this mess
+        - [1, 4, 4]
+        - [1, 2, 2]
+        - [1, 1, 1]
+
+    raw_volume_kwargs:
+      # Sliding window size
+      window_size: &shape [10, 1152, 1152]  # 288
+#        A:
+#        B: *shape
+#        C: *shape
+      # Sliding window stride
+      stride: &stride [6, 268, 268]
+#        A:
+#        B: *stride
+#        C: *stride
+      # Data slice to iterate over.
+      data_slice: ':,:,:'
+#        A: ':, :, :'
+#        B: ':, :, :'
+#        C: ':, :, :'
+
+#      padding_mode: "constant"
+      padding:
+        - [2,2]
+        - [442, 442]
+        - [442, 442]
+      # PATHS:
+      path:
+        A: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleA_train.h5'
+        B: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleB_train.h5'
+        C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
+        B+: '$HCI_HOME/datasets/cremi/testvol/test_samples/sampleB+_cropped_plus_mask.h5'
+        A+: '$HCI_HOME/datasets/cremi/testvol/test_samples/sampleA+_cropped_plus_mask.h5'
+        C+: '$HCI_HOME/datasets/cremi/testvol/test_samples/sampleC+_cropped_plus_mask.h5'
+      path_in_file:
+        A: 'raw'
+        B: 'raw'
+        C: 'raw'
+        A+: "volumes/raw"
+        B+: "volumes/raw"
+        C+: "volumes/raw"
+      dtype: float32
+#      sigma: 0.025
+
+inference:
+  path_checkpoint_trainer: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/affs_stacked_def"
+  crop_global_slice:
+    - [2,2]
+    - [442, 442]
+    - [442, 442]
+  crop_prediction:
+    - [2,2]
+    - [10,10]
+    - [10,10]
+
+stack_scaling_factors_2: # FIXME: this mess
+  - [1, 4, 4]
+  - [1, 2, 2]
+  - [1, 1, 1]
+
+
+#model:
+#  embeddingutils.models.unet.StackedAffinityNet:
+#    path_model: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stackedHourGlass_fxd_btch2/best_checkpoint.pytorch"
+##    nb_offsets: 17
+##    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/UNETaffs_first/best_checkpoint.pytorch"
+#
+#
+#
+
+#trainer:
+#  max_epochs: 10 # basically infinite
+##  TODO: increase this if we need both affinity targets and directional DT targets
+#  num_targets: 1
+#
+#  criterion:
+#    # TODO: here you will be able to add the final losses (SoresenDice for affinities and L1 for DT)
+#    losses: null
+#    kwargs:
+#      loss_type: "Dice" # "MSE"
+#
+#
+#  metric:
+#    evaluate_every: 'never'
+#    quantizedVDT.metrics.ArandFromMWSDistances:
+#      strides: null # [1,2,2]
+#      z_direction: *z_direction
+#      n_directions: *n_directions
+#
+#  optimizer:
+#    Adam:
+#      lr: 0.0001
+#      weight_decay: 0.0005
+##      betas: [0.9, 0.999]
+#
+#  intervals:
+#    save_every: [1000, 'iterations']
+#    validate_every:
+#      frequency : [100, 'iterations']
+#      for_num_iterations: 5
+#
+#  tensorboard:
+#    log_scalars_every: [1, 'iterations']
+#    log_images_every: [100, 'iterations']
+#    log_histograms_every: 'never'
+#    send_image_at_batch_indices: [0]
+#    send_image_at_channel_indices: [0]
+###    send_volume_at_z_indices: 'mid'
+##    split_config_keys: True
+##    log_anywhere: ['scalars']
+#
+#  callbacks:
+##    gradients:
+##      LogOutputGradients:
+##        frequency: 1
+#
+#    essentials:
+#      SaveAtBestValidationScore:
+#        smoothness: 0
+#        verbose: True
+##      GradientClip:
+##        clip_value: 1e-3
+#      SaveModelCallback:
+#        save_every: 500
+#      PlotReconstructedCallback:
+#        plot_every: 100
+#
+#    scheduling:
+#      AutoLR:
+#        monitor: 'validation_loss'
+#        factor: 0.99
+#        patience: '100 iterations'
+#        monitor_while: 'validating'
+#        monitor_momentum: 0.75
+##        cooldown_duration: '50000 iterations'
+#        consider_improvement_with_respect_to: 'previous'
+#        verbose: True
+#
+#
+#firelight:
+#  affs_raw_gt:
+#    RowVisualizer:
+#      input_mapping:
+#        global: [B: 0, D: 2]
+#      pad_width: 1  # width of the border between images in pixels
+#      pad_value: .2  # intensity of the border pixels
+#      visualizers:
+#        - IdentityVisualizer:
+#            input: ['inputs', index: 2]
+#            cmap: gray
+#
+#        - SegmentationVisualizer:
+#            input: ['target', index: 2, C: 0]
+#            #background_color: [0, 0, 0]
+#            background_label: 0
+#
+#  affs:
+#    ImageGridVisualizer:
+#
+#      input_mapping:
+#        global: [B: 0, D: 2] # the mapping specified in 'global' is applied to all keys
+#
+#      pad_width: 1  # width of the border between images in pixels
+#      pad_value: .2  # intensity of the border pixels
+#      upsampling_factor: 1  # the whole grid is upsampled by this factor
+#
+#      row_specs: ['H', 'S', 'D', 'V',]
+#      column_specs: ['W', 'B',  'C']
+#
+#      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+#      visualizers:
+#
+#        # visualize raw input
+##        - IdentityVisualizer:
+##            input: ['inputs', index: 2]
+##            cmap: gray
+##
+##        - SegmentationVisualizer:
+##            input: ['target', index: 2, C: 0]
+##            #background_color: [0, 0, 0]
+##            background_label: 0
+#
+##        - IdentityVisualizer:
+##            input: ['prediction', index: 0, B: 0, D: "1:6", C: 0]
+##            cmap: gray
+#
+#        - IdentityVisualizer:
+#            input: ['target', index: 2, C: "1:12"]
+#            cmap: gray
+#
+#        - IdentityVisualizer:
+#            input: ['prediction', index: 0, C: ":11"]
+#            cmap: gray
+#
+##
+##        - PcaVisualizer:
+##            input: ['prediction', index: 0, W: "::2", H: "::2"]
+##
+##        - PcaVisualizer:
+##            input: ['prediction', index: 1]
+##
+##        - PcaVisualizer:
+##            input: ['prediction', pre: {vaeAffs.utils.various.torch_tensor_zoom: {zoom: [1,1,1,2,2], order: 0}}, index: 2]
+#
+#
+#
+#
+

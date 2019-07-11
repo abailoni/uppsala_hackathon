@@ -1,8 +1,8 @@
 import vaeAffs
 
-from vaeAffs.utils.path_utils import change_paths_config_file
+from vaeAffs.utils.path_utils import change_paths_config_file, get_trendytukan_drive_path
 
-from speedrun import BaseExperiment, TensorboardMixin, InfernoMixin, FirelightLogger
+from speedrun import BaseExperiment, TensorboardMixin, AffinityInferenceMixin
 from speedrun.log_anywhere import register_logger, log_image, log_scalar
 from speedrun.py_utils import locate
 
@@ -37,8 +37,7 @@ from vaeAffs.datasets.cremi_stackedHourGlass import get_cremi_loader
 from vaeAffs.utils.path_utils import get_source_dir
 
 
-
-class BaseCremiExperiment(BaseExperiment, InfernoMixin):
+class BaseCremiExperiment(BaseExperiment, AffinityInferenceMixin):
     def __init__(self, experiment_directory=None, config=None):
         super(BaseCremiExperiment, self).__init__(experiment_directory)
         # Privates
@@ -47,55 +46,75 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin):
         if config is not None:
             self.read_config_file(config)
 
-
         self.DEFAULT_DISPATCH = 'train'
         self.auto_setup()
 
-        # register_logger(FirelightLogger, "image")
-
-        offsets = self.get_boundary_offsets()
+        offsets = self.get_default_offsets()
         self.set('global/offsets', offsets)
         self.set('loaders/general/volume_config/segmentation/affinity_config/offsets', offsets)
 
-        self.model_class = list(self.get('model').keys())[0]
-        nb_stacked = self.get("model/{}/nb_stacked".format(self.model_class))
-        self.set("trainer/num_targets", nb_stacked)
-
         self.set_devices()
 
+        self.build_infer_loader()
 
-
-
-
-
-    def get_boundary_offsets(self):
-        return [[0, -1, 0], [0, 0, -1], [0, 2, 0], [0, 0, 2],
-                [0, -3, 0], [0, 0, -3], [0, 3, 0], [0, 0, 3]]
+    def get_default_offsets(self):
+        return [[0, -3, 0],
+                [0, 0, -3],
+                [0, -9, 0],
+                [0, 0, -9],
+                [0, -6, -7],
+                [0, -6, +7],
+                [0, -18, 0],
+                [0, 0, -18],
+                [-1, 0, 0],
+                [-2, 0, 0],
+                [+1, -1, -1],
+                [+2, -1, -1],
+                ]
 
     def build_model(self, model_config=None):
         model_config = self.get('model') if model_config is None else model_config
-        return super(BaseCremiExperiment, self).build_model(model_config) #parse_model(model_config)
+        model_class = list(model_config.keys())[0]
+        # out_channels = self.get("autoencoder/latent_variable_size") * 2
+        # model_config[model_class]['out_channels'] = out_channels
+        # self.set('model/{}/out_channels'.format(model_class), out_channels)
+
+        # self.build_final_activation(model_config)
+        return super(BaseCremiExperiment, self).build_model(model_config)  # parse_model(model_config)
 
     def set_devices(self):
         n_gpus = torch.cuda.device_count()
         gpu_list = range(n_gpus)
         self.set("gpu_list", gpu_list)
         self.trainer.cuda(gpu_list)
-        # self.set("gpu_list", [0])
-        # self.trainer.cuda([0])
         # self.trainer.cuda()
 
     def inferno_build_criterion(self):
         print("Building criterion")
         # path = self.get("autoencoder/path")
         loss_kwargs = self.get("trainer/criterion/kwargs")
-        from vaeAffs.models.modified_unet import EncodingLoss, PatchLoss, StackedPyrHourGlassLoss
-        model_kwargs = self.get('model/{}'.format(self.model_class))
-        loss = StackedPyrHourGlassLoss(model=self.model, model_kwargs=model_kwargs,
-                                       devices=tuple(self.get("gpu_list")),
-                                       **loss_kwargs)
+        from vaeAffs.models.modified_unet import EncodingLoss, PatchLoss, AffLoss
+        loss = AffLoss(**loss_kwargs)
         self._trainer.build_criterion(loss)
         self._trainer.build_validation_criterion(loss)
+
+    #
+    # def inferno_build_metric(self):
+    #     metric_config = self.get('trainer/metric')
+    #     frequency = metric_config.pop('evaluate_every', (25, 'iterations'))
+    #
+    #     self.trainer.evaluate_metric_every(frequency)
+    #     if metric_config:
+    #         assert len(metric_config) == 1
+    #         for class_name, kwargs in metric_config.items():
+    #             cls = locate(class_name)
+    #             #kwargs['offsets'] = self.get('global/offsets')
+    #             #kwargs['z_direction'] = self.get(
+    #             #    'loaders/general/master_config/compute_directions/z_direction')
+    #             print(f'Building metric of class "{cls.__name__}"')
+    #             metric = cls(**kwargs)
+    #             self.trainer.build_metric(metric)
+    #     self.set('trainer/metric/evaluate_every', frequency)
 
     def build_train_loader(self):
         scaling_factors = self.get("stack_scaling_factors_2")
@@ -108,6 +127,25 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin):
         kwargs = recursive_dict_update(self.get('loaders/val'), deepcopy(self.get('loaders/general')))
         kwargs["volume_config"]["scaling_factors"] = scaling_factors
         return get_cremi_loader(kwargs)
+
+
+    def build_infer_loader(self):
+        # scaling_factors = self.get("stack_scaling_factors_2")
+        kwargs = deepcopy(self.get('loaders/infer'))
+        # kwargs["volume_config"]["scaling_factors"] = scaling_factors
+        loader = get_cremi_loader(kwargs)
+        self.set("full_volume_infer_shape", loader.dataset.volume.shape)
+        self.set("inference/global_padding", loader.dataset.padding)
+        self.set("inference/global_ds_ratio", loader.dataset.downsampling_ratio)
+
+        return loader
+
+    def save_infer_output(self, output):
+        import h5py
+        import numpy as np
+        print("Saving....")
+        with h5py.File(os.path.join(get_trendytukan_drive_path(), "projects/pixel_embeddings/stacked_hour_glass/predictions_sample_{}.h5".format(self.get("loaders/infer/name"))), 'w') as f:
+            f.create_dataset('data', data=output.astype(np.float16), compression='gzip')
 
 
 if __name__ == '__main__':
@@ -136,5 +174,4 @@ if __name__ == '__main__':
         else:
             break
     cls = BaseCremiExperiment
-    cls().run()
-
+    cls().infer()

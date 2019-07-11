@@ -211,7 +211,7 @@ model:
 #      in_channels: *tot_directions
 #      out_channels: *tot_directions
 #      kernel_size: 3
-#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/PyrUNetMultiScale_MeMasks_newAE/best_checkpoint.pytorch"
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stackedHourGlass_fxd_btch2/best_checkpoint.pytorch"
 
 #autoencoder:
 #  latent_variable_size: 128
@@ -335,6 +335,9 @@ firelight:
 
   ptch_l0:
     ImageGridVisualizer:
+      input_mapping:
+        global: [B: ":2", D: ":"]
+
       pad_width: 1  # width of the border between images in pixels
       pad_value: .2  # intensity of the border pixels
       upsampling_factor: 5  # the whole grid is upsampled by this factor
@@ -348,75 +351,75 @@ firelight:
         - IdentityVisualizer:
             input: ['ptc_trg_l0']
             cmap: gray
+            value_range: [0,1]
         - IdentityVisualizer:
             input: ['ptc_pred_l0']
             cmap: gray
-#        - IdentityVisualizer:
-#            input: ['ptc_raw_l0']
-#            cmap: gray
+            value_range: [0,1]
         - IdentityVisualizer:
             input: ['ptc_ign_l0']
             cmap: gray
+            value_range: [0,1]
 #        - IdentityVisualizer:
 #            input: ['ptc_pred_trg_l0']
 #            cmap: gray
 
-  ptch_l1:
-    ImageGridVisualizer:
-      pad_width: 1  # width of the border between images in pixels
-      pad_value: .2  # intensity of the border pixels
-      upsampling_factor: 5  # the whole grid is upsampled by this factor
-
-      row_specs: ['H', 'S', 'D', 'C', 'B']
-      column_specs: ['W', 'V']
-
-      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
-      visualizers:
-
-        - IdentityVisualizer:
-            input: ['ptc_trg_l1']
-            cmap: gray
-        - IdentityVisualizer:
-            input: ['ptc_pred_l1']
-            cmap: gray
+#  ptch_l1:
+#    ImageGridVisualizer:
+#      pad_width: 1  # width of the border between images in pixels
+#      pad_value: .2  # intensity of the border pixels
+#      upsampling_factor: 5  # the whole grid is upsampled by this factor
+#
+#      row_specs: ['H', 'S', 'D', 'C', 'B']
+#      column_specs: ['W', 'V']
+#
+#      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+#      visualizers:
+#
 #        - IdentityVisualizer:
-#            input: ['ptc_raw_l1']
+#            input: ['ptc_trg_l1']
 #            cmap: gray
-        - IdentityVisualizer:
-            input: ['ptc_ign_l1']
-            cmap: gray
 #        - IdentityVisualizer:
-#            input: ['ptc_pred_trg_l1']
+#            input: ['ptc_pred_l1']
 #            cmap: gray
-
-
-  ptch_l2:
-    ImageGridVisualizer:
-      pad_width: 1  # width of the border between images in pixels
-      pad_value: .2  # intensity of the border pixels
-      upsampling_factor: 5  # the whole grid is upsampled by this factor
-
-      row_specs: ['H', 'S', 'D', 'C', 'B']
-      column_specs: ['W', 'V']
-
-      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
-      visualizers:
-
-        - IdentityVisualizer:
-            input: ['ptc_trg_l2']
-            cmap: gray
-        - IdentityVisualizer:
-            input: ['ptc_pred_l2']
-            cmap: gray
+##        - IdentityVisualizer:
+##            input: ['ptc_raw_l1']
+##            cmap: gray
 #        - IdentityVisualizer:
-#            input: ['ptc_raw_l2']
+#            input: ['ptc_ign_l1']
 #            cmap: gray
-        - IdentityVisualizer:
-            input: ['ptc_ign_l2']
-            cmap: gray
+##        - IdentityVisualizer:
+##            input: ['ptc_pred_trg_l1']
+##            cmap: gray
+#
+#
+#  ptch_l2:
+#    ImageGridVisualizer:
+#      pad_width: 1  # width of the border between images in pixels
+#      pad_value: .2  # intensity of the border pixels
+#      upsampling_factor: 5  # the whole grid is upsampled by this factor
+#
+#      row_specs: ['H', 'S', 'D', 'C', 'B']
+#      column_specs: ['W', 'V']
+#
+#      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+#      visualizers:
+#
 #        - IdentityVisualizer:
-#            input: ['ptc_pred_trg_l2']
+#            input: ['ptc_trg_l2']
 #            cmap: gray
+#        - IdentityVisualizer:
+#            input: ['ptc_pred_l2']
+#            cmap: gray
+##        - IdentityVisualizer:
+##            input: ['ptc_raw_l2']
+##            cmap: gray
+#        - IdentityVisualizer:
+#            input: ['ptc_ign_l2']
+#            cmap: gray
+##        - IdentityVisualizer:
+##            input: ['ptc_pred_trg_l2']
+##            cmap: gray
 
 
 

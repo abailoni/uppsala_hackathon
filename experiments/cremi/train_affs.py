@@ -33,11 +33,11 @@ from neurofire.criteria.loss_transforms import ApplyAndRemoveMask
 from neurofire.criteria.loss_transforms import RemoveSegmentationFromTarget
 from neurofire.criteria.loss_transforms import InvertTarget
 
-from vaeAffs.datasets.cremi_affs import get_cremi_loader
+from vaeAffs.datasets.cremi_stackedHourGlass import get_cremi_loader
 from vaeAffs.utils.path_utils import get_source_dir
 
 
-class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
+class BaseCremiExperiment(BaseExperiment, InfernoMixin):
     def __init__(self, experiment_directory=None, config=None):
         super(BaseCremiExperiment, self).__init__(experiment_directory)
         # Privates
@@ -49,34 +49,32 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         self.DEFAULT_DISPATCH = 'train'
         self.auto_setup()
 
-        register_logger(self, 'scalars')
-        register_logger(self, 'embedding')
-        register_logger(self, 'image')
-
         offsets = self.get_default_offsets()
         self.set('global/offsets', offsets)
         self.set('loaders/general/volume_config/segmentation/affinity_config/offsets', offsets)
 
+        self.model_class = list(self.get('model').keys())[0]
+        self.set("model/{}/nb_offsets".format(self.model_class), len(self.get_default_offsets()))
+
+        self.set("trainer/num_targets", len(self.get("stack_scaling_factors_2")))
+
         self.set_devices()
 
+
     def get_default_offsets(self):
-        return [[-1, 0, 0],
-                [0, -1, 0],
-                [0, 0, -1],
-                [-1, -1, -1],
-                [-1, 1, 1],
-                [-1, -1, 1],
-                [-1, 1, -1],
+        return [[0, -3, 0],
+                [0, 0, -3],
                 [0, -9, 0],
                 [0, 0, -9],
-                [0, -9, -9],
-                [0, 9, -9],
-                [0, -9, -4],
-                [0, -4, -9],
-                [0, 4, -9],
-                [0, 9, -4],
-                [0, -27, 0],
-                [0, 0, -27]]
+                [0, -6, -7],
+                [0, -6, +7],
+                [0, -18, 0],
+                [0, 0, -18],
+                [-1, 0, 0],
+                [-2, 0, 0],
+                [+1, -1, -1],
+                [+2, -1, -1],
+                ]
 
     def build_model(self, model_config=None):
         model_config = self.get('model') if model_config is None else model_config
@@ -89,7 +87,10 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         return super(BaseCremiExperiment, self).build_model(model_config)  # parse_model(model_config)
 
     def set_devices(self):
-        self.trainer.cuda([0])
+        n_gpus = torch.cuda.device_count()
+        gpu_list = range(n_gpus)
+        self.set("gpu_list", gpu_list)
+        self.trainer.cuda(gpu_list)
         # self.trainer.cuda()
 
     def inferno_build_criterion(self):
@@ -120,10 +121,18 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
     #     self.set('trainer/metric/evaluate_every', frequency)
 
     def build_train_loader(self):
-        return get_cremi_loader(recursive_dict_update(self.get('loaders/train'), deepcopy(self.get('loaders/general'))))
+        scaling_factors = self.get("stack_scaling_factors_2")
+        kwargs = recursive_dict_update(self.get('loaders/train'), deepcopy(self.get('loaders/general')))
+        kwargs["volume_config"]["scaling_factors"] = scaling_factors
+        return get_cremi_loader(kwargs)
 
     def build_val_loader(self):
-        return get_cremi_loader(recursive_dict_update(self.get('loaders/val'), deepcopy(self.get('loaders/general'))))
+        scaling_factors = self.get("stack_scaling_factors_2")
+        kwargs = recursive_dict_update(self.get('loaders/val'), deepcopy(self.get('loaders/general')))
+        kwargs["volume_config"]["scaling_factors"] = scaling_factors
+        return get_cremi_loader(kwargs)
+
+
 
 
 if __name__ == '__main__':

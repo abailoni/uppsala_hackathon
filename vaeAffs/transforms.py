@@ -21,11 +21,13 @@ class ReplicateBatch(Transform):
         self.num_replica = num_replica
 
     def batch_function(self, batch):
-        assert len(batch) == 2
-
-        new_batch = [np.copy(batch[0]) for _ in range(self.num_replica)]
-        new_batch += [np.copy(batch[1]) for _ in range(self.num_replica)]
-
+        if len(batch) == 2:
+            new_batch = [np.copy(batch[0]) for _ in range(self.num_replica)]
+            new_batch += [np.copy(batch[1]) for _ in range(self.num_replica)]
+        elif len(batch) == 1:
+            new_batch = [np.copy(batch[0]) for _ in range(self.num_replica)]
+        else:
+            raise ValueError("Batch should have one or two tensors")
         return new_batch
 
 

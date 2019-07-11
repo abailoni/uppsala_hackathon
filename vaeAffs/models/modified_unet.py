@@ -82,6 +82,11 @@ class AffLoss(nn.Module):
 
     def forward(self, affinities, target):
         # gt_segm = target[:,0]
+        if isinstance(target, (tuple, list)):
+            # TODO: avoid computing all others affinities
+            # For the stacked architecture, only use the last affinities
+            target = target[-1]
+
         all_affs = target[:,1:]
         nb_offsets = int(all_affs.shape[1] / 2)
         target_affs, ignore_affs_mask = all_affs[:,:nb_offsets], all_affs[:,nb_offsets:]
@@ -459,10 +464,10 @@ class StackedPyrHourGlassLoss(nn.Module):
                     patch_targets = 1 - patch_targets
 
                 if depth_factor == 1:
-                    btch_slc = list(np.random.randint(patch_targets.shape[0], size=4)) if patch_targets.shape[0] >= 4 else slice(0, 1)
-                    log_image("ptc_trg_l{}".format(lvl), patch_targets[btch_slc][:, 0, 2])
-                    log_image("ptc_pred_l{}".format(lvl), pred_patches[btch_slc][:, 0, 2])
-                    log_image("ptc_ign_l{}".format(lvl), patch_ignore_masks[btch_slc][:, 0, 2])
+                    # btch_slc = list(np.random.randint(patch_targets.shape[0], size=4)) if patch_targets.shape[0] >= 4 else slice(0, 1)
+                    log_image("ptc_trg_l{}".format(lvl), patch_targets)
+                    log_image("ptc_pred_l{}".format(lvl), pred_patches)
+                    log_image("ptc_ign_l{}".format(lvl), patch_ignore_masks)
 
                 # Apply ignore mask:
                 pred_patches[patch_ignore_masks] = 0
