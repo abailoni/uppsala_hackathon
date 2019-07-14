@@ -13,6 +13,17 @@ class HackyHacky(Transform):
     def batch_function(self, batch):
         return batch[:-1] + (np.concatenate([np.expand_dims(batch[0],0), batch[-1]], axis=0), )
 
+
+class PassGTBoundaries_HackyHackyReloaded(Transform):
+    # FIXME: super ugly, temp hack, add raw to target
+    def batch_function(self, batch):
+        assert len(batch) == 2
+        # 0: GT
+        # 1:9 boudn affs
+        # 9:13 input affs
+        return (batch[1][1:5], np.concatenate((batch[1][[0]], batch[1][3:5])))
+
+
 class ReplicateBatch(Transform):
     def __init__(self,
                  num_replica,

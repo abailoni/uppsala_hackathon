@@ -89,15 +89,15 @@ class CremiDataset(ZipReject):
             transforms.add(RandomFlip3D())
             transforms.add(RandomRotate())
 
-        # Elastic transforms can be skipped by
-        # setting elastic_transform to false in the
-        # yaml config file.
-        if self.master_config.get('elastic_transform'):
-            elastic_transform_config = self.master_config.get('elastic_transform')
-            if elastic_transform_config.get('apply', False):
-                transforms.add(ElasticTransform(alpha=elastic_transform_config.get('alpha', 2000.),
-                                                sigma=elastic_transform_config.get('sigma', 50.),
-                                                order=elastic_transform_config.get('order', 0)))
+        # # Elastic transforms can be skipped by
+        # # setting elastic_transform to false in the
+        # # yaml config file.
+        # if self.master_config.get('elastic_transform'):
+        #     elastic_transform_config = self.master_config.get('elastic_transform')
+        #     if elastic_transform_config.get('apply', False):
+        #         transforms.add(ElasticTransform(alpha=elastic_transform_config.get('alpha', 2000.),
+        #                                         sigma=elastic_transform_config.get('sigma', 50.),
+        #                                         order=elastic_transform_config.get('order', 0)))
 
         # random slide augmentation
         if self.master_config.get('random_slides', False):
@@ -111,6 +111,15 @@ class CremiDataset(ZipReject):
         assert self.affinity_config is not None
         transforms.add(affinity_config_to_transform(apply_to=[1], **self.affinity_config))
 
+        # crop invalid affinity labels and elastic augment reflection padding assymetrically
+        crop_config = self.master_config.get('crop_after_target', {})
+        if crop_config:
+            # One might need to crop after elastic transform to avoid edge artefacts of affinity
+            # computation being warped into the FOV.
+            transforms.add(VolumeAsymmetricCrop(**crop_config))
+
+        from vaeAffs.transforms import PassGTBoundaries_HackyHackyReloaded
+        transforms.add(PassGTBoundaries_HackyHackyReloaded())
 
         return transforms
 

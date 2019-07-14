@@ -69,20 +69,22 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
 
 
     def get_boundary_offsets(self):
-        return [[0, -1, 0], [0, 0, -1], [0, 2, 0], [0, 0, 2],
-                [0, -3, 0], [0, 0, -3], [0, 3, 0], [0, 0, 3]]
+        return self.get("boundary_offsets")
+        # return [[0, -1, 0], [0, 0, -1], [0, 2, 0], [0, 0, 2],
+        #         [0, -3, 0], [0, 0, -3], [0, 3, 0], [0, 0, 3]]
 
     def build_model(self, model_config=None):
         model_config = self.get('model') if model_config is None else model_config
         return super(BaseCremiExperiment, self).build_model(model_config) #parse_model(model_config)
 
     def set_devices(self):
-        # n_gpus = torch.cuda.device_count()
-        # gpu_list = range(n_gpus)
-        # self.set("gpu_list", gpu_list)
-        # self.trainer.cuda(gpu_list)
-        self.set("gpu_list", [0])
-        self.trainer.cuda([0])
+        n_gpus = torch.cuda.device_count()
+        gpu_list = range(n_gpus)
+        self.set("gpu_list", gpu_list)
+        self.trainer.cuda(gpu_list)
+        # self.set("gpu_list", [0])
+        # self.trainer.cuda([0])
+
 
     def inferno_build_criterion(self):
         print("Building criterion")

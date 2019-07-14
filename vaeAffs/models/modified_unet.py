@@ -544,11 +544,11 @@ class RefinedPyrUNetLoss(nn.Module):
             pred_dws_fact = kwargs.get("pred_dws_fact", [1,1,1])
             precrop_target = kwargs.get("crop_targets")
 
-            if patch_dws_fact[1] <= 2:
+            # if patch_dws_fact[1] <= 2:
                 # Thinner boundaries for the higher res output:
-                boundary_mask = boundary_affs[:, :4].max(dim=1, keepdim=True)[0]
-            else:
-                boundary_mask = boundary_affs[:, 4:].max(dim=1, keepdim=True)[0]
+            boundary_mask = boundary_affs[:, :].max(dim=1, keepdim=True)[0]
+            # else:
+            #     boundary_mask = boundary_affs[:, 4:8].max(dim=1, keepdim=True)[0]
 
 
             real_patch_shape = tuple(pt*fc for pt, fc in zip(patch_shape_input, patch_dws_fact))
@@ -643,7 +643,7 @@ class RefinedPyrUNetLoss(nn.Module):
             #     loss += 0.00000001 * loss_unet
             log_scalar("loss_l{}".format(nb_patch_net), loss_unet)
             log_scalar("nb_patches_l{}".format(nb_patch_net), pred_patches.shape[0])
-            log_scalar("avg_targets_l{}".format(nb_patch_net), patch_targets.float().mean())
+            # log_scalar("avg_targets_l{}".format(nb_patch_net), patch_targets.float().mean())
 
 
         return loss
