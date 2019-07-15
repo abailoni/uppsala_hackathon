@@ -90,7 +90,7 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         print("Building criterion")
         # path = self.get("autoencoder/path")
         loss_kwargs = self.get("trainer/criterion/kwargs")
-        from vaeAffs.models.modified_unet import EncodingLoss, PatchLoss, RefinedPyrUNetLoss
+        from vaeAffs.models.losses import EncodingLoss, PatchLoss, RefinedPyrUNetLoss
         model_kwargs = self.get('model/{}'.format(self.model_class))
         loss = RefinedPyrUNetLoss(model=self.model, model_kwargs=model_kwargs,
                                        devices=tuple(self.get("gpu_list")),

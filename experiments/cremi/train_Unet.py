@@ -100,7 +100,7 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         print("Building criterion")
         # path = self.get("autoencoder/path")
         loss_kwargs = self.get("trainer/criterion/kwargs")
-        from vaeAffs.models.modified_unet import EncodingLoss, PatchLoss
+        from vaeAffs.models.losses import EncodingLoss, PatchLoss
         loss = PatchLoss(model=self.model, **loss_kwargs)
         self._trainer.build_criterion(loss)
         self._trainer.build_validation_criterion(loss)

@@ -88,7 +88,7 @@ class VaeCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         print("Building criterion")
         # loss = nn.MSELoss()
         # loss = SorensenDiceLoss()
-        from vaeAffs.models.modified_unet import VAE_loss
+        from vaeAffs.models.losses import VAE_loss
         loss = VAE_loss()
 
         self._trainer.build_criterion(loss)
