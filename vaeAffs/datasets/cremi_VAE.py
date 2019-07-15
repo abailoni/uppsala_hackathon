@@ -89,11 +89,10 @@ class CremiDataset(ZipReject):
 
         # affinity transforms for affinity targets
         # we apply the affinity target calculation only to the segmentation (1)
-        assert self.affinity_config is not None
-        transforms.add(affinity_config_to_transform(apply_to=[0], **self.affinity_config))
+        # assert self.affinity_config is not None
+        # transforms.add(affinity_config_to_transform(apply_to=[0], **self.affinity_config))
         # transforms.add(ComputeMeMask(apply_to=[0]))
 
-        # TODO: add clipping transformation
 
         # crop invalid affinity labels and elastic augment reflection padding assymetrically
         crop_config = self.master_config.get('crop_after_target', {})
@@ -102,7 +101,7 @@ class CremiDataset(ZipReject):
             # computation being warped into the FOV.
             transforms.add(VolumeAsymmetricCrop(**crop_config))
 
-        transforms.add(RandomlyDownscale(final_shape=(15,15), downscale_factors=(1,2,4)))
+        # transforms.add(RandomlyDownscale(final_shape=(15,15), downscale_factors=(1,2,4)))
         # transforms.add(RemoveInvalidAffs(apply_to=[0]))
         transforms.add(SetVAETarget())
 

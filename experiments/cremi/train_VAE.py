@@ -33,9 +33,8 @@ from neurofire.criteria.loss_transforms import ApplyAndRemoveMask
 from neurofire.criteria.loss_transforms import RemoveSegmentationFromTarget
 from neurofire.criteria.loss_transforms import InvertTarget
 
-from vaeAffs.datasets.cremi import get_cremi_loader
+from vaeAffs.datasets.cremi_VAE import get_cremi_loader
 from vaeAffs.utils.path_utils import get_source_dir
-from vaeAffs.models.vanilla_vae import VAE_loss
 
 
 
@@ -63,7 +62,7 @@ class VaeCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         self.set_devices()
 
     def set_devices(self):
-        self.trainer.cuda([0,1])
+        self.trainer.cuda([0])
 
     def get_default_offsets(self):
         return [[0, -4, +4],
@@ -89,6 +88,7 @@ class VaeCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         print("Building criterion")
         # loss = nn.MSELoss()
         # loss = SorensenDiceLoss()
+        from vaeAffs.models.modified_unet import VAE_loss
         loss = VAE_loss()
 
         self._trainer.build_criterion(loss)

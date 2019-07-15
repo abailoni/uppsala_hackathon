@@ -8,6 +8,16 @@ class SetVAETarget(Transform):
     def batch_function(self, batch):
         return [batch[0], np.copy(batch[0])]
 
+
+class ComputeMaskTarget(Transform):
+    def batch_function(self, batch):
+        assert len(batch) == 1
+
+
+
+        return [batch[0], np.copy(batch[0])]
+
+
 class HackyHacky(Transform):
     # FIXME: super ugly, temp hack, add raw to target
     def batch_function(self, batch):
@@ -15,13 +25,11 @@ class HackyHacky(Transform):
 
 
 class PassGTBoundaries_HackyHackyReloaded(Transform):
-    # FIXME: super ugly, temp hack, add raw to target
+    # FIXME: super ugly, temp fix to train on GT
     def batch_function(self, batch):
         assert len(batch) == 2
-        # 0: GT
-        # 1:9 boudn affs
-        # 9:13 input affs
-        return (batch[1][1:5], np.concatenate((batch[1][[0]], batch[1][3:5])))
+        # return (batch[1][1:5], np.concatenate((batch[1][[0]], batch[1][3:5])))
+        return (np.stack((batch[0],batch[0],batch[0],batch[0])), np.concatenate((batch[1][[0]], batch[1][3:5])))
 
 
 class ReplicateBatch(Transform):

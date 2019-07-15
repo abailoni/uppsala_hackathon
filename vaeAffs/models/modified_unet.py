@@ -67,6 +67,44 @@ class EncodingLoss(nn.Module):
 
         return loss
 
+
+class VAE_loss(nn.Module):
+    def __init__(self, model_kwargs=None):
+        super(VAE_loss, self).__init__()
+        self.reconstruction_loss = nn.BCELoss(reduction="sum")
+        self.model_kwargs = model_kwargs
+        # self.reconstruction_function.size_average = False
+        # self.reconstruction_function = SorensenDiceLoss()
+        # self.reconstruction_function = nn.MSELoss()
+
+        self.pre_maxpool = None
+        if model_kwargs.get("pre_maxpool") is not None:
+            pre_maxpool = model_kwargs.get("pre_maxpool")
+            self.pre_maxpool = nn.MaxPool3d(kernel_size=pre_maxpool,
+                                            stride=pre_maxpool,
+                                            padding=0)
+
+    def forward(self, predictions, target):
+        # x = target[:, :, 0]
+        recon_x, mu, logvar = predictions
+
+        if self.pre_maxpool is not None:
+            target = self.pre_maxpool(target)
+
+        # Reconstruction loss:
+        # BCE = 0
+        BCE = self.reconstruction_loss(recon_x, target)
+
+        # BCE = self.reconstruction_function(recon_x, target)
+
+        # see Appendix B from VAE paper:
+        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
+        # https://arxiv.org/abs/1312.6114
+        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+
+        return BCE + KLD
+
 class AffLoss(nn.Module):
     def __init__(self, loss_type="Dice"):
         super(AffLoss, self).__init__()

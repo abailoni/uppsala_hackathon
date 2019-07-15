@@ -28,7 +28,7 @@ loaders:
         artifact_source:
             min_masking_ratio: .5
             slicing_config:
-              window_size: [1, 243, 243]  #change x and y to window size
+              window_size: [1, 76, 76]  #change x and y to window size
               stride: [1, 128, 128]
               downsampling_ratio: [1, 1, 1]
             volume_config:
@@ -53,16 +53,16 @@ loaders:
         sigma: 50.
         order: 0
       random_slides: False
-      shape_after_slide: [243, 243]   #change to x, y of window size
+      shape_after_slide: [76, 76]   #change to x, y of window size
 
       random_flip: False
 
       compute_directions:
         n_directions: *n_directions
         z_direction:  &z_direction True
-      crop_after_target:
-        crop_left: [0, 30, 30]
-        crop_right: [0, 30, 30]
+#      crop_after_target:
+#        crop_left: [0, 30, 30]
+#        crop_right: [0, 30, 30]
 
     # Specify configuration for the loader
     loader_config:
@@ -89,12 +89,12 @@ loaders:
     slicing_config:
       # Sliding window size
       window_size:
-        A: &shape [5, 205, 205] # 141
+        A: &shape [7, 76, 76] # 141
         B: *shape
         C: *shape
       # Sliding window stride
       stride:
-        A: &stride [1, 40, 40]
+        A: &stride [1, 30, 30]
         B: *stride
         C: *stride
       # Data slice to iterate over.
@@ -161,25 +161,12 @@ loaders:
 
 
 model:
-  vaeAffs.models.vanilla_vae.AutoEncoder:
-#    in_channels: *tot_offsets
-#    out_channels: *tot_offsets
-    add_residual_connections: true
-    conv_type_key: conv_bn
-    fmap_growth: 3
-    in_channels: 1
-#    out_channels: 1
-    initial_num_fmaps: 16
-    scale_factor:
-      - [1, 1, 1]
-#      - [1, 3, 3]
-#      - [1, 1, 1]
-    final_activation: Sigmoid
-    latent_variable_size: 64
-    patch_size: [5,15,15]
-#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE64_3D_5_29_29_DS1_BCE/best_checkpoint.pytorch"
-#    unfold_size: 27
-#    max_pool_factor: 8
+  embeddingutils.models.unet.PatchNet:
+    latent_variable_size: 128
+    feature_maps: 16
+    downscaling_factor: [1, 1, 1] # Inside patchNet, to reduce memory
+    output_shape: [7,19,19]
+
 
 trainer:
   max_epochs: 10000 # basically infinite
