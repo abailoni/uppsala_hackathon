@@ -14,7 +14,7 @@ from neurofire.transform.affinities import Segmentation2AffinitiesDynamicOffsets
 from neurofire.transform.artifact_source import RejectNonZeroThreshold
 from neurofire.transform.volume import RandomSlide
 
-from ..transforms import SetVAETarget, RemoveThirdDimension, RemoveInvalidAffs, HackyHacky, DownsampleAndCrop3D, \
+from ..transforms import ComputeVAETarget, RemoveThirdDimension, RemoveInvalidAffs, HackyHacky, DownsampleAndCrop3D, \
     ReplicateBatch
 import numpy as np
 

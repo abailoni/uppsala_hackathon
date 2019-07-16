@@ -52,17 +52,24 @@ class VaeCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         self.auto_setup()
 
         register_logger(self, 'scalars')
-        register_logger(self, 'embedding')
-        register_logger(self, 'image')
+        # register_logger(self, 'embedding')
+        # register_logger(self, 'image')
 
         offsets = self.get_default_offsets()
         self.set('global/offsets', offsets)
         self.set('loaders/general/volume_config/segmentation/affinity_config/offsets', offsets)
 
+        self.model_class = list(self.get('model').keys())[0]
+
         self.set_devices()
 
     def set_devices(self):
-        self.trainer.cuda([0])
+        n_gpus = torch.cuda.device_count()
+        gpu_list = range(n_gpus)
+        self.set("gpu_list", gpu_list)
+        self.trainer.cuda(gpu_list)
+        # self.set("gpu_list", [0])
+        # self.trainer.cuda([0])
 
     def get_default_offsets(self):
         return [[0, -4, +4],
@@ -89,7 +96,8 @@ class VaeCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         # loss = nn.MSELoss()
         # loss = SorensenDiceLoss()
         from vaeAffs.models.losses import VAE_loss
-        loss = VAE_loss()
+        model_kwargs = self.get('model/{}'.format(self.model_class))
+        loss = VAE_loss(model_kwargs=model_kwargs)
 
         self._trainer.build_criterion(loss)
         self._trainer.build_validation_criterion(loss)

@@ -14,7 +14,7 @@ from neurofire.transform.affinities import affinity_config_to_transform
 from neurofire.transform.artifact_source import RejectNonZeroThreshold
 from neurofire.transform.volume import RandomSlide
 
-from ..transforms import SetVAETarget, RemoveThirdDimension, RemoveInvalidAffs, HackyHacky
+from ..transforms import ComputeVAETarget, RemoveThirdDimension, RemoveInvalidAffs, HackyHacky
 import numpy as np
 
 from neurofire.criteria.loss_transforms import InvertTarget
@@ -118,7 +118,7 @@ class CremiDataset(ZipReject):
 
         # transforms.add(InvertTarget(self.affinity_config.get("retain_segmentation", False)))
         # transforms.add(HackyHacky())
-        #transforms.add(SetVAETarget()), HackyHacky
+        #transforms.add(ComputeVAETarget()), HackyHacky
 
         return transforms
 

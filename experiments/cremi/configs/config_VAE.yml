@@ -161,11 +161,13 @@ loaders:
 
 
 model:
-  embeddingutils.models.unet.PatchNet:
-    latent_variable_size: 128
-    feature_maps: 16
-    downscaling_factor: [1, 1, 1] # Inside patchNet, to reduce memory
-    output_shape: [7,19,19]
+  embeddingutils.models.unet.PatchNetVAE:
+    pre_maxpool: [1,4,4]
+    patchNet_kwargs:
+      latent_variable_size: 64
+      feature_maps: 16
+      downscaling_factor: [1, 1, 1] # Inside patchNet, to reduce memory
+      output_shape: [7,19,19]
 
 
 trainer:
@@ -236,15 +238,15 @@ trainer:
         verbose: True
 
 firelight:
-  VAE:
+  VAE_patches:
     ImageGridVisualizer:
 
       input_mapping:
-#        global: [B: 0] # the mapping specified in 'global' is applied to all keys
-        input: ['inputs', index: 0, B: ":3", D: ":2"]
-        target: ['target', index: 0, B: ":3", D: ":2"]
-        preds: ['prediction', index: 0, B: ":3", D: ":2"]
-        preds2: ['prediction', index: 1, B: ":3", D: ":2"]
+        global: [B: ":5", D: ":"] # the mapping specified in 'global' is applied to all keys
+#        input: ['inputs', index: 0, B: ":3", D: ":"]
+#        target: ['target', index: 0, B: ":3", D: ":2"]
+#        preds: ['prediction', index: 0, B: ":3", D: ":"]
+#        preds2: ['prediction', index: 1, B: ":3", D: ":2"]
 
       pad_width: 1  # width of the border between images in pixels
       pad_value: .2  # intensity of the border pixels
@@ -258,13 +260,13 @@ firelight:
 
         # visualize raw input
         - IdentityVisualizer:
-            input: 'preds'
+            input: ["maxpooled_target"]
             cmap: gray
 #        - IdentityVisualizer:
 #            input: 'preds2'
 #            cmap: gray
         - IdentityVisualizer:
-            input: 'target'
+            input: ['prediction', index: 0]
             cmap: gray
 #        - IdentityVisualizer:
 #            input: 'input'

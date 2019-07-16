@@ -14,7 +14,7 @@ from neurofire.transform.affinities import affinity_config_to_transform
 from neurofire.transform.artifact_source import RejectNonZeroThreshold
 from neurofire.transform.volume import RandomSlide
 
-from ..transforms import SetVAETarget, RemoveThirdDimension, RemoveInvalidAffs, RandomlyDownscale, ComputeMeMask
+from ..transforms import ComputeVAETarget, RemoveThirdDimension, RemoveInvalidAffs, RandomlyDownscale, ComputeMeMask
 import numpy as np
 
 from .cremi_Unet import RejectSingleLabelVolumes
@@ -103,7 +103,7 @@ class CremiDataset(ZipReject):
 
         # transforms.add(RandomlyDownscale(final_shape=(15,15), downscale_factors=(1,2,4)))
         # transforms.add(RemoveInvalidAffs(apply_to=[0]))
-        transforms.add(SetVAETarget())
+        transforms.add(ComputeVAETarget())
 
         return transforms
 

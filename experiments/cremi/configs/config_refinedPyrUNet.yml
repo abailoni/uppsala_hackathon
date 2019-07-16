@@ -166,6 +166,8 @@ loaders:
 # - exclude smallest segments??
 # - am I doing the MaxPooling option right in the patchDownscaling? Tiny processd could be lost (but at the same time I don't want to merge...)
 # - train already with additional input channels!
+# - fix input datasets
+# - should I replace MaxPool with a strided conv...?
 sdfsfds
 
 model:

@@ -4,9 +4,18 @@ from inferno.io.transform import Transform
 from vaeAffs.utils.affinitiy_utils import get_offset_locations
 from scipy.ndimage import zoom
 
-class SetVAETarget(Transform):
+class ComputeVAETarget(Transform):
     def batch_function(self, batch):
-        return [batch[0], np.copy(batch[0])]
+        assert len(batch) == 1
+        # Compute me-mask:
+        GT_segm = batch[0]
+        shape = GT_segm.shape
+
+        center_label_coord = tuple(int(sh/2)  for sh in shape)
+        center_label = GT_segm[center_label_coord]
+        others_mask = (GT_segm != center_label).astype('float32')
+
+        return [others_mask, others_mask]
 
 
 class ComputeMaskTarget(Transform):
