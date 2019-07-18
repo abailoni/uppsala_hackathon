@@ -164,7 +164,7 @@ model:
   embeddingutils.models.unet.PatchNetVAE:
     pre_maxpool: [1,4,4]
     patchNet_kwargs:
-      latent_variable_size: 64
+      latent_variable_size: 192
       feature_maps: 16
       downscaling_factor: [1, 1, 1] # Inside patchNet, to reduce memory
       output_shape: [7,19,19]

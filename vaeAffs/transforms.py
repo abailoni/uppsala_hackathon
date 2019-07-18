@@ -37,8 +37,8 @@ class PassGTBoundaries_HackyHackyReloaded(Transform):
     # FIXME: super ugly, temp fix to train on GT
     def batch_function(self, batch):
         assert len(batch) == 2
-        # return (batch[1][1:5], np.concatenate((batch[1][[0]], batch[1][3:5])))
-        return (np.stack((batch[0],batch[0],batch[0],batch[0])), np.concatenate((batch[1][[0]], batch[1][3:5])))
+        return (batch[1][1:5], np.concatenate((batch[1][[0]], batch[1][3:5])))
+        # return (np.stack((batch[0],batch[0],batch[0],batch[0])), np.concatenate((batch[1][[0]], batch[1][3:5])))
 
 
 class ReplicateBatch(Transform):

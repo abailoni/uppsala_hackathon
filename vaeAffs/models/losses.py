@@ -143,6 +143,359 @@ class AffLoss(nn.Module):
 
 from speedrun.log_anywhere import log_image, log_embedding, log_scalar
 
+class RefinedPyrUNetLoss(nn.Module):
+    def __init__(self, model, loss_type="Dice", model_kwargs=None, devices=(0,1)):
+        super(RefinedPyrUNetLoss, self).__init__()
+        if loss_type == "Dice":
+            self.loss = SorensenDiceLoss()
+        elif loss_type == "MSE":
+            self.loss = nn.MSELoss()
+        elif loss_type == "BCE":
+            self.loss = nn.BCELoss()
+        else:
+            raise ValueError
+
+        self.devices = devices
+        self.model_kwargs = model_kwargs
+        self.MSE_loss = nn.MSELoss()
+        self.smoothL1_loss = nn.SmoothL1Loss()
+        # TODO: use nn.BCEWithLogitsLoss()
+        self.BCE = nn.BCELoss()
+        self.soresen_loss = SorensenDiceLoss()
+
+        from vaeAffs.models.vanilla_vae import VAE_loss
+        self.VAE_loss = VAE_loss()
+
+        self.model = model
+
+
+
+    def forward(self, all_predictions, target):
+        mdl_kwargs = self.model_kwargs
+        ptch_kwargs = mdl_kwargs["patchNet_kwargs"]
+        nb_preds = len(all_predictions)
+
+        full_target_shape = target.shape[-3:]
+        gt_segm = target[:, [0]]
+        boundary_affs = target[:, 1:]
+        boundary_affs = 1 - boundary_affs
+
+        # Collect loss from some random patches:
+        loss = 0
+        for nb_patch_net in range(nb_preds):
+            pred = all_predictions[nb_patch_net]
+            kwargs = ptch_kwargs[nb_patch_net]
+
+            # Collect options from config:
+            patch_shape_input = kwargs.get("patch_size")
+            assert all(i % 2 ==  1 for i in patch_shape_input), "Patch should be odd"
+            patch_dws_fact = kwargs.get("patch_dws_fact", [1,1,1])
+            stride = tuple(kwargs.get("patch_stride", [1,1,1]))
+            pred_dws_fact = kwargs.get("pred_dws_fact", [1,1,1])
+            precrop_target = kwargs.get("crop_targets")
+
+            # if patch_dws_fact[1] <= 2:
+                # Thinner boundaries for the higher res output:
+            boundary_mask = boundary_affs[:, :].max(dim=1, keepdim=True)[0]
+            # else:
+            #     boundary_mask = boundary_affs[:, 4:8].max(dim=1, keepdim=True)[0]
+
+
+            real_patch_shape = tuple(pt*fc for pt, fc in zip(patch_shape_input, patch_dws_fact))
+
+            # TODO assert dims!
+            assert all([i <= j for i, j in zip(real_patch_shape, full_target_shape)]), "Real-sized patch is too large!"
+
+            gt_patches, crop_slice_targets, nb_patches = extract_patches_torch_new(gt_segm, real_patch_shape, stride=stride,
+                                  max_random_crop=(0,5,5),
+                                                                         precrop_target=precrop_target)
+
+            # Make sure to crop some additional border and get the embedding correctly:
+            crop_slice_emb = (slice(None), slice(None)) + tuple(slice(slc.start+int(sh/2), slc.stop) for slc, sh in zip(crop_slice_targets[2:], real_patch_shape))
+
+            center_labels, _, _ = extract_patches_torch_new(gt_segm, (1,1,1), stride=stride,
+                                                        crop_slice=crop_slice_emb,
+                                                        limit_patches_to=nb_patches)
+
+            is_on_boundary, _, _ = extract_patches_torch_new(boundary_mask, (1, 1, 1), stride=stride,
+                                                     crop_slice=crop_slice_emb,
+                                                     limit_patches_to=nb_patches)
+
+            center_labels_repeated = center_labels.repeat(1, 1, *real_patch_shape)
+            me_masks = gt_patches != center_labels_repeated
+
+            # max_offsets = [ j-i for i, j in zip(patch_shape, full_target_shape)]
+
+            # Ignore some additional pixels:
+            ignore_masks = (gt_patches == 0)
+
+            # Reject some patches:
+            valid_patches = (center_labels != 0) & (is_on_boundary != 1)
+            valid_batch_indices = np.argwhere(valid_patches[:, 0, 0, 0, 0].cpu().detach().numpy())[:, 0]
+
+            if valid_batch_indices.shape[0] == 0:
+                raise ValueError("ZERO patches! Delete torch cache!")
+                # continue
+
+            # Downscale masks:
+            # Make sure that the me-mask is zero (better split than merge)
+            if all(fctr == 1 for fctr in patch_dws_fact):
+                maxpool = Identity()
+            else:
+                maxpool = nn.MaxPool3d(kernel_size=patch_dws_fact,
+                     stride=patch_dws_fact,
+                     padding=0)
+
+            # Final targets:
+            patch_targets = maxpool(me_masks[valid_batch_indices].float()).float()
+            patch_ignore_masks = maxpool(ignore_masks[valid_batch_indices].float()).byte()
+
+            # Get corresponding prediction embeddings
+            # (prediction could be downscaled and cropped wrt the original targets):
+            crop_slice_pred, pred_strides = get_prediction_slice_crops(pred.shape[2:], full_target_shape, pred_dws_fact, stride, crop_slice_emb[2:])
+            crop_slice_pred = (slice(None), slice(None)) + crop_slice_pred
+
+            pred_patches, _, _ = extract_patches_torch_new(pred, (1, 1, 1), stride=pred_strides,
+                                                     crop_slice=crop_slice_pred,
+                                                    limit_patches_to=nb_patches)
+            pred_embed = pred_patches[valid_batch_indices][:, :, 0, 0, 0]
+
+            # raw_patches, _, _ = extract_patches_torch(raw, patch_shape, stride=stride,
+            #                                                              fixed_crop=crop_offsets)
+            # all_raw_patches[level] = maxpool(raw_patches[valid_batch_indices])
+
+            # Compute predicted patches:
+            pred_patches = data_parallel(self.model.patch_models[nb_patch_net], pred_embed, self.devices)[:, [0]]
+            # pred_patches = self.model.patch_models[lvl](pred_embed)[:, [0]]
+
+            # if lvl == 0 and depth_factor > 1:
+            #     pred_patches = 1 - pred_patches
+            #     patch_targets = 1 - patch_targets
+
+            # btch_slc = list(np.random.randint(patch_targets.shape[0], size=4)) if patch_targets.shape[0] >= 4 else slice(0, 1)
+            log_image("ptc_trg_l{}".format(nb_patch_net), patch_targets)
+            log_image("ptc_pred_l{}".format(nb_patch_net), pred_patches)
+            log_image("ptc_ign_l{}".format(nb_patch_net), patch_ignore_masks)
+
+            # Apply ignore mask:
+            pred_patches[patch_ignore_masks] = 0
+            patch_targets[patch_ignore_masks] = 0
+            with warnings.catch_warnings(record=True) as w:
+                loss_unet = data_parallel(self.loss, (pred_patches, patch_targets.float()), self.devices).mean()
+                # loss_unet = self.loss(pred_patches, patch_targets.float())
+
+            # if lvl == 0:
+            loss += loss_unet
+            # else:
+            #     loss += 0.00000001 * loss_unet
+            log_scalar("loss_l{}".format(nb_patch_net), loss_unet)
+            log_scalar("nb_patches_l{}".format(nb_patch_net), pred_patches.shape[0])
+            # log_scalar("avg_targets_l{}".format(nb_patch_net), patch_targets.float().mean())
+
+
+        return loss
+
+
+def get_prediction_slice_crops(pred_shape, target_shape, pred_ds_factor, strides, crops_target_center_labels):
+    # Compute updated strides:
+    assert all(strd % pred_fctr == 0 for strd, pred_fctr in
+               zip(strides, pred_ds_factor)), "Stride {} should be divisible by downscaling factor {}".format(strides,
+                                                                                                            pred_ds_factor)
+    pred_strides = tuple(int(strd / pred_fctr) for strd, pred_fctr in zip(strides, pred_ds_factor))
+
+    # Compute new left crops:
+    # (we do not care about the right crops, because anyway the extra patches are
+    # ignored with the option `limit_patches_to`)
+    upscaled_pred_shape = [sh*fctr for sh, fctr in zip(pred_shape, pred_ds_factor)]
+    if any(trg!=pred for trg, pred in zip(target_shape, upscaled_pred_shape)):
+        diff = [orig - trg for orig, trg in zip(target_shape, upscaled_pred_shape)]
+        assert all([d > 0 for d in diff]), "Something went wrong..."
+        left_crops = [int(d / 2) for d in diff]
+
+        # Now compute the updated crops:
+        assert all(orig_crop.start >= new_crop for orig_crop, new_crop in zip(crops_target_center_labels, left_crops)), "The prediction was cropped too much!"
+
+        new_crops = [orig_crop.start - new_crop for orig_crop, new_crop in zip(crops_target_center_labels, left_crops)]
+    else:
+        new_crops = [orig_crop.start for orig_crop in crops_target_center_labels]
+
+    # Even if it is not divisible, it should not be a problem because it is just an offset:
+    pred_crop_slice = tuple(slice(int(crp/pred_fctr), None) for crp, pred_fctr in zip(new_crops, pred_ds_factor))
+
+    return pred_crop_slice, pred_strides
+
+def extract_patches_torch_new(tensor, shape, stride, precrop_target=None, max_random_crop=None,
+                          # downscale_fctr=None,
+                          crop_slice=None,
+                          limit_patches_to=None,
+                          reshape_to_batch_dim=True):
+    assert tensor.dim() == 4 or tensor.dim() == 5
+    dim = tensor.dim() - 2
+    assert len(shape) == dim and len(stride) == dim
+    if crop_slice is not None:
+        assert max_random_crop is None and precrop_target is None
+    if precrop_target is not None:
+        assert len(precrop_target) == dim
+        assert all([isinstance(sl, (tuple, list)) for sl in precrop_target]) and all([len(sl) == 2 for sl in precrop_target])
+    else:
+        precrop_target = [(0, 0) for _ in range(dim)]
+
+    max_random_crop = [0 for _ in range(dim)] if max_random_crop is None else max_random_crop
+    assert len(max_random_crop) == dim
+
+    # if downscale_fct is not None:
+    #     assert len(downscale_fct) == dim
+
+    if limit_patches_to is not None:
+        assert len(limit_patches_to) == dim
+
+    # Pick a random crop:
+    if crop_slice is None:
+        rnd_crop = [np.random.randint(max_offs+1) for max_offs in max_random_crop]
+        crop_slice = (slice(None), slice(None)) + tuple(slice(precrop[0]+off, full_shp-precrop[1]) for off, precrop, full_shp in zip(rnd_crop, precrop_target, tensor.shape[2:]))
+
+    # Unfold it:
+    tensor = tensor[crop_slice]
+    N, C = tensor.shape[:2]
+    for d in range(dim):
+        tensor = tensor.unfold(d+2, size=shape[d],step=stride[d])
+    # Reshape:
+    nb_patches = tensor.shape[2:2+len(shape)]
+    # Along each dimension, we make sure to keep only a specific number of patches (not more):
+    # this assures compatibility with other patches already extracted
+    if limit_patches_to is not None:
+        actual_limits  = tuple( lim if lim<nb else nb for nb, lim in zip(nb_patches, limit_patches_to))
+        valid_patch_slice = (slice(None), slice(None)) + tuple(slice(None,lim) for lim in actual_limits)
+        tensor = tensor[valid_patch_slice]
+        nb_patches = actual_limits
+    # Reshape
+    tensor = tensor.contiguous().view(N,C,-1,*shape)
+    if reshape_to_batch_dim:
+        tensor = tensor.permute(0,2,1,*range(3,3+dim)).contiguous().view(-1,C,*shape)
+    else:
+        tensor = tensor.permute(0, 1, *range(3, 3 + dim), 2).contiguous()
+
+    # if downscale_fct is not None:
+    #     # TODO: use MaxPool instead?
+    #     for d, dw in enumerate(downscale_fct):
+    #         slc = tuple(slice(None) for _ in range(2+d)) + (slice(None,None,dw),)
+    #         tensor = tensor[slc]
+
+    return tensor, crop_slice, nb_patches
+
+
+def extract_patches_torch(tensor, shape, stride, fixed_crop=None, max_random_crop=None,
+                          # downscale_fctr=None,
+                          limit_patches_to=None,
+                          reshape_to_batch_dim=True):
+    assert tensor.dim() == 4 or tensor.dim() == 5
+    dim = tensor.dim() - 2
+    assert len(shape) == dim and len(stride) == dim
+    if fixed_crop is not None:
+        assert len(fixed_crop) == dim
+        assert max_random_crop is None
+    else:
+        fixed_crop = tuple(0 for _ in range(dim)) if fixed_crop is None else fixed_crop
+
+
+    max_random_crop = tuple(0 for _ in range(dim)) if max_random_crop is None else max_random_crop
+    assert len(max_random_crop) == dim
+
+    # if downscale_fct is not None:
+    #     assert len(downscale_fct) == dim
+
+    if limit_patches_to is not None:
+        assert len(limit_patches_to) == dim
+
+    # Pick a random crop:
+    rnd_crop = tuple(fx_offs + np.random.randint(max_offs+1) for max_offs, fx_offs in zip(max_random_crop, fixed_crop))
+    crop_slice = (slice(None), slice(None)) + tuple(slice(off,None) for off in rnd_crop)
+
+    # Unfold it:
+    tensor = tensor[crop_slice]
+    N, C = tensor.shape[:2]
+    for d in range(dim):
+        tensor = tensor.unfold(d+2, size=shape[d],step=stride[d])
+    # Reshape:
+    nb_patches = tensor.shape[2:2+len(shape)]
+    if limit_patches_to is not None:
+        actual_limits  = tuple( lim if lim<nb else nb for nb, lim in zip(nb_patches, limit_patches_to))
+        valid_patch_slice = (slice(None), slice(None)) + tuple(slice(None,lim) for lim in actual_limits)
+        tensor = tensor[valid_patch_slice]
+        nb_patches = actual_limits
+    # Reshape
+    tensor = tensor.contiguous().view(N,C,-1,*shape)
+    if reshape_to_batch_dim:
+        tensor = tensor.permute(0,2,1,*range(3,3+dim)).contiguous().view(-1,C,*shape)
+    else:
+        tensor = tensor.permute(0, 1, *range(3, 3 + dim), 2).contiguous()
+
+    # if downscale_fct is not None:
+    #     # TODO: use MaxPool instead?
+    #     for d, dw in enumerate(downscale_fct):
+    #         slc = tuple(slice(None) for _ in range(2+d)) + (slice(None,None,dw),)
+    #         tensor = tensor[slc]
+
+    return tensor, rnd_crop, nb_patches
+
+
+
+def predict_full_image(embeddings, decoder, patch_shape=(27, 27), stride=3):
+    assert len(patch_shape) == 2
+    assert len(embeddings.shape) == 4
+    pred_shape = embeddings.shape[-2:]
+
+    assert all(i % 2 == 1 for i in patch_shape), "Patch should be odd"
+    assert all([i <= j for i, j in zip(patch_shape, pred_shape)]), "Prediction is too small"
+
+    def unfold_and_refold(input, normalize=True):
+        # For the moment we do not overlap them:
+        assert all([j % i == 0 for i, j in zip(patch_shape, pred_shape)]), "Patch should fit the image!"
+        nb_channels = input.shape[1]
+        unfolded = nn.functional.unfold(input[:,:,13:-13,13:-13], kernel_size=(1,1), stride=stride) # (N, C, nb_patches)
+        batch_size = unfolded.shape[0]
+        nb_patches = unfolded.shape[2]
+        unfolded = unfolded.permute(0,2,1).contiguous().view(-1, nb_channels, 1)
+
+        with torch.no_grad():
+            decoded = decoder(unfolded)
+        # Get rid of Z dim:
+        decoded = decoded[:,:,0]
+        decoded_shape = decoded.shape # (N * nb_patches, C, X, Y)
+        # Bring it to the shape expected by fold:
+        decoded_reshaped = decoded.view(batch_size, nb_patches, *decoded_shape[1:]).permute(0,2,3,4,1).view(batch_size,-1,nb_patches)
+        refolded = nn.functional.fold(decoded_reshaped, kernel_size=(27, 27), output_size=pred_shape, stride=stride)
+
+        if normalize:
+            normalization = nn.functional.fold(torch.ones_like(decoded_reshaped), kernel_size=(27, 27), output_size=pred_shape, stride=stride)
+            refolded /= normalization
+        return refolded
+
+
+    folded = unfold_and_refold(embeddings)
+    return folded
+
+def unfold_3d(x, *args, **kwargs):
+    unfolded = []
+    for z in range(x.shape[2]):
+        unfolded_slice = nn.functional.unfold(x[:,:,z], *args, **kwargs)
+        assert unfolded_slice.shape[-1] == 1, "kernel size does not match! Trying to unfold a patch of size {} with kernel {}".format(x.shape[-1], kwargs["kernel_size"])
+        unfolded.append(unfolded_slice)
+    x = torch.cat(unfolded, dim=2)
+    return x
+
+
+def fold_3d(x, *args, **kwargs):
+    folded = []
+    for z in range(x.shape[2]):
+        folded_slice = nn.functional.fold(x[:,:,[z]], *args, **kwargs)
+        folded.append(folded_slice)
+    x = torch.stack(folded, dim=2)
+    return x
+
+
+
+
 class PatchLoss(nn.Module):
     def __init__(self, model, loss_type="Dice", devices=(0,1)):
         super(PatchLoss, self).__init__()
@@ -534,331 +887,6 @@ class StackedPyrHourGlassLoss(nn.Module):
         return loss
 
 
-class RefinedPyrUNetLoss(nn.Module):
-    def __init__(self, model, loss_type="Dice", model_kwargs=None, devices=(0,1)):
-        super(RefinedPyrUNetLoss, self).__init__()
-        if loss_type == "Dice":
-            self.loss = SorensenDiceLoss()
-        elif loss_type == "MSE":
-            self.loss = nn.MSELoss()
-        elif loss_type == "BCE":
-            self.loss = nn.BCELoss()
-        else:
-            raise ValueError
-
-        self.devices = devices
-        self.model_kwargs = model_kwargs
-        self.MSE_loss = nn.MSELoss()
-        self.smoothL1_loss = nn.SmoothL1Loss()
-        # TODO: use nn.BCEWithLogitsLoss()
-        self.BCE = nn.BCELoss()
-        self.soresen_loss = SorensenDiceLoss()
-
-        from vaeAffs.models.vanilla_vae import VAE_loss
-        self.VAE_loss = VAE_loss()
-
-        self.model = model
-
-
-
-    def forward(self, all_predictions, target):
-        mdl_kwargs = self.model_kwargs
-        ptch_kwargs = mdl_kwargs["scale_spec_patchNet_kwargs"]
-        nb_preds = len(all_predictions)
-
-        full_target_shape = target.shape[-3:]
-        gt_segm = target[:, [0]]
-        boundary_affs = target[:, 1:]
-        boundary_affs = 1 - boundary_affs
-
-        # Collect loss from some random patches:
-        loss = 0
-        for nb_patch_net in range(nb_preds):
-            pred = all_predictions[nb_patch_net]
-            kwargs = ptch_kwargs[nb_patch_net]
-
-            # Collect options from config:
-            patch_shape_input = kwargs.get("patch_size")
-            assert all(i % 2 ==  1 for i in patch_shape_input), "Patch should be odd"
-            patch_dws_fact = kwargs.get("patch_dws_fact", [1,1,1])
-            stride = tuple(kwargs.get("patch_stride", [1,1,1]))
-            pred_dws_fact = kwargs.get("pred_dws_fact", [1,1,1])
-            precrop_target = kwargs.get("crop_targets")
-
-            # if patch_dws_fact[1] <= 2:
-                # Thinner boundaries for the higher res output:
-            boundary_mask = boundary_affs[:, :].max(dim=1, keepdim=True)[0]
-            # else:
-            #     boundary_mask = boundary_affs[:, 4:8].max(dim=1, keepdim=True)[0]
-
-
-            real_patch_shape = tuple(pt*fc for pt, fc in zip(patch_shape_input, patch_dws_fact))
-
-            # TODO assert dims!
-            assert all([i <= j for i, j in zip(real_patch_shape, full_target_shape)]), "Real-sized patch is too large!"
-
-            gt_patches, crop_slice_targets, nb_patches = extract_patches_torch_new(gt_segm, real_patch_shape, stride=stride,
-                                  max_random_crop=(0,5,5),
-                                                                         precrop_target=precrop_target)
-
-            # Make sure to crop some additional border and get the embedding correctly:
-            crop_slice_emb = (slice(None), slice(None)) + tuple(slice(slc.start+int(sh/2), slc.stop) for slc, sh in zip(crop_slice_targets[2:], real_patch_shape))
-
-            center_labels, _, _ = extract_patches_torch_new(gt_segm, (1,1,1), stride=stride,
-                                                        crop_slice=crop_slice_emb,
-                                                        limit_patches_to=nb_patches)
-
-            is_on_boundary, _, _ = extract_patches_torch_new(boundary_mask, (1, 1, 1), stride=stride,
-                                                     crop_slice=crop_slice_emb,
-                                                     limit_patches_to=nb_patches)
-
-            center_labels_repeated = center_labels.repeat(1, 1, *real_patch_shape)
-            me_masks = gt_patches != center_labels_repeated
-
-            # max_offsets = [ j-i for i, j in zip(patch_shape, full_target_shape)]
-
-            # Ignore some additional pixels:
-            ignore_masks = (gt_patches == 0)
-
-            # Reject some patches:
-            valid_patches = (center_labels != 0) & (is_on_boundary != 1)
-            valid_batch_indices = np.argwhere(valid_patches[:, 0, 0, 0, 0].cpu().detach().numpy())[:, 0]
-
-            if valid_batch_indices.shape[0] == 0:
-                raise ValueError("ZERO!!!")
-                continue
-
-            # Downscale masks:
-            # Make sure that the me-mask is zero (better split than merge)
-            if all(fctr == 1 for fctr in patch_dws_fact):
-                maxpool = Identity()
-            else:
-                maxpool = nn.MaxPool3d(kernel_size=patch_dws_fact,
-                     stride=patch_dws_fact,
-                     padding=0)
-
-            # Final targets:
-            patch_targets = maxpool(me_masks[valid_batch_indices].float()).float()
-            patch_ignore_masks = maxpool(ignore_masks[valid_batch_indices].float()).byte()
-
-            # Compute patches for prediction (possibly downscaled):
-            # TODO: is there something smarter to do here? ROIAlign style
-            # The problem is that the CNN does not know exactly which of the targets patches to expect
-            # (but if we stay away from boundary it should be fine...)
-            crop_slice_pred = (slice(None), slice(None)) + tuple(
-                slice(int(slc.start / pred_fctr), int(slc.stop / pred_fctr))
-                for slc, pred_fctr in zip(crop_slice_emb[2:], pred_dws_fact))
-            pred_strides = tuple(int(strd/pred_fctr) for strd, pred_fctr in zip(stride, pred_dws_fact))
-            pred_patches, _, _ = extract_patches_torch_new(pred, (1, 1, 1), stride=pred_strides,
-                                                     crop_slice=crop_slice_pred,
-                                                    limit_patches_to=nb_patches)
-            pred_embed = pred_patches[valid_batch_indices][:, :, 0, 0, 0]
-
-            # raw_patches, _, _ = extract_patches_torch(raw, patch_shape, stride=stride,
-            #                                                              fixed_crop=crop_offsets)
-            # all_raw_patches[level] = maxpool(raw_patches[valid_batch_indices])
-
-            # Compute predicted patches:
-            pred_patches = data_parallel(self.model.patch_models[nb_patch_net], pred_embed, self.devices)[:, [0]]
-            # pred_patches = self.model.patch_models[lvl](pred_embed)[:, [0]]
-
-            # if lvl == 0 and depth_factor > 1:
-            #     pred_patches = 1 - pred_patches
-            #     patch_targets = 1 - patch_targets
-
-            # btch_slc = list(np.random.randint(patch_targets.shape[0], size=4)) if patch_targets.shape[0] >= 4 else slice(0, 1)
-            log_image("ptc_trg_l{}".format(nb_patch_net), patch_targets)
-            log_image("ptc_pred_l{}".format(nb_patch_net), pred_patches)
-            log_image("ptc_ign_l{}".format(nb_patch_net), patch_ignore_masks)
-
-            # Apply ignore mask:
-            pred_patches[patch_ignore_masks] = 0
-            patch_targets[patch_ignore_masks] = 0
-            with warnings.catch_warnings(record=True) as w:
-                loss_unet = data_parallel(self.loss, (pred_patches, patch_targets.float()), self.devices).mean()
-                # loss_unet = self.loss(pred_patches, patch_targets.float())
-
-            # if lvl == 0:
-            loss += loss_unet
-            # else:
-            #     loss += 0.00000001 * loss_unet
-            log_scalar("loss_l{}".format(nb_patch_net), loss_unet)
-            log_scalar("nb_patches_l{}".format(nb_patch_net), pred_patches.shape[0])
-            # log_scalar("avg_targets_l{}".format(nb_patch_net), patch_targets.float().mean())
-
-
-        return loss
-
-
-
-def extract_patches_torch_new(tensor, shape, stride, precrop_target=None, max_random_crop=None,
-                          # downscale_fctr=None,
-                          crop_slice=None,
-                          limit_patches_to=None,
-                          reshape_to_batch_dim=True):
-    assert tensor.dim() == 4 or tensor.dim() == 5
-    dim = tensor.dim() - 2
-    assert len(shape) == dim and len(stride) == dim
-    if crop_slice is not None:
-        assert max_random_crop is None and precrop_target is None
-    if precrop_target is not None:
-        assert len(precrop_target) == dim
-        assert all([isinstance(sl, (tuple, list)) for sl in precrop_target]) and all([len(sl) == 2 for sl in precrop_target])
-    else:
-        precrop_target = [(0, 0) for _ in range(dim)]
-
-    max_random_crop = [0 for _ in range(dim)] if max_random_crop is None else max_random_crop
-    assert len(max_random_crop) == dim
-
-    # if downscale_fct is not None:
-    #     assert len(downscale_fct) == dim
-
-    if limit_patches_to is not None:
-        assert len(limit_patches_to) == dim
-
-    # Pick a random crop:
-    if crop_slice is None:
-        rnd_crop = [np.random.randint(max_offs+1) for max_offs in max_random_crop]
-        crop_slice = (slice(None), slice(None)) + tuple(slice(precrop[0]+off, full_shp-precrop[1]) for off, precrop, full_shp in zip(rnd_crop, precrop_target, tensor.shape[2:]))
-
-    # Unfold it:
-    tensor = tensor[crop_slice]
-    N, C = tensor.shape[:2]
-    for d in range(dim):
-        tensor = tensor.unfold(d+2, size=shape[d],step=stride[d])
-    # Reshape:
-    nb_patches = tensor.shape[2:2+len(shape)]
-    # Along each dimension, we make sure to keep only a specific number of patches (not more):
-    # this assures compatibility with other patches already extracted
-    if limit_patches_to is not None:
-        actual_limits  = tuple( lim if lim<nb else nb for nb, lim in zip(nb_patches, limit_patches_to))
-        valid_patch_slice = (slice(None), slice(None)) + tuple(slice(None,lim) for lim in actual_limits)
-        tensor = tensor[valid_patch_slice]
-        nb_patches = actual_limits
-    # Reshape
-    tensor = tensor.contiguous().view(N,C,-1,*shape)
-    if reshape_to_batch_dim:
-        tensor = tensor.permute(0,2,1,*range(3,3+dim)).contiguous().view(-1,C,*shape)
-    else:
-        tensor = tensor.permute(0, 1, *range(3, 3 + dim), 2).contiguous()
-
-    # if downscale_fct is not None:
-    #     # TODO: use MaxPool instead?
-    #     for d, dw in enumerate(downscale_fct):
-    #         slc = tuple(slice(None) for _ in range(2+d)) + (slice(None,None,dw),)
-    #         tensor = tensor[slc]
-
-    return tensor, crop_slice, nb_patches
-
-def extract_patches_torch(tensor, shape, stride, fixed_crop=None, max_random_crop=None,
-                          # downscale_fctr=None,
-                          limit_patches_to=None,
-                          reshape_to_batch_dim=True):
-    assert tensor.dim() == 4 or tensor.dim() == 5
-    dim = tensor.dim() - 2
-    assert len(shape) == dim and len(stride) == dim
-    if fixed_crop is not None:
-        assert len(fixed_crop) == dim
-        assert max_random_crop is None
-    else:
-        fixed_crop = tuple(0 for _ in range(dim)) if fixed_crop is None else fixed_crop
-
-
-    max_random_crop = tuple(0 for _ in range(dim)) if max_random_crop is None else max_random_crop
-    assert len(max_random_crop) == dim
-
-    # if downscale_fct is not None:
-    #     assert len(downscale_fct) == dim
-
-    if limit_patches_to is not None:
-        assert len(limit_patches_to) == dim
-
-    # Pick a random crop:
-    rnd_crop = tuple(fx_offs + np.random.randint(max_offs+1) for max_offs, fx_offs in zip(max_random_crop, fixed_crop))
-    crop_slice = (slice(None), slice(None)) + tuple(slice(off,None) for off in rnd_crop)
-
-    # Unfold it:
-    tensor = tensor[crop_slice]
-    N, C = tensor.shape[:2]
-    for d in range(dim):
-        tensor = tensor.unfold(d+2, size=shape[d],step=stride[d])
-    # Reshape:
-    nb_patches = tensor.shape[2:2+len(shape)]
-    if limit_patches_to is not None:
-        actual_limits  = tuple( lim if lim<nb else nb for nb, lim in zip(nb_patches, limit_patches_to))
-        valid_patch_slice = (slice(None), slice(None)) + tuple(slice(None,lim) for lim in actual_limits)
-        tensor = tensor[valid_patch_slice]
-        nb_patches = actual_limits
-    # Reshape
-    tensor = tensor.contiguous().view(N,C,-1,*shape)
-    if reshape_to_batch_dim:
-        tensor = tensor.permute(0,2,1,*range(3,3+dim)).contiguous().view(-1,C,*shape)
-    else:
-        tensor = tensor.permute(0, 1, *range(3, 3 + dim), 2).contiguous()
-
-    # if downscale_fct is not None:
-    #     # TODO: use MaxPool instead?
-    #     for d, dw in enumerate(downscale_fct):
-    #         slc = tuple(slice(None) for _ in range(2+d)) + (slice(None,None,dw),)
-    #         tensor = tensor[slc]
-
-    return tensor, rnd_crop, nb_patches
-
-
-def predict_full_image(embeddings, decoder, patch_shape=(27, 27), stride=3):
-    assert len(patch_shape) == 2
-    assert len(embeddings.shape) == 4
-    pred_shape = embeddings.shape[-2:]
-
-    assert all(i % 2 == 1 for i in patch_shape), "Patch should be odd"
-    assert all([i <= j for i, j in zip(patch_shape, pred_shape)]), "Prediction is too small"
-
-    def unfold_and_refold(input, normalize=True):
-        # For the moment we do not overlap them:
-        assert all([j % i == 0 for i, j in zip(patch_shape, pred_shape)]), "Patch should fit the image!"
-        nb_channels = input.shape[1]
-        unfolded = nn.functional.unfold(input[:,:,13:-13,13:-13], kernel_size=(1,1), stride=stride) # (N, C, nb_patches)
-        batch_size = unfolded.shape[0]
-        nb_patches = unfolded.shape[2]
-        unfolded = unfolded.permute(0,2,1).contiguous().view(-1, nb_channels, 1)
-
-        with torch.no_grad():
-            decoded = decoder(unfolded)
-        # Get rid of Z dim:
-        decoded = decoded[:,:,0]
-        decoded_shape = decoded.shape # (N * nb_patches, C, X, Y)
-        # Bring it to the shape expected by fold:
-        decoded_reshaped = decoded.view(batch_size, nb_patches, *decoded_shape[1:]).permute(0,2,3,4,1).view(batch_size,-1,nb_patches)
-        refolded = nn.functional.fold(decoded_reshaped, kernel_size=(27, 27), output_size=pred_shape, stride=stride)
-
-        if normalize:
-            normalization = nn.functional.fold(torch.ones_like(decoded_reshaped), kernel_size=(27, 27), output_size=pred_shape, stride=stride)
-            refolded /= normalization
-        return refolded
-
-
-    folded = unfold_and_refold(embeddings)
-    return folded
-
-
-
-
-def unfold_3d(x, *args, **kwargs):
-    unfolded = []
-    for z in range(x.shape[2]):
-        unfolded_slice = nn.functional.unfold(x[:,:,z], *args, **kwargs)
-        assert unfolded_slice.shape[-1] == 1, "kernel size does not match! Trying to unfold a patch of size {} with kernel {}".format(x.shape[-1], kwargs["kernel_size"])
-        unfolded.append(unfolded_slice)
-    x = torch.cat(unfolded, dim=2)
-    return x
-
-def fold_3d(x, *args, **kwargs):
-    folded = []
-    for z in range(x.shape[2]):
-        folded_slice = nn.functional.fold(x[:,:,[z]], *args, **kwargs)
-        folded.append(folded_slice)
-    x = torch.stack(folded, dim=2)
-    return x
 
 # class AutoEncoderSkeleton(nn.Module):
 #     def __init__(self, encoders, base, decoders, output,

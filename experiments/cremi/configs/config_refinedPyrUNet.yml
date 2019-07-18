@@ -159,8 +159,8 @@ loaders:
         dtype: float32
 
 # FIXME:
-#  -boundary ignore in mod_net;
-# - cremi_augmentation; crop output;
+#  -boundary ignore in mod_unet;
+# - add back cremi_augmentation; crop output;
 #  add back emb heads if I train on multilevel
 # - invert input boundary (MaxPool should preserve boundaries, not the opposite!!)
 # - exclude smallest segments??
@@ -168,10 +168,34 @@ loaders:
 # - train already with additional input channels!
 # - fix input datasets
 # - should I replace MaxPool with a strided conv...?
+# - percentage of validation...?
+# - think about how to use the same architecture with affs!
 sdfsfds
 
 model:
   embeddingutils.models.unet.YetAnotherFeaturePyramidUNet3D:
+    global_patchNet_kwargs: # Yes or no???
+      something: "blala"
+    PyrNet_kwargs:
+      global:
+        res_blocks_3D:
+          - [False, False]
+          - [True, True, False, False]
+          - [True, True, True, False]
+          - [True, True]
+          - [True, True]
+        decoder_crops:
+          4: "3:-3, :, :"
+          2: ":, 5:-5, 5:-5"
+
+      0:
+        patchNet_kwargs:
+          global:
+            something: "blala"
+          0:
+            output_shape: "more_bla"
+
+
     pyramid_fmaps: 256
     output_fmaps: 150
     in_channels: 1
