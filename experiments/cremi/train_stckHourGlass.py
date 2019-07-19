@@ -4,6 +4,7 @@ from vaeAffs.utils.path_utils import change_paths_config_file
 
 from speedrun import BaseExperiment, TensorboardMixin, InfernoMixin, FirelightLogger
 from speedrun.log_anywhere import register_logger, log_image, log_scalar
+from speedrun.py_utils import create_instance
 from speedrun.py_utils import locate
 
 from copy import deepcopy
@@ -74,7 +75,24 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
 
     def build_model(self, model_config=None):
         model_config = self.get('model') if model_config is None else model_config
-        return super(BaseCremiExperiment, self).build_model(model_config) #parse_model(model_config)
+        # return super(BaseCremiExperiment, self).build_model(model_config) #parse_model(model_config)
+
+        model_path = model_config[next(iter(model_config.keys()))].pop('loadfrom', None)
+        model = create_instance(model_config, self.MODEL_LOCATIONS)
+
+        if model_path is not None:
+            # FIXME: temporary hack to load only model 0:
+            if self.get("loading/load_only_model_0", False):
+                print(f"loading model 0 from {model_path}")
+                prova = torch.load(model_path)["_model"]
+                model_0_state_dict = prova.models[0].state_dict()
+                model.models[0].load_state_dict(model_0_state_dict)
+            else:
+                print(f"loading model from {model_path}")
+                state_dict = torch.load(model_path)["_model"].state_dict()
+                model.load_state_dict(state_dict)
+
+        return model
 
     def set_devices(self):
         n_gpus = torch.cuda.device_count()

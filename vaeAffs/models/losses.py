@@ -298,7 +298,8 @@ class PatchBasedLoss(nn.Module):
             # Some logs:
             log_image("ptc_trg_l{}".format(nb_patch_net), patch_targets)
             log_image("ptc_pred_l{}".format(nb_patch_net), pred_patches)
-            log_image("ptc_ign_l{}".format(nb_patch_net), patch_ignore_masks)
+            # log_image("ptc_ign_l{}".format(nb_patch_net), patch_ignore_masks)
+            log_scalar("avg_targets_l{}".format(nb_patch_net), patch_targets.float().mean())
 
             # ----------------------------
             # Apply ignore mask and compute loss:
