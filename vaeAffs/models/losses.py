@@ -288,6 +288,7 @@ class PatchBasedLoss(nn.Module):
             # Expand embeddings to patches using PatchNet models:
             # ----------------------------
             if "model_number" in kwargs:
+                # FIXME: update this crap
                 # In this case we are training a stacked model:
                 mdl_num = kwargs["model_number"]
                 ptch_num = kwargs["patchNet_number"]
