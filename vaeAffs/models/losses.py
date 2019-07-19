@@ -20,6 +20,7 @@ from inferno.extensions.criteria.set_similarity_measures import SorensenDiceLoss
 from inferno.extensions.layers.reshape import GlobalMeanPooling
 from inferno.extensions.containers.graph import Identity
 
+from vaeAffs.transforms import DownsampleAndCrop3D
 
 from neurofire.models.unet.unet_3d import CONV_TYPES, Decoder, DecoderResidual, BaseResidual, Base, Output, Encoder, \
     EncoderResidual
@@ -143,9 +144,9 @@ class AffLoss(nn.Module):
 
 from speedrun.log_anywhere import log_image, log_embedding, log_scalar
 
-class RefinedPyrUNetLoss(nn.Module):
+class PatchBasedLoss(nn.Module):
     def __init__(self, model, loss_type="Dice", model_kwargs=None, devices=(0,1)):
-        super(RefinedPyrUNetLoss, self).__init__()
+        super(PatchBasedLoss, self).__init__()
         if loss_type == "Dice":
             self.loss = SorensenDiceLoss()
         elif loss_type == "MSE":
@@ -168,23 +169,39 @@ class RefinedPyrUNetLoss(nn.Module):
 
         self.model = model
 
+        # TODO: hack to adapt to stacked model:
+        self.downscale_and_crop_targets = {}
+        if hasattr(self.model, "collected_patchNet_kwargs"):
+            self.model_kwargs["patchNet_kwargs"] = [kwargs for i, kwargs in enumerate(self.model.collected_patchNet_kwargs) if i in self.model.trained_patchNets]
+
+            # FIXME: generalize to the non-stacked model (there I also have global in the keys...)
+            for nb, kwargs in enumerate(self.model_kwargs["patchNet_kwargs"]):
+                if "downscale_and_crop_target" in kwargs:
+                    self.downscale_and_crop_targets[nb] = DownsampleAndCrop3D(**kwargs["downscale_and_crop_target"])
+
 
 
     def forward(self, all_predictions, target):
         mdl_kwargs = self.model_kwargs
         ptch_kwargs = mdl_kwargs["patchNet_kwargs"]
         nb_preds = len(all_predictions)
+        assert len(ptch_kwargs) == nb_preds
 
-        full_target_shape = target.shape[-3:]
-        gt_segm = target[:, [0]]
-        boundary_affs = target[:, 1:]
-        boundary_affs = 1 - boundary_affs
 
         # Collect loss from some random patches:
         loss = 0
         for nb_patch_net in range(nb_preds):
+            # ----------------------------
+            # Initializations:
+            # ----------------------------
             pred = all_predictions[nb_patch_net]
             kwargs = ptch_kwargs[nb_patch_net]
+
+            # Check if I should precrop the targets:
+            gt_segm = target
+            if nb_patch_net in self.downscale_and_crop_targets:
+                gt_segm = self.downscale_and_crop_targets[nb_patch_net].apply_to_torch_tensor(target)
+            full_target_shape = gt_segm.shape[-3:]
 
             # Collect options from config:
             patch_shape_input = kwargs.get("patch_size")
@@ -193,52 +210,53 @@ class RefinedPyrUNetLoss(nn.Module):
             stride = tuple(kwargs.get("patch_stride", [1,1,1]))
             pred_dws_fact = kwargs.get("pred_dws_fact", [1,1,1])
             precrop_target = kwargs.get("crop_targets")
-
-            # if patch_dws_fact[1] <= 2:
-                # Thinner boundaries for the higher res output:
-            boundary_mask = boundary_affs[:, :].max(dim=1, keepdim=True)[0]
-            # else:
-            #     boundary_mask = boundary_affs[:, 4:8].max(dim=1, keepdim=True)[0]
-
-
+            central_shape = tuple(kwargs.get("central_shape", [1,3,3]))
+            max_random_crop = tuple(kwargs.get("max_random_crop", [0,5,5]))
             real_patch_shape = tuple(pt*fc for pt, fc in zip(patch_shape_input, patch_dws_fact))
-
-            # TODO assert dims!
             assert all([i <= j for i, j in zip(real_patch_shape, full_target_shape)]), "Real-sized patch is too large!"
 
+            # ----------------------------
+            # Collect gt_segm patches and corresponding center labels:
+            # ----------------------------
             gt_patches, crop_slice_targets, nb_patches = extract_patches_torch_new(gt_segm, real_patch_shape, stride=stride,
-                                  max_random_crop=(0,5,5),
+                                  max_random_crop=max_random_crop,
                                                                          precrop_target=precrop_target)
 
-            # Make sure to crop some additional border and get the embedding correctly:
-            crop_slice_emb = (slice(None), slice(None)) + tuple(slice(slc.start+int(sh/2), slc.stop) for slc, sh in zip(crop_slice_targets[2:], real_patch_shape))
-
+            # Make sure to crop some additional border and get the centers correctly:
+            crop_slice_center_labels = (slice(None), slice(None)) + tuple(slice(slc.start+int(sh/2), slc.stop) for slc, sh in zip(crop_slice_targets[2:], real_patch_shape))
             center_labels, _, _ = extract_patches_torch_new(gt_segm, (1,1,1), stride=stride,
-                                                        crop_slice=crop_slice_emb,
+                                                        crop_slice=crop_slice_center_labels,
                                                         limit_patches_to=nb_patches)
 
-            is_on_boundary, _, _ = extract_patches_torch_new(boundary_mask, (1, 1, 1), stride=stride,
-                                                     crop_slice=crop_slice_emb,
-                                                     limit_patches_to=nb_patches)
-
-            center_labels_repeated = center_labels.repeat(1, 1, *real_patch_shape)
-            me_masks = gt_patches != center_labels_repeated
-
-            # max_offsets = [ j-i for i, j in zip(patch_shape, full_target_shape)]
-
-            # Ignore some additional pixels:
+            # ----------------------------
+            # Ignore patches on the boundary or involving ignore-label:
+            # ----------------------------
+            # Ignore pixels involving ignore-labels:
+            # TODO: generalize
             ignore_masks = (gt_patches == 0)
+            valid_patches = (center_labels != 0)
 
-            # Reject some patches:
-            valid_patches = (center_labels != 0) & (is_on_boundary != 1)
+            # Exclude a patch from training if the central region contains more than one gt label
+            # (i.e. it is really close to a boundary):
+            central_crop = (slice(None), slice(None)) + convert_central_shape_to_crop_slice(gt_patches.shape[-3:], central_shape)
+            mean_central_crop_labels = gt_patches[central_crop].mean(dim=-1, keepdim=True)\
+                .mean(dim=-1, keepdim=True)\
+                .mean(dim=-1, keepdim=True)
+            valid_patches = valid_patches & (mean_central_crop_labels == center_labels)
+
+            # Delete redundant patches from batch:
             valid_batch_indices = np.argwhere(valid_patches[:, 0, 0, 0, 0].cpu().detach().numpy())[:, 0]
-
             if valid_batch_indices.shape[0] == 0:
                 raise ValueError("ZERO patches! Delete torch cache!")
                 # continue
 
-            # Downscale masks:
-            # Make sure that the me-mask is zero (better split than merge)
+            # ----------------------------
+            # Compute the actual MeMasks targets:
+            # ----------------------------
+            center_labels_repeated = center_labels.repeat(1, 1, *real_patch_shape)
+            me_masks = gt_patches == center_labels_repeated
+
+            # Downscale MeMasks using MaxPooling (preserve narrow processes):
             if all(fctr == 1 for fctr in patch_dws_fact):
                 maxpool = Identity()
             else:
@@ -250,9 +268,15 @@ class RefinedPyrUNetLoss(nn.Module):
             patch_targets = maxpool(me_masks[valid_batch_indices].float()).float()
             patch_ignore_masks = maxpool(ignore_masks[valid_batch_indices].float()).byte()
 
-            # Get corresponding prediction embeddings
-            # (prediction could be downscaled and cropped wrt the original targets):
-            crop_slice_pred, pred_strides = get_prediction_slice_crops(pred.shape[2:], full_target_shape, pred_dws_fact, stride, crop_slice_emb[2:])
+            # Invert MeMasks:
+            # best targets for Dice loss are: meMask == 0; others == 1
+            patch_targets = 1. - patch_targets
+
+            # ----------------------------
+            # Get corresponding prediction embeddings:
+            # (requires more care because prediction could be downscaled and/or cropped wrt the original targets)
+            # ----------------------------
+            crop_slice_pred, pred_strides = get_prediction_slice_crops(pred.shape[2:], full_target_shape, pred_dws_fact, stride, crop_slice_center_labels[2:])
             crop_slice_pred = (slice(None), slice(None)) + crop_slice_pred
 
             pred_patches, _, _ = extract_patches_torch_new(pred, (1, 1, 1), stride=pred_strides,
@@ -260,38 +284,33 @@ class RefinedPyrUNetLoss(nn.Module):
                                                     limit_patches_to=nb_patches)
             pred_embed = pred_patches[valid_batch_indices][:, :, 0, 0, 0]
 
-            # raw_patches, _, _ = extract_patches_torch(raw, patch_shape, stride=stride,
-            #                                                              fixed_crop=crop_offsets)
-            # all_raw_patches[level] = maxpool(raw_patches[valid_batch_indices])
+            # ----------------------------
+            # Expand embeddings to patches using PatchNet models:
+            # ----------------------------
+            if "model_number" in kwargs:
+                # In this case we are training a stacked model:
+                mdl_num = kwargs["model_number"]
+                ptch_num = kwargs["patchNet_number"]
+                pred_patches = data_parallel(self.model.models[mdl_num].patch_models[ptch_num], pred_embed, self.devices)[:, [0]]
+            else:
+                pred_patches = data_parallel(self.model.patch_models[nb_patch_net], pred_embed, self.devices)[:, [0]]
 
-            # Compute predicted patches:
-            pred_patches = data_parallel(self.model.patch_models[nb_patch_net], pred_embed, self.devices)[:, [0]]
-            # pred_patches = self.model.patch_models[lvl](pred_embed)[:, [0]]
-
-            # if lvl == 0 and depth_factor > 1:
-            #     pred_patches = 1 - pred_patches
-            #     patch_targets = 1 - patch_targets
-
-            # btch_slc = list(np.random.randint(patch_targets.shape[0], size=4)) if patch_targets.shape[0] >= 4 else slice(0, 1)
+            # Some logs:
             log_image("ptc_trg_l{}".format(nb_patch_net), patch_targets)
             log_image("ptc_pred_l{}".format(nb_patch_net), pred_patches)
             log_image("ptc_ign_l{}".format(nb_patch_net), patch_ignore_masks)
 
-            # Apply ignore mask:
+            # ----------------------------
+            # Apply ignore mask and compute loss:
+            # ----------------------------
             pred_patches[patch_ignore_masks] = 0
             patch_targets[patch_ignore_masks] = 0
             with warnings.catch_warnings(record=True) as w:
                 loss_unet = data_parallel(self.loss, (pred_patches, patch_targets.float()), self.devices).mean()
-                # loss_unet = self.loss(pred_patches, patch_targets.float())
 
-            # if lvl == 0:
             loss += loss_unet
-            # else:
-            #     loss += 0.00000001 * loss_unet
             log_scalar("loss_l{}".format(nb_patch_net), loss_unet)
             log_scalar("nb_patches_l{}".format(nb_patch_net), pred_patches.shape[0])
-            # log_scalar("avg_targets_l{}".format(nb_patch_net), patch_targets.float().mean())
-
 
         return loss
 
@@ -309,7 +328,7 @@ def get_prediction_slice_crops(pred_shape, target_shape, pred_ds_factor, strides
     upscaled_pred_shape = [sh*fctr for sh, fctr in zip(pred_shape, pred_ds_factor)]
     if any(trg!=pred for trg, pred in zip(target_shape, upscaled_pred_shape)):
         diff = [orig - trg for orig, trg in zip(target_shape, upscaled_pred_shape)]
-        assert all([d > 0 for d in diff]), "Something went wrong..."
+        assert all([d >= 0 for d in diff]), "Something went wrong..."
         left_crops = [int(d / 2) for d in diff]
 
         # Now compute the updated crops:
@@ -323,6 +342,15 @@ def get_prediction_slice_crops(pred_shape, target_shape, pred_ds_factor, strides
     pred_crop_slice = tuple(slice(int(crp/pred_fctr), None) for crp, pred_fctr in zip(new_crops, pred_ds_factor))
 
     return pred_crop_slice, pred_strides
+
+def convert_central_shape_to_crop_slice(target_shape, central_shape):
+    assert all(shp%2 == 1 for shp in central_shape), "Only odd center shape supported atm"
+    diff = [trg - ctr for trg, ctr in zip(target_shape, central_shape)]
+    assert all([d >= 0 for d in diff]), "Centers are bigger than the patch..."
+    left_crops = [int(d / 2) for d in diff]
+    right_crops = [shp - int(d / 2) for d, shp in zip(diff, target_shape)]
+    return tuple(slice(lft, rgt) for rgt, lft in zip(right_crops, left_crops))
+
 
 def extract_patches_torch_new(tensor, shape, stride, precrop_target=None, max_random_crop=None,
                           # downscale_fctr=None,
@@ -727,6 +755,7 @@ class PatchLoss(nn.Module):
 class StackedPyrHourGlassLoss(nn.Module):
     def __init__(self, model, loss_type="Dice", model_kwargs=None, devices=(0,1)):
         super(StackedPyrHourGlassLoss, self).__init__()
+        raise DeprecationWarning
         if loss_type == "Dice":
             self.loss = SorensenDiceLoss()
         elif loss_type == "MSE":

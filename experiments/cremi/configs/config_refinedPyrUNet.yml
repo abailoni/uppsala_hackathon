@@ -159,18 +159,10 @@ loaders:
         dtype: float32
 
 # FIXME:
-#  -boundary ignore in mod_unet;
-# - add back cremi_augmentation; crop output;
-#  add back emb heads if I train on multilevel
-# - invert input boundary (MaxPool should preserve boundaries, not the opposite!!)
 # - exclude smallest segments??
-# - am I doing the MaxPooling option right in the patchDownscaling? Tiny processd could be lost (but at the same time I don't want to merge...)
-# - train already with additional input channels!
-# - fix input datasets
 # - should I replace MaxPool with a strided conv...?
 # - percentage of validation...?
-# - think about how to use the same architecture with affs!
-sdfsfds
+# - STRIDE!!!!
 
 model:
   embeddingutils.models.unet.YetAnotherFeaturePyramidUNet3D:

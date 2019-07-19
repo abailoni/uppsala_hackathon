@@ -3,6 +3,7 @@ import numpy as np
 from inferno.io.transform import Transform
 from vaeAffs.utils.affinitiy_utils import get_offset_locations
 from scipy.ndimage import zoom
+from segmfriends.utils.various import parse_data_slice
 
 class ComputeVAETarget(Transform):
     def batch_function(self, batch):
@@ -44,14 +45,19 @@ class PassGTBoundaries_HackyHackyReloaded(Transform):
 class ReplicateBatch(Transform):
     def __init__(self,
                  num_replica,
+                 replicate_targets=True,
                  **super_kwargs):
         super(ReplicateBatch, self).__init__(**super_kwargs)
         self.num_replica = num_replica
+        self.replicate_targets = replicate_targets
 
     def batch_function(self, batch):
         if len(batch) == 2:
             new_batch = [np.copy(batch[0]) for _ in range(self.num_replica)]
-            new_batch += [np.copy(batch[1]) for _ in range(self.num_replica)]
+            if self.replicate_targets:
+                new_batch += [np.copy(batch[1]) for _ in range(self.num_replica)]
+            else:
+                new_batch += [batch[1]]
         elif len(batch) == 1:
             new_batch = [np.copy(batch[0]) for _ in range(self.num_replica)]
         else:
@@ -62,44 +68,66 @@ class ReplicateBatch(Transform):
 
 class DownsampleAndCrop3D(Transform):
     def __init__(self,
-                 zoom_factor=(1, 2, 2),
-                 crop_factor=(1, 2, 2),
+                 ds_factor=(1, 2, 2),
+                 crop_factor=None,
+                 crop_slice=None,
                  order=3,
                  **super_kwargs):
         """
-        :param zoom_factor: If factor is 2, then downscaled to half-resolution
+        :param ds_factor: If factor is 2, then downscaled to half-resolution
         :param crop_factor: If factor is 2, the central crop of half-size is taken
         :param order: downscaling order
         """
         super(DownsampleAndCrop3D, self).__init__(**super_kwargs)
         self.order = order
-        self.zoom_factor = zoom_factor
+        self.ds_factor = ds_factor
+        if crop_factor is not None:
+            assert isinstance(crop_factor, (tuple, list))
+            # assert crop_slice is None
+        if crop_slice is not None:
+            # assert crop_slice is not None
+            assert isinstance(crop_slice, str)
+            crop_slice = parse_data_slice(crop_slice)
         self.crop_factor = crop_factor
+        self.crop_slice = crop_slice
 
     def volume_function(self, volume):
         # Downscale the volume:
         downscaled =  volume
-        if (np.array(self.zoom_factor) != 1).any():
-            downscaled = zoom(volume, tuple(1./fct for fct in self.zoom_factor), order=self.order)
+        if (np.array(self.ds_factor) != 1).any():
+            downscaled = zoom(volume, tuple(1./fct for fct in self.ds_factor), order=self.order)
 
-        # Crop at the center:
-        shape = downscaled.shape
-        cropped_shape = [int(shp/crp_fct) for shp, crp_fct in zip(shape, self.crop_factor)]
-        offsets = [int((shp-crp_shp)/2) for shp, crp_shp in zip(shape, cropped_shape)]
-        crop_slc = tuple(slice(off, off+crp_shp) for off, crp_shp in zip(offsets, cropped_shape))
-        cropped = downscaled[crop_slc]
+        # Crop:
+        cropped = downscaled
+        if self.crop_factor is not None:
+            shape = downscaled.shape
+            cropped_shape = [int(shp/crp_fct) for shp, crp_fct in zip(shape, self.crop_factor)]
+            offsets = [int((shp-crp_shp)/2) for shp, crp_shp in zip(shape, cropped_shape)]
+            crop_slc = tuple(slice(off, off+crp_shp) for off, crp_shp in zip(offsets, cropped_shape))
+            cropped = downscaled[crop_slc]
+
+        if self.crop_slice is not None:
+            # Crop using the passed crop_slice:
+            cropped = cropped[self.crop_slice]
         return cropped
 
     def apply_to_torch_tensor(self, tensor):
         assert tensor.ndimension() == 5
-        assert (np.array(self.zoom_factor) == 1).all(), "Zoom not applicable to tensors"
+        assert (np.array(self.ds_factor) == 1).all(), "Zoom not applicable to tensors"
 
-        # Crop at the center:
-        shape = tensor.shape[-3:]
-        cropped_shape = [int(shp/crp_fct) for shp, crp_fct in zip(shape, self.crop_factor)]
-        offsets = [int((shp-crp_shp)/2) for shp, crp_shp in zip(shape, cropped_shape)]
-        crop_slc = (slice(None), slice(None)) + tuple(slice(off, off+crp_shp) for off, crp_shp in zip(offsets, cropped_shape))
-        cropped = tensor[crop_slc]
+        # Crop:
+        cropped = tensor
+        if self.crop_factor is not None:
+            shape = tensor.shape[-3:]
+            cropped_shape = [int(shp/crp_fct) for shp, crp_fct in zip(shape, self.crop_factor)]
+            offsets = [int((shp-crp_shp)/2) for shp, crp_shp in zip(shape, cropped_shape)]
+            crop_slc = (slice(None), slice(None)) + tuple(slice(off, off+crp_shp) for off, crp_shp in zip(offsets, cropped_shape))
+            cropped = tensor[crop_slc]
+
+        if self.crop_slice is not None:
+            # Crop using the passed crop_slice:
+            cropped = cropped[(slice(None), slice(None)) + self.crop_slice]
+
         return cropped
 
 

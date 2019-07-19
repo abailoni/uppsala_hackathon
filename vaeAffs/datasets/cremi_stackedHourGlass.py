@@ -47,7 +47,6 @@ class CremiDataset(ZipReject):
         assert 'segmentation' in volume_config
 
         volume_config = deepcopy(volume_config)
-        self.scaling_factors = volume_config.pop("scaling_factors")
 
         # Get kwargs for raw volume
         raw_volume_kwargs = dict(volume_config.get('raw'))
@@ -78,7 +77,7 @@ class CremiDataset(ZipReject):
                          sync=True, rejection_dataset_indices=1,
                          rejection_criterion=RejectSingleLabelVolumes(1.0, 1.))
         # Set master config (for transforms)
-        self.master_config = {} if master_config is None else master_config
+        self.master_config = {} if master_config is None else deepcopy(master_config)
         # Get transforms
         self.transforms = self.get_transforms()
 
@@ -107,23 +106,25 @@ class CremiDataset(ZipReject):
             transforms.add(RandomSlide(output_image_size=ouput_shape, max_misalign=max_misalign))
 
         # Replicate and downscale batch:
-        num_inputs = len(self.scaling_factors)
-        input_indices = list(range(num_inputs))
-        target_indices = list(range(num_inputs, num_inputs * 2))
+        input_indices, target_indices = [0], [1]
+        if self.master_config.get("downscale_and_crop") is not None:
+            ds_config = self.master_config.get("downscale_and_crop")
+            assert len(ds_config) >= 1
+            num_inputs = len(ds_config)
+            input_indices = list(range(num_inputs))
+            target_indices = [num_inputs]
 
-        transforms.add(ReplicateBatch(num_inputs))
-        inv_scaling_facts = deepcopy(self.scaling_factors)
-        inv_scaling_facts.reverse()
-        for in_idx, targ_idx, dws_fact, crop_fact in zip(input_indices, target_indices, self.scaling_factors,
-                                                         inv_scaling_facts):
-            transforms.add(DownsampleAndCrop3D(apply_to=[in_idx], order=2, zoom_factor=dws_fact, crop_factor=crop_fact))
-            transforms.add(
-                DownsampleAndCrop3D(apply_to=[targ_idx], order=0, zoom_factor=dws_fact, crop_factor=crop_fact))
+            transforms.add(ReplicateBatch(num_inputs, replicate_targets=False))
+            for in_idx in input_indices:
+                kwargs = ds_config[in_idx]
+                transforms.add(DownsampleAndCrop3D(apply_to=[in_idx], order=2, **kwargs))
+                # transforms.add(
+                #     DownsampleAndCrop3D(apply_to=[targ_idx], order=0, **kwargs))
 
-        # affinity transforms for affinity targets
-        # we apply the affinity target calculation only to the segmentation (1)
-        assert self.affinity_config is not None
-        transforms.add(affinity_config_to_transform(apply_to=target_indices, **self.affinity_config))
+        # # affinity transforms for affinity targets
+        # # we apply the affinity target calculation only to the segmentation (1)
+        # assert self.affinity_config is not None
+        # transforms.add(affinity_config_to_transform(apply_to=target_indices, **self.affinity_config))
 
         # # TODO: add clipping transformation
         #

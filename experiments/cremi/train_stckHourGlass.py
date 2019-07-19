@@ -38,7 +38,7 @@ from vaeAffs.utils.path_utils import get_source_dir
 
 
 
-class BaseCremiExperiment(BaseExperiment, InfernoMixin):
+class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
     def __init__(self, experiment_directory=None, config=None):
         super(BaseCremiExperiment, self).__init__(experiment_directory)
         # Privates
@@ -52,14 +52,14 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin):
         self.auto_setup()
 
         # register_logger(FirelightLogger, "image")
+        register_logger(self, 'scalars')
+
 
         offsets = self.get_boundary_offsets()
         self.set('global/offsets', offsets)
         self.set('loaders/general/volume_config/segmentation/affinity_config/offsets', offsets)
 
         self.model_class = list(self.get('model').keys())[0]
-        nb_stacked = self.get("model/{}/nb_stacked".format(self.model_class))
-        self.set("trainer/num_targets", nb_stacked)
 
         self.set_devices()
 
@@ -83,30 +83,25 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin):
         self.trainer.cuda(gpu_list)
         # self.set("gpu_list", [0])
         # self.trainer.cuda([0])
-        # self.trainer.cuda()
 
     def inferno_build_criterion(self):
         print("Building criterion")
         # path = self.get("autoencoder/path")
         loss_kwargs = self.get("trainer/criterion/kwargs")
-        from vaeAffs.models.losses import EncodingLoss, PatchLoss, StackedPyrHourGlassLoss
+        from vaeAffs.models.losses import EncodingLoss, PatchLoss, PatchBasedLoss
         model_kwargs = self.get('model/{}'.format(self.model_class))
-        loss = StackedPyrHourGlassLoss(model=self.model, model_kwargs=model_kwargs,
+        loss = PatchBasedLoss(model=self.model, model_kwargs=model_kwargs,
                                        devices=tuple(self.get("gpu_list")),
                                        **loss_kwargs)
         self._trainer.build_criterion(loss)
         self._trainer.build_validation_criterion(loss)
 
     def build_train_loader(self):
-        scaling_factors = self.get("stack_scaling_factors_2")
         kwargs = recursive_dict_update(self.get('loaders/train'), deepcopy(self.get('loaders/general')))
-        kwargs["volume_config"]["scaling_factors"] = scaling_factors
         return get_cremi_loader(kwargs)
 
     def build_val_loader(self):
-        scaling_factors = self.get("stack_scaling_factors_2")
         kwargs = recursive_dict_update(self.get('loaders/val'), deepcopy(self.get('loaders/general')))
-        kwargs["volume_config"]["scaling_factors"] = scaling_factors
         return get_cremi_loader(kwargs)
 
 
