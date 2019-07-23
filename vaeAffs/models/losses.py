@@ -189,8 +189,11 @@ class StackedAffinityLoss(nn.Module):
     def forward(self, predictions, targets):
         assert len(predictions) == 1
 
-        # TODO: generalize to n. targets
-        targets = auto_crop_tensor_to_shape(targets[0], predictions[0].shape,
+        # TODO: improve this...
+        mdl_to_train = self.model_kwargs["models_to_train"]
+        assert len(mdl_to_train) == 1
+        trg_index = mdl_to_train[0]
+        targets = auto_crop_tensor_to_shape(targets[trg_index], predictions[0].shape,
                                             ignore_channel_and_batch_dims=True)
         assert targets.shape[1] % 2 == 0, "I should have both affinities and masks"
 
