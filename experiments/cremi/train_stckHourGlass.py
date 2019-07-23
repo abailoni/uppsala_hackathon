@@ -56,41 +56,42 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         register_logger(self, 'scalars')
 
 
-        offsets = self.get_boundary_offsets()
-        self.set('global/offsets', offsets)
-        self.set('loaders/general/volume_config/segmentation/affinity_config/offsets', offsets)
+        # offsets = self.get_boundary_offsets()
+        # self.set('global/offsets', offsets)
+        # self.set('loaders/general/volume_config/segmentation/affinity_config/offsets', offsets)
 
         self.model_class = list(self.get('model').keys())[0]
 
+        if self.get("loaders/general/master_config/downscale_and_crop") is not None:
+            # TODO: improve this...
+            ds_config = self.get("loaders/general/master_config/downscale_and_crop")
+            nb_targets = len(ds_config) - 1
+            self.set("trainer/num_targets", nb_targets)
+        else:
+            self.set("trainer/num_targets", 1)
+
         self.set_devices()
 
-
-
-
-
-
-    def get_boundary_offsets(self):
-        return [[0, -1, 0], [0, 0, -1], [0, 2, 0], [0, 0, 2],
-                [0, -3, 0], [0, 0, -3], [0, 3, 0], [0, 0, 3]]
 
     def build_model(self, model_config=None):
         model_config = self.get('model') if model_config is None else model_config
         # return super(BaseCremiExperiment, self).build_model(model_config) #parse_model(model_config)
 
         model_path = model_config[next(iter(model_config.keys()))].pop('loadfrom', None)
+        stacked_models_path = model_config[next(iter(model_config.keys()))].pop('load_stacked_models_from', None)
         model = create_instance(model_config, self.MODEL_LOCATIONS)
 
         if model_path is not None:
-            # FIXME: temporary hack to load only model 0:
-            if self.get("loading/load_only_model_0", False):
-                print(f"loading model 0 from {model_path}")
-                prova = torch.load(model_path)["_model"]
-                model_0_state_dict = prova.models[0].state_dict()
-                model.models[0].load_state_dict(model_0_state_dict)
-            else:
-                print(f"loading model from {model_path}")
-                state_dict = torch.load(model_path)["_model"].state_dict()
-                model.load_state_dict(state_dict)
+            print(f"loading model from {model_path}")
+            state_dict = torch.load(model_path)["_model"].state_dict()
+            model.load_state_dict(state_dict)
+        if stacked_models_path is not None:
+            for mdl in stacked_models_path:
+                stck_mdl_path = stacked_models_path[mdl]
+                print("loading stacked model {} from {}".format(mdl, stck_mdl_path))
+                mdl_state_dict = torch.load(stck_mdl_path)["_model"].models[mdl].state_dict()
+                model.models[mdl].load_state_dict(mdl_state_dict)
+
 
         return model
 
@@ -105,12 +106,16 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
     def inferno_build_criterion(self):
         print("Building criterion")
         # path = self.get("autoencoder/path")
-        loss_kwargs = self.get("trainer/criterion/kwargs")
-        from vaeAffs.models.losses import EncodingLoss, PatchLoss, PatchBasedLoss
+        loss_kwargs = self.get("trainer/criterion/kwargs", {})
+        # from vaeAffs.models.losses import EncodingLoss, PatchLoss, PatchBasedLoss, StackedAffinityLoss
+        loss_name = self.get("trainer/criterion/loss_name", "vaeAffs.models.losses.PatchBasedLoss")
+        loss_config = {loss_name: loss_kwargs}
+        loss_config[loss_name]['model'] = self.model
         model_kwargs = self.get('model/{}'.format(self.model_class))
-        loss = PatchBasedLoss(model=self.model, model_kwargs=model_kwargs,
-                                       devices=tuple(self.get("gpu_list")),
-                                       **loss_kwargs)
+        loss_config[loss_name]['model_kwargs'] = model_kwargs
+        loss_config[loss_name]['devices'] = tuple(self.get("gpu_list"))
+
+        loss = create_instance(loss_config, self.CRITERION_LOCATIONS)
         self._trainer.build_criterion(loss)
         self._trainer.build_validation_criterion(loss)
 

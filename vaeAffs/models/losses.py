@@ -140,6 +140,75 @@ class AffLoss(nn.Module):
         target_affs[ignore_affs_mask] = 0
         return self.loss(affinities, target_affs)
 
+def auto_crop_tensor_to_shape(to_be_cropped, target_tensor_shape, return_slice=False,
+                              ignore_channel_and_batch_dims=True):
+    initial_shape = to_be_cropped.shape
+    diff = [int_sh - trg_sh for int_sh, trg_sh in zip(initial_shape, target_tensor_shape)]
+    if ignore_channel_and_batch_dims:
+        assert all([d >= 0 for d in diff[2:]]), "Target shape should be smaller!"
+    else:
+        assert all([d >= 0 for d in diff]), "Target shape should be smaller!"
+    left_crops = [int(d / 2) for d in diff]
+    right_crops = [shp - int(d / 2) if d % 2 == 0 else shp - (int(d / 2) + 1) for d, shp in zip(diff, initial_shape)]
+    if ignore_channel_and_batch_dims:
+        crop_slice = (slice(None), slice(None)) + tuple(slice(lft, rgt) for rgt, lft in zip(right_crops[2:], left_crops[2:]))
+    else:
+        crop_slice = tuple(slice(lft, rgt) for rgt, lft in zip(right_crops, left_crops))
+    if return_slice:
+        return crop_slice
+    else:
+        return to_be_cropped[crop_slice]
+
+
+
+class StackedAffinityLoss(nn.Module):
+    def __init__(self, model, loss_type="Dice", model_kwargs=None, devices=(0,1)):
+        super(StackedAffinityLoss, self).__init__()
+        if loss_type == "Dice":
+            self.loss = SorensenDiceLoss()
+        elif loss_type == "MSE":
+            self.loss = nn.MSELoss()
+        elif loss_type == "BCE":
+            self.loss = nn.BCELoss()
+        else:
+            raise ValueError
+
+        self.devices = devices
+        self.model_kwargs = model_kwargs
+        self.MSE_loss = nn.MSELoss()
+        self.smoothL1_loss = nn.SmoothL1Loss()
+        # TODO: use nn.BCEWithLogitsLoss()
+        self.BCE = nn.BCELoss()
+        self.soresen_loss = SorensenDiceLoss()
+
+        from vaeAffs.models.vanilla_vae import VAE_loss
+        self.VAE_loss = VAE_loss()
+
+        self.model = model
+
+    def forward(self, predictions, targets):
+        assert len(predictions) == 1
+
+        # TODO: generalize to n. targets
+        targets = auto_crop_tensor_to_shape(targets[0], predictions[0].shape,
+                                            ignore_channel_and_batch_dims=True)
+        assert targets.shape[1] % 2 == 0, "I should have both affinities and masks"
+
+        # Get ignore-mask and affinities:
+        nb_channels = int(targets.shape[1] / 2)
+        gt_affs = targets[:,:nb_channels]
+        valid_pixels = targets[:,nb_channels:]
+
+        # Invert affinities for Dice loss:
+        gt_affs = 1. - gt_affs
+
+        predictions = predictions[0]*valid_pixels
+        gt_affs = gt_affs*valid_pixels
+
+        with warnings.catch_warnings(record=True) as w:
+            loss = data_parallel(self.loss, (predictions, gt_affs), self.devices).mean()
+        return loss
+
 
 
 from speedrun.log_anywhere import log_image, log_embedding, log_scalar
@@ -223,6 +292,7 @@ class PatchBasedLoss(nn.Module):
                                                                          precrop_target=precrop_target)
 
             # Make sure to crop some additional border and get the centers correctly:
+            # TODO: this can be now easily done by cropping the gt_patches...
             crop_slice_center_labels = (slice(None), slice(None)) + tuple(slice(slc.start+int(sh/2), slc.stop) for slc, sh in zip(crop_slice_targets[2:], real_patch_shape))
             center_labels, _, _ = extract_patches_torch_new(gt_segm, (1,1,1), stride=stride,
                                                         crop_slice=crop_slice_center_labels,

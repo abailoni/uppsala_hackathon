@@ -109,20 +109,34 @@ class CremiDataset(ZipReject):
         input_indices, target_indices = [0], [1]
         if self.master_config.get("downscale_and_crop") is not None:
             ds_config = self.master_config.get("downscale_and_crop")
+            replicate_targets = ds_config.pop("replicate_targets", False)
             assert len(ds_config) >= 1
             num_inputs = len(ds_config)
             input_indices = list(range(num_inputs))
-            target_indices = [num_inputs]
+            target_indices = list(range(num_inputs, 2*num_inputs)) if replicate_targets else [num_inputs]
 
-            transforms.add(ReplicateBatch(num_inputs, replicate_targets=False))
-            for in_idx in input_indices:
+            transforms.add(ReplicateBatch(num_inputs, replicate_targets=replicate_targets))
+            for i, in_idx in enumerate(input_indices):
                 kwargs = ds_config[in_idx]
                 transforms.add(DownsampleAndCrop3D(apply_to=[in_idx], order=2, **kwargs))
-                # transforms.add(
-                #     DownsampleAndCrop3D(apply_to=[targ_idx], order=0, **kwargs))
+                if replicate_targets:
+                    transforms.add(
+                        DownsampleAndCrop3D(apply_to=[target_indices[i]], order=0, **kwargs))
 
         # # affinity transforms for affinity targets
         # # we apply the affinity target calculation only to the segmentation (1)
+        if self.master_config.get("affinity_config") is not None:
+            affs_config = self.master_config.get("affinity_config")
+            global_kwargs = affs_config.pop("global", {})
+            # TODO: define computed affs not in this way, but with a variable in config...
+            nb_affs = len(affs_config)
+            assert nb_affs == num_inputs
+            # all_affs_kwargs = [deepcopy(global_kwargs) for _ in range(nb_affs)]
+            for input_index in affs_config:
+                affs_kwargs = deepcopy(global_kwargs)
+                affs_kwargs.update(affs_config[input_index])
+                transforms.add(affinity_config_to_transform(apply_to=[input_index+num_inputs], **affs_kwargs))
+
         # assert self.affinity_config is not None
         # transforms.add(affinity_config_to_transform(apply_to=target_indices, **self.affinity_config))
 
