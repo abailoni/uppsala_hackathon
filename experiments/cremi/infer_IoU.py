@@ -1,10 +1,9 @@
 import vaeAffs
 
-from vaeAffs.utils.path_utils import change_paths_config_file
+from vaeAffs.utils.path_utils import change_paths_config_file, get_trendytukan_drive_path
 
-from speedrun import BaseExperiment, TensorboardMixin, InfernoMixin, FirelightLogger
+from speedrun import BaseExperiment, TensorboardMixin, AffinityInferenceMixin
 from speedrun.log_anywhere import register_logger, log_image, log_scalar
-from speedrun.py_utils import create_instance
 from speedrun.py_utils import locate
 
 from copy import deepcopy
@@ -36,10 +35,10 @@ from neurofire.criteria.loss_transforms import InvertTarget
 
 from vaeAffs.datasets.cremi_stackedHourGlass import get_cremi_loader
 from vaeAffs.utils.path_utils import get_source_dir
+from speedrun.py_utils import create_instance
 
 
-
-class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
+class BaseCremiExperiment(BaseExperiment, AffinityInferenceMixin):
     def __init__(self, experiment_directory=None, config=None):
         super(BaseCremiExperiment, self).__init__(experiment_directory)
         # Privates
@@ -48,34 +47,20 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         if config is not None:
             self.read_config_file(config)
 
-
+        # FIXME:
         self.DEFAULT_DISPATCH = 'train'
         self.auto_setup()
 
-        # register_logger(FirelightLogger, "image")
-        register_logger(self, 'scalars')
-
-
-        # offsets = self.get_boundary_offsets()
-        # self.set('global/offsets', offsets)
-        # self.set('loaders/general/volume_config/segmentation/affinity_config/offsets', offsets)
-
-        self.model_class = list(self.get('model').keys())[0]
-
-        if self.get("loaders/general/master_config/downscale_and_crop") is not None:
-            # TODO: improve this...
-            ds_config = self.get("loaders/general/master_config/downscale_and_crop")
-            nb_targets = len(ds_config) - 1
-            self.set("trainer/num_targets", nb_targets)
-        else:
-            self.set("trainer/num_targets", 1)
-
         self.set_devices()
+
+        self.build_infer_loader()
+        self.model_class = list(self.get('model').keys())[0]
 
 
     def build_model(self, model_config=None):
         model_config = self.get('model') if model_config is None else model_config
         # return super(BaseCremiExperiment, self).build_model(model_config) #parse_model(model_config)
+
 
         model_path = model_config[next(iter(model_config.keys()))].pop('loadfrom', None)
         stacked_models_path = model_config[next(iter(model_config.keys()))].pop('load_stacked_models_from', None)
@@ -96,12 +81,12 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         return model
 
     def set_devices(self):
-        # n_gpus = torch.cuda.device_count()
-        # gpu_list = range(n_gpus)
-        # self.set("gpu_list", gpu_list)
-        # self.trainer.cuda(gpu_list)
-        self.set("gpu_list", [0])
-        self.trainer.cuda([0])
+        n_gpus = torch.cuda.device_count()
+        gpu_list = range(n_gpus)
+        self.set("gpu_list", gpu_list)
+        self.trainer.cuda(gpu_list)
+        # self.set("gpu_list", [0])
+        # self.trainer.cuda([0])
 
     def inferno_build_criterion(self):
         print("Building criterion")
@@ -120,12 +105,35 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         self._trainer.build_validation_criterion(loss)
 
     def build_train_loader(self):
+        scaling_factors = self.get("stack_scaling_factors_2")
         kwargs = recursive_dict_update(self.get('loaders/train'), deepcopy(self.get('loaders/general')))
+        kwargs["volume_config"]["scaling_factors"] = scaling_factors
         return get_cremi_loader(kwargs)
 
     def build_val_loader(self):
+        scaling_factors = self.get("stack_scaling_factors_2")
         kwargs = recursive_dict_update(self.get('loaders/val'), deepcopy(self.get('loaders/general')))
+        kwargs["volume_config"]["scaling_factors"] = scaling_factors
         return get_cremi_loader(kwargs)
+
+
+    def build_infer_loader(self):
+        # scaling_factors = self.get("stack_scaling_factors_2")
+        kwargs = deepcopy(self.get('loaders/infer'))
+        # kwargs["volume_config"]["scaling_factors"] = scaling_factors
+        loader = get_cremi_loader(kwargs)
+        self.set("full_volume_infer_shape", loader.dataset.volume.shape)
+        self.set("inference/global_padding", loader.dataset.padding)
+        self.set("inference/global_ds_ratio", loader.dataset.downsampling_ratio)
+
+        return loader
+
+    def save_infer_output(self, output):
+        import h5py
+        import numpy as np
+        print("Saving....")
+        with h5py.File(os.path.join(get_trendytukan_drive_path(), "projects/pixel_embeddings/IoU_stacked_UNet/predictions_sample_{}_24.h5".format(self.get("loaders/infer/name"))), 'w') as f:
+            f.create_dataset('data', data=output.astype(np.float16), compression='gzip')
 
 
 if __name__ == '__main__':
@@ -154,5 +162,4 @@ if __name__ == '__main__':
         else:
             break
     cls = BaseCremiExperiment
-    cls().run()
-
+    cls().infer()

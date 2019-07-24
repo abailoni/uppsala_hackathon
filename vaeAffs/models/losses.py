@@ -25,6 +25,8 @@ from vaeAffs.transforms import DownsampleAndCrop3D
 from neurofire.models.unet.unet_3d import CONV_TYPES, Decoder, DecoderResidual, BaseResidual, Base, Output, Encoder, \
     EncoderResidual
 
+from speedrun.log_anywhere import log_image, log_embedding, log_scalar
+
 import warnings
 
 
@@ -214,7 +216,7 @@ class StackedAffinityLoss(nn.Module):
 
 
 
-from speedrun.log_anywhere import log_image, log_embedding, log_scalar
+
 
 class PatchBasedLoss(nn.Module):
     def __init__(self, model, loss_type="Dice", model_kwargs=None, devices=(0,1)):
@@ -472,11 +474,11 @@ def extract_patches_torch_new(tensor, shape, stride, precrop_target=None, max_ra
         tensor = tensor[valid_patch_slice]
         nb_patches = actual_limits
     # Reshape
-    tensor = tensor.contiguous().view(N,C,-1,*shape)
     if reshape_to_batch_dim:
+        tensor = tensor.contiguous().view(N,C,-1,*shape)
         tensor = tensor.permute(0,2,1,*range(3,3+dim)).contiguous().view(-1,C,*shape)
-    else:
-        tensor = tensor.permute(0, 1, *range(3, 3 + dim), 2).contiguous()
+    # else:
+    #     tensor = tensor.permute(0, 1, *range(3, 3 + dim), 2).contiguous()
 
     # if downscale_fct is not None:
     #     # TODO: use MaxPool instead?

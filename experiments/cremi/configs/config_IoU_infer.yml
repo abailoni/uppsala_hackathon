@@ -1,0 +1,326 @@
+
+
+device: cuda
+
+loaders:
+  infer:
+    inference_mode: True
+    loader_config:
+      # Number of processes to use for loading data. Set to (say) 10 if you wish to
+      # use 10 CPU cores, or to 0 if you wish to use the same process for training and
+      # data-loading (generally not recommended).
+      batch_size: 1
+      num_workers: 10
+      drop_last: False
+#      pin_memory: False
+      shuffle: False
+    name: C
+
+    master_config:
+      downscale_and_crop:
+        replicate_targets: False
+        0:
+          ds_factor: [1, 3, 3]
+          crop_factor: [1, 1, 1]
+        1:
+          ds_factor: [1, 1, 1]
+          crop_factor: [1, 2, 2]
+          crop_slice: "3:-3, : , :"
+
+    volume_config:
+      # Sliding window size
+      window_size: &shape [20, 432, 432]  # 288
+#        A:
+#        B: *shape
+#        C: *shape
+      # Sliding window stride
+      stride: &stride [6, 100, 100] #FIXME
+#        A:
+#        B: *stride
+#        C: *stride
+      # Data slice to iterate over.
+      data_slice: '70:100,200:800,200:800'
+#        A: ':, :, :'
+#        B: ':, :, :'
+#        C: ':, :, :'
+
+#      padding_mode: "constant"
+      padding:
+        - [7,7]
+        - [166, 166]
+        - [166, 166]
+      # PATHS:
+      path:
+        A: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleA_train.h5'
+        B: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleB_train.h5'
+        C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
+        B+: '$HCI_HOME/datasets/cremi/testvol/test_samples/sampleB+_cropped_plus_mask.h5'
+        A+: '$HCI_HOME/datasets/cremi/testvol/test_samples/sampleA+_cropped_plus_mask.h5'
+        C+: '$HCI_HOME/datasets/cremi/testvol/test_samples/sampleC+_cropped_plus_mask.h5'
+      path_in_file:
+        A: 'raw'
+        B: 'raw'
+        C: 'raw'
+        A+: "volumes/raw"
+        B+: "volumes/raw"
+        C+: "volumes/raw"
+      dtype: float32
+#      sigma: 0.025
+
+#FIXME: change this please...
+inference:
+  path_checkpoint_trainer: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack1c"
+  crop_global_slice: # As compared to the input, how much should I crop
+    - [7,7]
+    - [166, 166]
+    - [166, 166]
+  crop_prediction: # How much I crop the predicted tensor: (local_crop)
+    - [1,1]
+    - [16,16]
+    - [16,16]
+
+model:
+  vaeAffs.models.compute_IoU.IntersectOverUnionUNet:
+    # EXTRA ARGS:
+    stride: [1, 4, 4]
+    num_IoU_workers: 6
+    offsets:
+       - [0, -4, 0]
+       - [0, 0, -4]
+#       - [0, -4, -4]
+#       - [0, -4, +4]
+#       - [0, -8, 0]
+#       - [0, 0, -8]
+#       - [0, -8, -8]
+#       - [0, -8, +8]
+#       - [0, -16, 0]
+#       - [0, 0, -16]
+#       - [-1, 0, 0]
+#       - [-2, 0, 0]
+#       - [-3, 0, 0]
+
+    load_stacked_models_from:
+      0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack0/checkpoint.pytorch"
+      1: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack1c/checkpoint.pytorch"
+#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/IoU_scores_debug2/checkpoint.pytorch"
+    nb_stacked: 2 # Number of stacked models
+    # If only model 1 is trained, then model 0 is run in inference mode. Atm there is no backprop between models:
+    models_to_train: [1]
+    downscale_and_crop:
+      0: # Crop and/or downscale the output of model 0 before to give it as an input
+        ds_factor: [1, 1, 1]
+#        crop_factor: [1, 3, 3]
+        crop_slice: ":,36:-36,36:-36"
+    # Parameters for each model in the stack:
+    models_kwargs:
+      global:
+        depth: 4
+        upsampling_mode: 'nearest'
+        stop_decoder_at_depth: 0
+        pyramid_fmaps: 128
+        output_fmaps: 128
+        scale_factor:
+          - [1, 3, 3]
+          - [1, 2, 2]
+          - [1, 3, 3]
+          - [1, 2, 2]
+      0:
+        in_channels: 1
+        encoder_fmaps: [32, 128, 192, 384, 512, 512]
+        res_blocks_3D:
+          - [False, False]
+          - [True, True, False, False]
+          - [True, True, True, False]
+          - [True, True]
+          - [True, True]
+        decoder_crops:
+          1: "3:-3, :, :"
+        nb_patch_nets: 1
+
+        patchNet_kwargs:
+          0:
+            latent_variable_size: 128
+            feature_maps: 16
+            downscaling_factor: [1, 1, 1] # Inside patchNet, to reduce memory
+            depth_level: 0
+            patch_size: [7,19,19]
+            patch_dws_fact: [1, 4, 4]
+            patch_stride: [2, 36, 36]
+            crop_targets: [[0,0], [80, 80 ], [80 ,80 ]]
+            pred_dws_fact: [1, 3, 3]
+            max_random_crop: [1, 25, 25]
+            # Exclude a patch from training if the center does contain more than one gt label:
+            central_shape: [1, 5, 5]
+      1:
+        in_channels: 129
+        encoder_fmaps: [128, 160, 256, 384, 512, 512]
+        res_blocks_3D:
+          - [False]
+          - [True, False]
+          - [True, False]
+          - [True]
+          - [True]
+        decoder_crops:
+          1: "3:-3, 14:-14, 14:-14"
+        nb_patch_nets: 1
+        patchNet_kwargs:
+          global:
+            central_shape: [1, 3, 3]
+            latent_variable_size: 128
+            feature_maps: 16
+            downscaling_factor: [1, 1, 1] # Inside patchNet, to reduce memory
+            downscale_and_crop_target:
+              ds_factor: [1, 1, 1]
+              crop_factor: [1, 2, 2]
+              crop_slice: "3:-3, : , :"
+          0:
+            depth_level: 0
+            patch_size: [7,19,19]
+            patch_dws_fact: [1, 2, 2]
+            patch_stride: [2, 18, 18]
+            crop_targets: [[0,0], [30 ,30 ], [30 ,30 ]] # I don't need to crop as much as the prediction, because anyway there is the padding of the patches at the borders..
+            pred_dws_fact: [1, 1, 1]
+            max_random_crop: [1, 15, 15]
+#          1:
+#            depth_level: 1
+#            patch_size: [7,19,19]
+#            patch_dws_fact: [1, 4, 4]
+#            patch_stride: [2, 27, 27]
+#            crop_targets: [[0,0], [5,5], [5,5]]
+#            pred_dws_fact: [1, 3, 3]
+#            max_random_crop: [1, 20, 20]
+
+
+#autoencoder:
+#  latent_variable_size: 128
+#  path: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/VAE_27fc_24/model.pytorch"
+#  path: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/Conv3DAutoEnc_Soresen_27_fc_noDownscale/model.pytorch"
+
+
+
+trainer:
+  max_epochs: 1000 # basically infinite
+  num_targets: 1
+
+  criterion:
+    loss_name: "vaeAffs.models.compute_IoU.ComputeIoU"
+    kwargs:
+      loss_type: "Dice" # "MSE"
+      stride: [1, 4, 4]
+      offsets:
+        - [0, 0, 16]
+        - [0, 16, 0]
+        - [0, 16, 16]
+      ptch_kwargs:
+        patch_size: [7,19,19]
+        patch_dws_fact: [1, 2, 2]
+
+
+  optimizer:
+    Adam:
+      lr: 0.0001
+      weight_decay: 0.0005
+      amsgrad: True
+#      betas: [0.9, 0.999]
+
+  intervals:
+    save_every: [1000, 'iterations']
+    validate_every:
+      frequency : [100, 'iterations']
+      for_num_iterations: 5
+
+  tensorboard:
+    log_scalars_every: [1, 'iterations']
+    log_images_every: [300, 'iterations']
+    log_histograms_every: 'never'
+    send_image_at_batch_indices: [0]
+    send_image_at_channel_indices: [0]
+##    send_volume_at_z_indices: 'mid'
+#    split_config_keys: True
+#    log_anywhere: ['scalars']
+
+  callbacks:
+#    gradients:
+#      LogOutputGradients:
+#        frequency: 1
+
+    essentials:
+      SaveAtBestValidationScore:
+        smoothness: 0
+        verbose: True
+#      GradientClip:
+#        clip_value: 1e-3
+      SaveModelCallback:
+        save_every: 500
+      PlotReconstructedCallback:
+        plot_every: 100
+
+    scheduling:
+      AutoLR:
+        monitor: 'validation_loss'
+        factor: 0.99
+        patience: '100 iterations'
+        monitor_while: 'validating'
+        monitor_momentum: 0.75
+#        cooldown_duration: '50000 iterations'
+        consider_improvement_with_respect_to: 'previous'
+        verbose: True
+
+#
+firelight:
+
+  debug_IoU:
+    ImageGridVisualizer:
+      input_mapping:
+        global: [B: "0", D: ":"]
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 5  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'D', 'C', 'B']
+      column_specs: ['W', 'V']
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        - IdentityVisualizer:
+            input: ['IoU_patch1_cr']
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['IoU_patch2_cr']
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['IoU_score']
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['IoU_score_pred']
+            cmap: gray
+            value_range: [0,1]
+
+  debug_IoU_2:
+    ImageGridVisualizer:
+      input_mapping:
+        global: [B: "0", D: ":"]
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 5  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'D', 'C', 'B']
+      column_specs: ['W', 'V']
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        - IdentityVisualizer:
+            input: ['IoU_patch1']
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['IoU_patch2']
+            cmap: gray
+            value_range: [0,1]

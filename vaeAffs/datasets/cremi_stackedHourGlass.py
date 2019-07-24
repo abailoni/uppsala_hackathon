@@ -137,21 +137,12 @@ class CremiDataset(ZipReject):
                 affs_kwargs.update(affs_config[input_index])
                 transforms.add(affinity_config_to_transform(apply_to=[input_index+num_inputs], **affs_kwargs))
 
-        # assert self.affinity_config is not None
-        # transforms.add(affinity_config_to_transform(apply_to=target_indices, **self.affinity_config))
-
-        # # TODO: add clipping transformation
-        #
-        # # crop invalid affinity labels and elastic augment reflection padding assymetrically
-        # crop_config = self.master_config.get('crop_after_target', {})
-        # if crop_config:
-        #     # One might need to crop after elastic transform to avoid edge artefacts of affinity
-        #     # computation being warped into the FOV.
-        #     transforms.add(VolumeAsymmetricCrop(**crop_config))
-
-        # transforms.add(InvertTarget(self.affinity_config.get("retain_segmentation", False)))
-        # transforms.add(HackyHacky())
-        # transforms.add(ComputeVAETarget()), HackyHacky
+        # crop invalid affinity labels and elastic augment reflection padding assymetrically
+        crop_config = self.master_config.get('crop_after_target', {})
+        if crop_config:
+            # One might need to crop after elastic transform to avoid edge artefacts of affinity
+            # computation being warped into the FOV.
+            transforms.add(VolumeAsymmetricCrop(**crop_config))
 
         return transforms
 
@@ -210,26 +201,54 @@ class CremiDatasets(Concatenate):
 
 
 class CremiDatasetInference(RawVolume):
-    def __init__(self, transform_config, **super_kwargs):
+    def __init__(self, master_config, **super_kwargs):
         super(CremiDatasetInference, self).__init__(return_index_spec=True,
                                                     **super_kwargs)
-        self.transforms = self.get_additional_transforms(transform_config)
+        self.transforms = self.get_additional_transforms(master_config)
 
-    def get_additional_transforms(self, transform_config):
+    def get_additional_transforms(self, master_config):
         transforms = self.transforms if self.transforms is not None else Compose()
 
-        stack_scaling_factors = transform_config["stack_scaling_factors"]
+        # TODO: somehow merge with the trainer loader...
 
         # Replicate and downscale batch:
-        num_inputs = len(stack_scaling_factors)
-        input_indices = list(range(num_inputs))
+        input_indices, target_indices = [0], [1]
+        if master_config.get("downscale_and_crop") is not None:
+            ds_config = master_config.get("downscale_and_crop")
+            replicate_targets = ds_config.pop("replicate_targets", False)
+            assert len(ds_config) >= 1
+            num_inputs = len(ds_config)
+            input_indices = list(range(num_inputs))
+            target_indices = list(range(num_inputs, 2*num_inputs)) if replicate_targets else [num_inputs]
 
-        transforms.add(ReplicateBatch(num_inputs))
-        inv_scaling_facts = deepcopy(stack_scaling_factors)
-        inv_scaling_facts.reverse()
-        for in_idx, dws_fact, crop_fact in zip(input_indices, stack_scaling_factors,
-                                                         inv_scaling_facts):
-            transforms.add(DownsampleAndCrop3D(apply_to=[in_idx], order=2, zoom_factor=dws_fact, crop_factor=crop_fact))
+            transforms.add(ReplicateBatch(num_inputs, replicate_targets=replicate_targets))
+            for i, in_idx in enumerate(input_indices):
+                kwargs = ds_config[in_idx]
+                transforms.add(DownsampleAndCrop3D(apply_to=[in_idx], order=2, **kwargs))
+                if replicate_targets:
+                    transforms.add(
+                        DownsampleAndCrop3D(apply_to=[target_indices[i]], order=0, **kwargs))
+
+        # # affinity transforms for affinity targets
+        # # we apply the affinity target calculation only to the segmentation (1)
+        if master_config.get("affinity_config") is not None:
+            affs_config = master_config.get("affinity_config")
+            global_kwargs = affs_config.pop("global", {})
+            # TODO: define computed affs not in this way, but with a variable in config...
+            nb_affs = len(affs_config)
+            assert nb_affs == num_inputs
+            # all_affs_kwargs = [deepcopy(global_kwargs) for _ in range(nb_affs)]
+            for input_index in affs_config:
+                affs_kwargs = deepcopy(global_kwargs)
+                affs_kwargs.update(affs_config[input_index])
+                transforms.add(affinity_config_to_transform(apply_to=[input_index+num_inputs], **affs_kwargs))
+
+        # crop invalid affinity labels and elastic augment reflection padding assymetrically
+        crop_config = master_config.get('crop_after_target', {})
+        if crop_config:
+            # One might need to crop after elastic transform to avoid edge artefacts of affinity
+            # computation being warped into the FOV.
+            transforms.add(VolumeAsymmetricCrop(**crop_config))
 
         transforms.add(AsTorchBatch(3))
 
@@ -274,9 +293,9 @@ def get_cremi_loader(config):
 
     if inference_mode:
         datasets = CremiDatasetInference(
-            config.get("transforms_config"),
+            config.get("master_config"),
             name=config.get('name'),
-            **config.get('raw_volume_kwargs'))
+            **config.get('volume_config'))
         # Avoid to wrap arrays into tensors:
         loader_config["collate_fn"] = collate_indices
     else:
