@@ -132,7 +132,7 @@ class BaseCremiExperiment(BaseExperiment, AffinityInferenceMixin):
         import h5py
         import numpy as np
         print("Saving....")
-        with h5py.File(os.path.join(get_trendytukan_drive_path(), "projects/pixel_embeddings/IoU_stacked_UNet/predictions_sample_{}_24.h5".format(self.get("loaders/infer/name"))), 'w') as f:
+        with h5py.File(os.path.join(get_trendytukan_drive_path(), "projects/pixel_embeddings/IoU_stacked_UNet/predictions_sample_{}_tiny.h5".format(self.get("loaders/infer/name"))), 'w') as f:
             f.create_dataset('data', data=output.astype(np.float16), compression='gzip')
 
 

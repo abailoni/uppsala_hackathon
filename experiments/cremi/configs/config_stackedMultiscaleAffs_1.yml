@@ -213,8 +213,8 @@ loaders:
 model:
   embeddingutils.models.unet.GeneralizedStackedPyramidUNet3D:
     load_stacked_models_from:
-      0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stackedAffs_trainStack0/checkpoint.pytorch"
-#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stackedAffs_deb/checkpoint.pytorch"
+      0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stackedAffs_trainStack0b/checkpoint.pytorch"
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stackedAffs_trainStack1/checkpoint.pytorch"
     nb_stacked: 2 # Number of stacked models
     # If only model 1 is trained, then model 0 is run in inference mode. Atm there is no backprop between models:
     models_to_train: [1]

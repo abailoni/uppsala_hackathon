@@ -96,12 +96,12 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         return model
 
     def set_devices(self):
-        # n_gpus = torch.cuda.device_count()
-        # gpu_list = range(n_gpus)
-        # self.set("gpu_list", gpu_list)
-        # self.trainer.cuda(gpu_list)
-        self.set("gpu_list", [0])
-        self.trainer.cuda([0])
+        n_gpus = torch.cuda.device_count()
+        gpu_list = range(n_gpus)
+        self.set("gpu_list", gpu_list)
+        self.trainer.cuda(gpu_list)
+        # self.set("gpu_list", [0])
+        # self.trainer.cuda([0])
 
     def inferno_build_criterion(self):
         print("Building criterion")

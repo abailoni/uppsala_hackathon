@@ -10,7 +10,7 @@ loaders:
       # use 10 CPU cores, or to 0 if you wish to use the same process for training and
       # data-loading (generally not recommended).
       batch_size: 1
-      num_workers: 10
+      num_workers: 4
       drop_last: False
 #      pin_memory: False
       shuffle: False
@@ -34,7 +34,7 @@ loaders:
 #        B: *shape
 #        C: *shape
       # Sliding window stride
-      stride: &stride [6, 100, 100] #FIXME
+      stride: &stride [6, 54, 54] # This should be the same to the prediction, after being cropped
 #        A:
 #        B: *stride
 #        C: *stride
@@ -47,8 +47,8 @@ loaders:
 #      padding_mode: "constant"
       padding:
         - [7,7]
-        - [166, 166]
-        - [166, 166]
+        - [189, 189]
+        - [189, 189]
       # PATHS:
       path:
         A: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleA_train.h5'
@@ -70,23 +70,26 @@ loaders:
 #FIXME: change this please...
 inference:
   path_checkpoint_trainer: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack1c"
-  crop_global_slice: # As compared to the input, how much should I crop
+  crop_global_slice: # As compared to the input, how much should I crop (global crop)
     - [7,7]
-    - [166, 166]
-    - [166, 166]
+    - [189, 189]
+    - [189, 189]
   crop_prediction: # How much I crop the predicted tensor: (local_crop)
     - [1,1]
-    - [16,16]
-    - [16,16]
+    - [6,6]
+    - [6,6]
 
 model:
   vaeAffs.models.compute_IoU.IntersectOverUnionUNet:
     # EXTRA ARGS:
-    stride: [1, 4, 4]
+    pre_crop_pred: ":, 33:-33, 33:-33"
+    stride: [1, 2, 2]
     num_IoU_workers: 6
     offsets:
-       - [0, -4, 0]
-       - [0, 0, -4]
+       - [0, -2, 0]
+       - [0, 0, -2]
+#       - [0, 0, -6]
+#       - [0, -6, 0]
 #       - [0, -4, -4]
 #       - [0, -4, +4]
 #       - [0, -8, 0]
@@ -95,7 +98,7 @@ model:
 #       - [0, -8, +8]
 #       - [0, -16, 0]
 #       - [0, 0, -16]
-#       - [-1, 0, 0]
+       - [-1, 0, 0]
 #       - [-2, 0, 0]
 #       - [-3, 0, 0]
 

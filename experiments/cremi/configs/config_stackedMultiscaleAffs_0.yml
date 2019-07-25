@@ -139,7 +139,7 @@ loaders:
     slicing_config:
       # Sliding window size
       window_size:
-        A: &shape [26, 432, 432]
+        A: &shape [23, 432, 432]
         B: *shape
         C: *shape
       # Sliding window stride
@@ -212,8 +212,8 @@ loaders:
 model:
   embeddingutils.models.unet.GeneralizedStackedPyramidUNet3D:
 #    load_stacked_models_from:
-#      0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack0/checkpoint.pytorch"
-    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stackedAffs_deb/checkpoint.pytorch"
+#      0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stackedAffs_trainStack0/checkpoint.pytorch"
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stackedAffs_trainStack0/checkpoint.pytorch"
     nb_stacked: 2 # Number of stacked models
     # If only model 1 is trained, then model 0 is run in inference mode. Atm there is no backprop between models:
     models_to_train: [0]

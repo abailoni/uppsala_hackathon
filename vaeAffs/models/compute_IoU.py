@@ -338,6 +338,7 @@ class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
     def forward(self, *inputs):
         pred = super(IntersectOverUnionUNet, self).forward(*inputs)
 
+        # FIXME: delete again the inputs!
         del inputs
         # torch.cuda.empty_cache()
         assert len(pred) == 1
@@ -354,6 +355,8 @@ class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
 
         # Pre-crop prediction:
         pred = pred[self.pre_crop_pred] if self.pre_crop_pred is not None else pred
+
+        # return torch.cat((inputs[1][:,:,3:-3,75:-75, 75:-75], pred[:, :4]), dim=1)
 
         # FIXME: here we no longer crop, so we will get invalid values
         # # Compute crop slice after rolling:
@@ -435,15 +438,22 @@ def IoU_worker(patches, offset, stride, patch_dws_fact,
         # assert all([offs % dws == 0 for dws, offs in zip(patch_dws_fact, offset)])
     patch_offset = tuple(int(offs / dws) for dws, offs in zip(patch_dws_fact, offset))
 
-    # FIXME: temp hack
-    if patch_offset[0] == 0:
-        # Only for affinities along xy:
-        patches = patches[:,:,:,[3], 4:-4, 4:-4]
-        rolled_patches = rolled_patches[:,:,:,[3], 4:-4, 4:-4]
-        patch_shape = deepcopy(patch_shape)
-        patch_shape[0] = 1
-        patch_shape[1] = 11
-        patch_shape[2] = 11
+    # # FIXME: temp hack
+    # if patch_offset[0] == 0:
+    # Only for affinities along xy:
+    # patches = patches[:,:,:,2:-2, 5:-5, 5:-5]
+    # rolled_patches = rolled_patches[:,:,:,2:-2, 5:-5, 5:-5]
+    # patch_shape = deepcopy(patch_shape)
+    # patch_shape[0] = 3
+    # patch_shape[1] = 9
+    # patch_shape[2] = 9
+
+    patches = patches[:, :, :, 3:-3, 7:-7, 7:-7]
+    rolled_patches = rolled_patches[:, :, :, 3:-3, 7:-7, 7:-7]
+    patch_shape = deepcopy(patch_shape)
+    patch_shape[0] = 1
+    patch_shape[1] = 5
+    patch_shape[2] = 5
 
     # Get crop slices patch_1:
     left_crop = [off if off > 0 else 0 for off in patch_offset]
