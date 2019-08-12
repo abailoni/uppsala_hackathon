@@ -64,6 +64,7 @@ loaders:
 #        crop_left: [0, 30, 30]
 #        crop_right: [0, 30, 30]
       downscale_and_crop:
+        replicate_targets: False
         0:
           ds_factor: [1, 3, 3]
           crop_factor: [1, 1, 1]

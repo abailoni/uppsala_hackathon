@@ -189,13 +189,18 @@ class StackedAffinityLoss(nn.Module):
         self.model = model
 
     def forward(self, predictions, targets):
-        assert len(predictions) == 1
+        if isinstance(predictions, (list, tuple)):
+            assert len(predictions) == 1
+            predictions = predictions[0]
 
-        # TODO: improve this...
-        mdl_to_train = self.model_kwargs["models_to_train"]
+        # TODO: improve this shit
+        if hasattr(self.model, "stacked_model"):
+            mdl_to_train = self.model.stacked_model.models_to_train
+        else:
+            mdl_to_train = self.model_kwargs["models_to_train"]
         assert len(mdl_to_train) == 1
         trg_index = mdl_to_train[0]
-        targets = auto_crop_tensor_to_shape(targets[trg_index], predictions[0].shape,
+        targets = auto_crop_tensor_to_shape(targets[trg_index], predictions.shape,
                                             ignore_channel_and_batch_dims=True)
         assert targets.shape[1] % 2 == 0, "I should have both affinities and masks"
 
@@ -207,7 +212,7 @@ class StackedAffinityLoss(nn.Module):
         # Invert affinities for Dice loss:
         gt_affs = 1. - gt_affs
 
-        predictions = predictions[0]*valid_pixels
+        predictions = predictions*valid_pixels
         gt_affs = gt_affs*valid_pixels
 
         with warnings.catch_warnings(record=True) as w:

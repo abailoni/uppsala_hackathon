@@ -1,10 +1,6 @@
 global:
   offsets: null
 
-shortcuts:
-  xy_directions: &n_directions
-  total_directions: &tot_directions 18
-
 
 device: cuda
 
@@ -14,14 +10,9 @@ loaders:
       rejection_threshold: 0.60
       segmentation:
         affinity_config:
-          retain_mask: True # This keep a mask of the valid affinities (not involving the ignore-label)
+          retain_mask: False # This keep a mask of the valid affinities (not involving the ignore-label)
           retain_segmentation: True # This keeps the label image in the inputs
           ignore_label: 0
-#          nb_offsets: 1
-#          max_offset_range:
-#            - 2
-#            - 45
-#            - 45
 
     defect_augmentation_config:
         p_missing_slice: 0.03
@@ -33,8 +24,8 @@ loaders:
         artifact_source:
             min_masking_ratio: .5
             slicing_config:
-              window_size: [1, 864, 864] # 87, 141
-              stride: &stride [1, 60, 60]
+              window_size: [1, 432, 432] # 192, 192
+              stride: &stride [8, 99, 99]
               downsampling_ratio: [1, 1, 1]
             volume_config:
               artifacts:
@@ -62,12 +53,59 @@ loaders:
 
       random_flip: True
 
-      compute_directions:
-        n_directions: *n_directions
-        z_direction:  &z_direction True
-#      crop_after_target:
-#        crop_left: [0, 30, 30]
-#        crop_right: [0, 30, 30]
+      downscale_and_crop:
+        replicate_targets: True
+        0:
+          ds_factor: [1, 3, 3]
+          crop_factor: [1, 1, 1]
+        1:
+          ds_factor: [1, 1, 1]
+          crop_factor: [1, 2, 2]
+          crop_slice: "3:-3, : , :"
+
+
+      affinity_config:
+        global:
+          retain_mask: True # This keep a mask of the valid affinities (not involving the ignore-label)
+          retain_segmentation: False # This keeps the label image in the inputs
+          ignore_label: 0
+        0:
+          offsets:
+            # Short-ranges:
+            - [0, 0, -4]
+#            - [0, -4, 0]
+#            - [0, -4, -4]
+#            - [0, -4, +4]
+#            # Long-range ones:
+#            - [0, 0, -13]
+#            - [0, -13, 0]
+#            - [0, -13, -13]
+#            - [0, -13, +13]
+#            # 3D offsets:
+#            - [-1, 0, 0]
+#            - [-2, 0, 0]
+#            - [-3, 0, 0]
+#            - [-4, 0, 0]
+        1:
+          offsets:
+            # Short-ranges:
+            - [0, -2, 0]
+            - [0, 0, -2]
+            # Long-ranges:
+            - [0, -9, 0]
+            - [0, 0, -9]
+            - [0, -9, -9]
+            - [0, 9, -9]
+            - [0, -15, 0]
+            - [0, 0, -15]
+            - [0, -15, -15]
+            - [0, 15, -15]
+            # 3D offsets:
+            - [-1, 0, 0]
+            - [-2, 0, 0]
+            - [-3, 0, 0]
+#            - [-4, 0, 0]
+
 
     # Specify configuration for the loader
     loader_config:
@@ -75,10 +113,11 @@ loaders:
       # use 10 CPU cores, or to 0 if you wish to use the same process for training and
       # data-loading (generally not recommended).
       batch_size: 1
-      num_workers: 5
+      num_workers: 6
       drop_last: True
       pin_memory: False
       shuffle: True
+
 
 
   train:
@@ -93,7 +132,7 @@ loaders:
     slicing_config:
       # Sliding window size
       window_size:
-        A: &shape [5, 864, 864] # 87, 141
+        A: &shape [28, 432, 432]
         B: *shape
         C: *shape
       # Sliding window stride
@@ -120,7 +159,7 @@ loaders:
           B: 'raw'
           C: 'raw'
         dtype: float32
-        sigma: 0.025 # FIXME: add some random noise to the image??
+        sigma: 0.025
       # Segmentation
       segmentation:
         path:
@@ -164,38 +203,24 @@ loaders:
 
 
 
-stack_scaling_factors_2: # FIXME: this mess
-  - [1, 4, 4]
-  - [1, 2, 2]
-  - [1, 1, 1]
-
 model:
-  embeddingutils.models.unet.StackedAffinityNet:
-    path_model: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stackedHourGlass_fxd_btch2/best_checkpoint.pytorch"
-#    nb_offsets: 17
-#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/UNETaffs_first/best_checkpoint.pytorch"
+  embeddingutils.models.unet.GeneralizedAffinitiesFromEmb:
+    path_model: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack1c/checkpoint.pytorch"
+    nb_offsets: 13
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/deb_affs/checkpoint.pytorch"
 
 
 
 
 trainer:
-  max_epochs: 10 # basically infinite
-#  TODO: increase this if we need both affinity targets and directional DT targets
+  max_epochs: 1000 # basically infinite
   num_targets: 1
 
   criterion:
-    # TODO: here you will be able to add the final losses (SoresenDice for affinities and L1 for DT)
-    losses: null
+    loss_name: "vaeAffs.models.losses.StackedAffinityLoss"
     kwargs:
       loss_type: "Dice" # "MSE"
 
-
-  metric:
-    evaluate_every: 'never'
-    quantizedVDT.metrics.ArandFromMWSDistances:
-      strides: null # [1,2,2]
-      z_direction: *z_direction
-      n_directions: *n_directions
 
   optimizer:
     Adam:
@@ -248,71 +273,50 @@ trainer:
 
 
 firelight:
-  affs_raw_gt:
-    RowVisualizer:
-      input_mapping:
-        global: [B: 0, D: 2]
-      pad_width: 1  # width of the border between images in pixels
-      pad_value: .2  # intensity of the border pixels
-      visualizers:
-        - IdentityVisualizer:
-            input: ['inputs', index: 2]
-            cmap: gray
-
-        - SegmentationVisualizer:
-            input: ['target', index: 2, C: 0]
-            #background_color: [0, 0, 0]
-            background_label: 0
-
-  affs:
+  stackedAffs:
     ImageGridVisualizer:
 
       input_mapping:
-        global: [B: 0, D: 2] # the mapping specified in 'global' is applied to all keys
+        global: [B: 0] # the mapping specified in 'global' is applied to all keys
 
       pad_width: 1  # width of the border between images in pixels
       pad_value: .2  # intensity of the border pixels
       upsampling_factor: 1  # the whole grid is upsampled by this factor
 
-      row_specs: ['H', 'S', 'D', 'V',]
-      column_specs: ['W', 'B',  'C']
+      row_specs: ['H', 'S', 'B', 'V']
+      column_specs: ['W', 'C', 'D']
 
       # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
       visualizers:
 
-        # visualize raw input
-#        - IdentityVisualizer:
-#            input: ['inputs', index: 2]
-#            cmap: gray
-#
-#        - SegmentationVisualizer:
-#            input: ['target', index: 2, C: 0]
-#            #background_color: [0, 0, 0]
-#            background_label: 0
-
-#        - IdentityVisualizer:
-#            input: ['prediction', index: 0, B: 0, D: "1:6", C: 0]
-#            cmap: gray
-
+##        # visualize raw input
+##        - IdentityVisualizer:
+##            input: ['prediction', index: 0, B: 0, D: "1:6", C: 0]
+##            cmap: gray
         - IdentityVisualizer:
-            input: ['target', index: 2, C: "1:12"]
+            input: ['inputs', index: 1, C: 0, W: "42:-42", H: "42:-42", D: "3:-3"]
             cmap: gray
-
+        - SegmentationVisualizer:
+            input: ['target', index: 1, C: 0, W: "42:-42", H: "42:-42", D: "3:-3"]
+            background_label: 0
         - IdentityVisualizer:
-            input: ['prediction', index: 0, C: ":11"]
+            input: ['prediction', index: 0, C: 0 ]
             cmap: gray
-
-#
-#        - PcaVisualizer:
-#            input: ['prediction', index: 0, W: "::2", H: "::2"]
-#
-#        - PcaVisualizer:
-#            input: ['prediction', index: 1]
-#
-#        - PcaVisualizer:
-#            input: ['prediction', pre: {vaeAffs.utils.various.torch_tensor_zoom: {zoom: [1,1,1,2,2], order: 0}}, index: 2]
-
-
-
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['prediction', index: 0, C: 4 ]
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['prediction', index: 0, C: 9 ]
+            cmap: gray
+            value_range: [0,1]
+        - SegmentationVisualizer:
+            input: ['target', index: 1, C: 11, W: "42:-42", H: "42:-42", D: "3:-3"]
+            background_label: 0
+        - IdentityVisualizer:
+            input: ['prediction', index: 0, C: 11 ]
+            cmap: gray
+            value_range: [0,1]
 
 

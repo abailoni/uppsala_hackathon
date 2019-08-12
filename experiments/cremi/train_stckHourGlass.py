@@ -64,6 +64,7 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
 
         if self.get("loaders/general/master_config/downscale_and_crop") is not None:
             # TODO: improve this...
+            # FIXME: bug when replicate_targets is missing...
             ds_config = self.get("loaders/general/master_config/downscale_and_crop")
             nb_targets = len(ds_config) - 1
             self.set("trainer/num_targets", nb_targets)
