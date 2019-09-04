@@ -13,10 +13,10 @@ def get_abailoni_hci_home_path():
             return '/home/abailoni/hci_home/'
         elif hostname == 'quadxeon5':
             return '/srv/scratch/abailoni'
+        else:
+            return '/net/hcihome/storage/abailoni/'
     elif hostname == 'trendytukan' and username == 'abailoni_local':
         return '/home/abailoni_local/hci_home/'
-    else:
-        return '/net/hciserver03/storage/abailoni/'
 
 def get_trendytukan_drive_path():
     username = getpass.getuser()
@@ -31,8 +31,8 @@ def get_trendytukan_drive_path():
     elif hostname == 'quadxeon5' and username == 'abailoni':
         return '/srv/scratch/abailoni'
     else:
-        raise NotImplementedError("Trendytukan local drive not accessible by the current user")
-        # return '/net/hciserver03/storage/abailoni/trendyTukan_drive/'
+        # raise NotImplementedError("Trendytukan local drive not accessible by the current user")
+        return '/net/hcihome/storage/abailoni/trendyTukan_drive/'
 
 
 def get_source_dir():

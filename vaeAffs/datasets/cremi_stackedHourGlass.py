@@ -229,19 +229,19 @@ class CremiDatasetInference(RawVolume):
                     transforms.add(
                         DownsampleAndCrop3D(apply_to=[target_indices[i]], order=0, **kwargs))
 
-        # # affinity transforms for affinity targets
-        # # we apply the affinity target calculation only to the segmentation (1)
-        if master_config.get("affinity_config") is not None:
-            affs_config = master_config.get("affinity_config")
-            global_kwargs = affs_config.pop("global", {})
-            # TODO: define computed affs not in this way, but with a variable in config...
-            nb_affs = len(affs_config)
-            assert nb_affs == num_inputs
-            # all_affs_kwargs = [deepcopy(global_kwargs) for _ in range(nb_affs)]
-            for input_index in affs_config:
-                affs_kwargs = deepcopy(global_kwargs)
-                affs_kwargs.update(affs_config[input_index])
-                transforms.add(affinity_config_to_transform(apply_to=[input_index+num_inputs], **affs_kwargs))
+        # # # affinity transforms for affinity targets
+        # # # we apply the affinity target calculation only to the segmentation (1)
+        # if master_config.get("affinity_config") is not None:
+        #     affs_config = master_config.get("affinity_config")
+        #     global_kwargs = affs_config.pop("global", {})
+        #     # TODO: define computed affs not in this way, but with a variable in config...
+        #     nb_affs = len(affs_config)
+        #     assert nb_affs == num_inputs
+        #     # all_affs_kwargs = [deepcopy(global_kwargs) for _ in range(nb_affs)]
+        #     for input_index in affs_config:
+        #         affs_kwargs = deepcopy(global_kwargs)
+        #         affs_kwargs.update(affs_config[input_index])
+        #         transforms.add(affinity_config_to_transform(apply_to=[input_index+num_inputs], **affs_kwargs))
 
         # crop invalid affinity labels and elastic augment reflection padding assymetrically
         crop_config = master_config.get('crop_after_target', {})
@@ -254,23 +254,23 @@ class CremiDatasetInference(RawVolume):
 
         return transforms
 
-class CremiDatasetsInference(Concatenate):
-    def __init__(self, names,
-                 transform_config,
-                 raw_volume_kwargs):
-        names = [None] if names is None else names
-
-        datasets = [CremiDatasetInference(transform_config,
-                                  name=name,
-                                  **raw_volume_kwargs)
-                for name in names]
-        super().__init__(*datasets)
-        # self.transforms = self.get_transforms()
-    #
-    # def get_transforms(self):
-    #     FIXME: avoid to apply to index...
-        # transforms = AsTorchBatch(3, apply_to=[0])
-        # return transforms
+# class CremiDatasetsInference(Concatenate):
+#     def __init__(self, names,
+#                  transform_config,
+#                  raw_volume_kwargs):
+#         names = [None] if names is None else names
+#
+#         datasets = [CremiDatasetInference(transform_config,
+#                                   name=name,
+#                                   **raw_volume_kwargs)
+#                 for name in names]
+#         super().__init__(*datasets)
+#         # self.transforms = self.get_transforms()
+#     #
+#     # def get_transforms(self):
+#     #     FIXME: avoid to apply to index...
+#         # transforms = AsTorchBatch(3, apply_to=[0])
+#         # return transforms
 
 
 def get_cremi_loader(config):

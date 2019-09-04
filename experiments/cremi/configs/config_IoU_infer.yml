@@ -34,21 +34,23 @@ loaders:
 #        B: *shape
 #        C: *shape
       # Sliding window stride
-      stride: &stride [6, 54, 54] # This should be the same to the prediction, after being cropped
+      stride: &stride [8, 46, 46] # This should be the same to the prediction, after being cropped
 #        A:
 #        B: *stride
 #        C: *stride
       # Data slice to iterate over.
-      data_slice: '70:100,200:800,200:800'
+#      data_slice: '70:100,200:800,200:800'
+      data_slice: ":8, 90:, 580: 1900"
+#      data_slice: ':,:,:'
 #        A: ':, :, :'
 #        B: ':, :, :'
 #        C: ':, :, :'
 
 #      padding_mode: "constant"
       padding:
-        - [7,7]
-        - [189, 189]
-        - [189, 189]
+        - [6,6]
+        - [193, 193]
+        - [193, 193]
       # PATHS:
       path:
         A: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleA_train.h5'
@@ -59,7 +61,7 @@ loaders:
         C+: '$HCI_HOME/datasets/cremi/testvol/test_samples/sampleC+_cropped_plus_mask.h5'
       path_in_file:
         A: 'raw'
-        B: 'raw'
+        B: 'raw_old'
         C: 'raw'
         A+: "volumes/raw"
         B+: "volumes/raw"
@@ -71,13 +73,14 @@ loaders:
 inference:
   path_checkpoint_trainer: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack1c"
   crop_global_slice: # As compared to the input, how much should I crop (global crop)
-    - [7,7]
-    - [189, 189]
-    - [189, 189]
+    - [6,6]
+    - [193, 193]
+    - [193, 193]
   crop_prediction: # How much I crop the predicted tensor: (local_crop)
-    - [1,1]
-    - [6,6]
-    - [6,6]
+    - [0,0]
+    - [10,10]
+    - [10,10]
+  return_patch_mask: True # Make sure to exclude the invalid affinities
 
 model:
   vaeAffs.models.compute_IoU.IntersectOverUnionUNet:
@@ -86,8 +89,11 @@ model:
     stride: [1, 2, 2]
     num_IoU_workers: 6
     offsets:
-       - [0, -2, 0]
-       - [0, 0, -2]
+#       - [-1, 0, 0]
+#       - [0, -2, 0]
+#       - [0, 0, -2]
+#       - [0, -4, 0]
+#       - [0, 0, -4]
 #       - [0, 0, -6]
 #       - [0, -6, 0]
 #       - [0, -4, -4]
@@ -96,11 +102,14 @@ model:
 #       - [0, 0, -8]
 #       - [0, -8, -8]
 #       - [0, -8, +8]
-#       - [0, -16, 0]
-#       - [0, 0, -16]
-       - [-1, 0, 0]
+#       - [0, -10, 0]
+       - [0, -10, 0]
+       - [0, 0, -20]
 #       - [-2, 0, 0]
 #       - [-3, 0, 0]
+    patch_size_per_offset: # They should be even (zero means that nothing is cropped)
+      - [3, 0, 0]
+      - [1, ]
 
     load_stacked_models_from:
       0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack0/checkpoint.pytorch"

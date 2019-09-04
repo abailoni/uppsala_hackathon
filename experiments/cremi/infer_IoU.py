@@ -85,6 +85,8 @@ class BaseCremiExperiment(BaseExperiment, AffinityInferenceMixin):
         gpu_list = range(n_gpus)
         self.set("gpu_list", gpu_list)
         self.trainer.cuda(gpu_list)
+        print("GPU:",gpu_list)
+
         # self.set("gpu_list", [0])
         # self.trainer.cuda([0])
 
@@ -132,9 +134,11 @@ class BaseCremiExperiment(BaseExperiment, AffinityInferenceMixin):
         import h5py
         import numpy as np
         print("Saving....")
-        with h5py.File(os.path.join(get_trendytukan_drive_path(), "projects/pixel_embeddings/IoU_stacked_UNet/predictions_sample_{}_tiny.h5".format(self.get("loaders/infer/name"))), 'w') as f:
+        from segmfriends.utils.various import check_dir_and_create
+        dir_path = os.path.join(get_trendytukan_drive_path(), "projects/pixel_embeddings", self.get("name_experiment", default="generic_experiment"))
+        check_dir_and_create(dir_path)
+        with h5py.File(os.path.join(dir_path, "predictions_sample_{}.h5".format(self.get("loaders/infer/name"))), 'w') as f:
             f.create_dataset('data', data=output.astype(np.float16), compression='gzip')
-
 
 if __name__ == '__main__':
     print(sys.argv[1])

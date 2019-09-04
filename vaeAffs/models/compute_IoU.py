@@ -317,6 +317,7 @@ from embeddingutils.models.unet import GeneralizedStackedPyramidUNet3D
 class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
     def __init__(self, offsets, stride, num_IoU_workers=1,
                  pre_crop_pred=None,
+                 patch_size_per_offset=None,
                  *super_args, **super_kwargs):
         super(IntersectOverUnionUNet, self).__init__(*super_args, **super_kwargs)
 
@@ -391,9 +392,11 @@ class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
                                           kwargs_iter=repeat(kwargs_pool))
             pool.close()
             pool.join()
+            predictions = [item[0] for item in results]
+            masks = [item[1] for item in results]
 
             # results_collected.append([deepcopy(stride_offsets), np.stack(results)])
-            results_collected.append([deepcopy(stride_offsets), torch.stack(results)])
+            results_collected.append([deepcopy(stride_offsets), torch.stack(predictions), np.stack(masks)])
 
             if stride_offsets[2]+1 == stride[2]:
                 if stride_offsets[1]+1 == stride[1]:
@@ -410,17 +413,20 @@ class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
                 stride_offsets[2] += 1
 
         # Merge everything in one output:
-        # import time
-        # tick = time.time()
-        # final_output = np.empty((1, len(self.offsets)) + pred.shape[2:])
         final_output = torch.empty((1, len(self.offsets)) + pred.shape[2:], dtype=pred.dtype, device=pred.device)
+        # final_output = np.empty((1, len(self.offsets)) + pred.shape[2:], dtype="float32")
+        final_mask = torch.empty((1, len(self.offsets)) + pred.shape[2:], dtype=pred.dtype, device=pred.device)
+        # final_mask = np.empty((1, len(self.offsets)) + pred.shape[2:], dtype="float32")
         for result in results_collected:
             write_slice = (slice(None), slice(None)) + tuple(slice(offs, None, strd) for offs, strd in zip(result[0], self.stride))
             final_output[write_slice] = result[1]
+            final_mask[write_slice] = torch.from_numpy(result[2]).float().to(pred.device)
+            # final_mask[write_slice] = result[2]
 
         # print("Took", time.time() - tick)
-        # TODO: wrap to tensor?
-        return final_output
+        # return [final_output, final_mask]
+        return final_output, final_mask
+
         # return torch.from_numpy(final_output).cuda()
 
 def IoU_worker(patches, offset, stride, patch_dws_fact,
@@ -448,12 +454,38 @@ def IoU_worker(patches, offset, stride, patch_dws_fact,
     # patch_shape[1] = 9
     # patch_shape[2] = 9
 
-    patches = patches[:, :, :, 3:-3, 7:-7, 7:-7]
-    rolled_patches = rolled_patches[:, :, :, 3:-3, 7:-7, 7:-7]
+    # patches = patches[:, :, :, 3:-3, 7:-7, 7:-7]
+    # rolled_patches = rolled_patches[:, :, :, 3:-3, 7:-7, 7:-7]
+    # patch_shape = deepcopy(patch_shape)
+    # patch_shape[0] = 1
+    # patch_shape[1] = 5
+    # patch_shape[2] = 5
+
+    # # Local predictions:
+    # patches = patches[:, :, :, 2:-2, 5:-5, 5:-5]
+    # rolled_patches = rolled_patches[:, :, :, 2:-2, 5:-5, 5:-5]
+    # patch_shape = deepcopy(patch_shape)
+    # patch_shape[0] = 3
+    # patch_shape[1] = 9
+    # patch_shape[2] = 9
+
+    # # Longer-range predictions:
+    # patches = patches[:, :, :, 2:-2]
+    # rolled_patches = rolled_patches[:, :, :, 2:-2]
+    # patch_shape = deepcopy(patch_shape)
+    # patch_shape[0] = 3
+    # # patch_shape[1] = 9
+    # # patch_shape[2] = 9
+
+    # Longer-range no-z context:
+    patches = patches[:, :, :, 3:-3]
+    rolled_patches = rolled_patches[:, :, :, 3:-3]
     patch_shape = deepcopy(patch_shape)
     patch_shape[0] = 1
-    patch_shape[1] = 5
-    patch_shape[2] = 5
+    # patch_shape[1] = 9
+    # patch_shape[2] = 9
+
+
 
     # Get crop slices patch_1:
     left_crop = [off if off > 0 else 0 for off in patch_offset]
@@ -472,4 +504,11 @@ def IoU_worker(patches, offset, stride, patch_dws_fact,
                                     1. - rolled_patches[crop_slice_rolled_patches])
     # if not isinstance(output, np.ndarray):
     #     output = output.cpu().numpy()
-    return output
+
+    left_crop = [-off if off < 0 else 0 for off in roll_offset]
+    right_crop = [sh - off if off > 0 else None for off, sh in zip(roll_offset, patches.shape[:3])]
+    valid_crop = tuple(slice(lft, rgt) for lft, rgt in zip(left_crop, right_crop))
+    valid_predictions = np.zeros(patches.shape[:3], dtype='uint8')
+    valid_predictions[valid_crop] = 1
+
+    return output, valid_predictions
