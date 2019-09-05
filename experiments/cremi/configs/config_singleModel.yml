@@ -1,10 +1,6 @@
 global:
   offsets: null
 
-shortcuts:
-  xy_directions: &n_directions 16
-  total_directions: &tot_directions 18
-
 
 device: cuda
 
@@ -57,20 +53,17 @@ loaders:
 
       random_flip: True
 
-      compute_directions:
-        n_directions: *n_directions
-        z_direction:  &z_direction True
 #      crop_after_target:
 #        crop_left: [0, 30, 30]
 #        crop_right: [0, 30, 30]
-      downscale_and_crop:
-        0:
-          ds_factor: [1, 3, 3]
-          crop_factor: [1, 1, 1]
-        1:
-          ds_factor: [1, 1, 1]
-          crop_factor: [1, 2, 2]
-          crop_slice: "3:-3, : , :"
+#      downscale_and_crop:
+#        0:
+#          ds_factor: [1, 3, 3]
+#          crop_factor: [1, 1, 1]
+#        1:
+#          ds_factor: [1, 1, 1]
+#          crop_factor: [1, 2, 2]
+#          crop_slice: "3:-3, : , :"
 
 
     # Specify configuration for the loader
@@ -167,31 +160,34 @@ loaders:
           C: 'segmentations/groundtruth_fixed'
         dtype: float32
 
+# TODO: show second patch, fix merge or heads...?
+
 model:
   embeddingutils.models.unet.GeneralizedStackedPyramidUNet3D:
 #    load_stacked_models_from:
 #      0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack0/checkpoint.pytorch"
 #    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack1b/checkpoint.pytorch"
-    nb_stacked: 2 # Number of stacked models
+    nb_stacked: 1 # Number of stacked models
     # If only model 1 is trained, then model 0 is run in inference mode. Atm there is no backprop between models:
-    models_to_train: [1]
-    detach_stacked_models: False
+    models_to_train: [0]
+    detach_stacked_models: True
 
-    downscale_and_crop:
-      0: # Crop and/or downscale the output of model 0 before to give it as an input
-        ds_factor: [1, 1, 1]
-#        crop_factor: [1, 3, 3]
-        crop_slice: ":,36:-36,36:-36"
+#    downscale_and_crop:
+#      0: # Crop and/or downscale the output of model 0 before to give it as an input
+#        ds_factor: [1, 1, 1]
+##        crop_factor: [1, 3, 3]
+#        crop_slice: ":,36:-36,36:-36"
     type_of_model: 'GeneralizedUNet3D'
     # Parameters for each model in the stack:
     models_kwargs:
       global:
-        depth: 4
+        depth: 5
         upsampling_mode: 'nearest'
         stop_decoder_at_depth: 0
         pyramid_fmaps: 128
         output_fmaps: 128
         scale_factor:
+          - [1, 3, 3]
           - [1, 3, 3]
           - [1, 2, 2]
           - [1, 3, 3]
@@ -202,67 +198,50 @@ model:
           - [True]
           - [True]
           - [True]
+          - [True]
         res_blocks_decoder_3D:
           - [False]
           - [True]
           - [True]
           - [True]
           - [True]
-        decoder_fmaps: [128, 128, 192, 384, 512]
+          - [True]
+        decoder_fmaps: [128, 128, 128, 288, 512, 512]
       0:
         in_channels: 1
-        encoder_fmaps: [32, 128, 192, 384]
-        decoder_crops:
-          1: "3:-3, 12:-12, 12:-12"
-        nb_patch_nets: 1
-        patchNet_kwargs:
-#          global:
-#            placeholder: "temp"
-          0:
-            latent_variable_size: 128
-            feature_maps: 16
-            downscaling_factor: [1, 1, 1] # Inside patchNet, to reduce memory
-            depth_level: 0
-            patch_size: [7,19,19]
-            patch_dws_fact: [1, 4, 4]
-            patch_stride: [2, 36, 36]
-            crop_targets: [[0,0], [70, 70 ], [70 ,70 ]] # I don't need to crop as much as the prediction, because anyway there is the padding of the patches at the borders..
-            pred_dws_fact: [1, 3, 3]
-            max_random_crop: [1, 15, 15]
-            # Exclude a patch from training if the center does contain more than one gt label:
-            central_shape: [1, 5, 5]
-      1:
-        in_channels: 129
-        encoder_fmaps: [128, 160, 256, 384]
+        encoder_fmaps: [16, 48, 144, 288, 512]
         decoder_crops:
           1: "3:-3, 10:-10, 10:-10"
+          2: "2:-2, 12:-12, 12:-12"
         nb_patch_nets: 1
         patchNet_kwargs:
           global:
-            central_shape: [1, 3, 3]
             latent_variable_size: 128
             feature_maps: 16
             downscaling_factor: [1, 1, 1] # Inside patchNet, to reduce memory
             downscale_and_crop_target:
               ds_factor: [1, 1, 1]
-              crop_factor: [1, 2, 2]
-              crop_slice: "3:-3, : , :"
+              crop_factor: [1, 1, 1]
+              crop_slice: "2:-2, 100:-100, 100:-100"
           0:
             depth_level: 0
             patch_size: [7,19,19]
-            patch_dws_fact: [1, 2, 2]
-            patch_stride: [2, 18, 18]
-            crop_targets: [[0,0], [11 ,11 ], [11 ,11 ]] # I don't need to crop as much as the prediction, because anyway there is the padding of the patches at the borders..
+            patch_dws_fact: [1, 4, 4]
+            patch_stride: [2, 36, 36]
+            crop_targets: [[0,0], [0, 0], [0, 0]] # I don't need to crop as much as the prediction, because anyway there is the padding of the patches at the borders..
             pred_dws_fact: [1, 1, 1]
-            max_random_crop: [1, 10, 10]
+            max_random_crop: [0, 15, 15]
+            # Exclude a patch from training if the center does contain more than one gt label:
+            central_shape: [1, 5, 5]
 #          1:
-#            depth_level: 1
+#            depth_level: 0
+#            central_shape: [1, 3, 3]
 #            patch_size: [7,19,19]
-#            patch_dws_fact: [1, 4, 4]
-#            patch_stride: [2, 27, 27]
-#            crop_targets: [[0,0], [5,5], [5,5]]
-#            pred_dws_fact: [1, 3, 3]
-#            max_random_crop: [1, 20, 20]
+#            patch_dws_fact: [1, 2, 2]
+#            patch_stride: [2, 18, 18]
+#            crop_targets: [[0,0], [19, 19], [19, 19]] # I don't need to crop as much as the prediction, because anyway there is the padding of the patches at the borders..
+#            pred_dws_fact: [1, 1, 1]
+#            max_random_crop: [1, 10, 10]
 
 
 #autoencoder:
@@ -281,13 +260,6 @@ trainer:
     kwargs:
       loss_type: "Dice" # "MSE"
 
-
-  metric:
-    evaluate_every: 'never'
-    quantizedVDT.metrics.ArandFromMWSDistances:
-      strides: null # [1,2,2]
-      z_direction: *z_direction
-      n_directions: *n_directions
 
   optimizer:
     Adam:
@@ -360,18 +332,18 @@ firelight:
 
 #        # visualize raw input
         - SegmentationVisualizer:
-            input: ['target', index: 0, C: 0, W: "138:-138", H: "138:-138", D: "6:-6"]
+            input: ['target', index: 0, C: 0, W: "138:-138", H: "138:-138", D: "5:-5"]
             background_label: 0
 #        - IdentityVisualizer:
 #            input: ['prediction', index: 0, B: 0, D: "1:6", C: 0]
 #            cmap: gray
         - IdentityVisualizer:
-            input: ['inputs', index: 1, W: "30:-30", H: "30:-30", D: "3:-3"]
+            input: ['inputs', index: 0, W: "138:-138", H: "138:-138", D: "5:-5"]
             cmap: gray
         - PcaVisualizer:
             input: ['prediction', index: 0,]
-        - PcaVisualizer:
-            input: ['prev_output', W: "30:-30", H: "30:-30", D: "3:-3"]
+#        - PcaVisualizer:
+#            input: ['prev_output', W: "30:-30", H: "30:-30", D: "3:-3"]
 #        - PcaVisualizer:
 #            input: ['prediction', index: 1, ]
 

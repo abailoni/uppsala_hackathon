@@ -1,0 +1,322 @@
+global:
+  offsets: null
+
+
+device: cuda
+
+loaders:
+  general:
+    volume_config:
+      rejection_threshold: 0.60
+      segmentation:
+        affinity_config:
+          retain_mask: False # This keep a mask of the valid affinities (not involving the ignore-label)
+          retain_segmentation: True # This keeps the label image in the inputs
+          ignore_label: 0
+
+    defect_augmentation_config:
+        p_missing_slice: 0.03
+        p_low_contrast: 0.03
+        p_deformed_slice: 0.03
+        p_artifact_source: 0.03
+        deformation_mode: 'compress'
+        deformation_strength: 16
+        artifact_source:
+            min_masking_ratio: .5
+            slicing_config:
+              window_size: [1, 432, 432] # 192, 192
+              stride: &stride [8, 99, 99]
+              downsampling_ratio: [1, 1, 1]
+            volume_config:
+              artifacts:
+                path: '$HCI_HOME/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
+                path_in_h5_dataset: 'defect_sections/raw'
+                dtype: float32
+              alpha_mask:
+                path: '$HCI_HOME/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
+                path_in_h5_dataset: 'defect_sections/mask'
+            master_config:
+              elastic_transform:
+                alpha: 2000.
+                sigma: 50.
+
+    # Configuration for the master dataset.
+    master_config:
+      # We might need order 0 interpolation if we have segmentation in there somewhere.
+      elastic_transform:
+        apply: False
+        alpha: 2000.
+        sigma: 50.
+        order: 0
+      random_slides: False
+      shape_after_slide: [87, 87]   #change to x, y of window size
+
+      random_flip: True
+
+      downscale_and_crop:
+        replicate_targets: True
+        0:
+          ds_factor: [1, 3, 3]
+          crop_factor: [1, 1, 1]
+        1:
+          ds_factor: [1, 1, 1]
+          crop_factor: [1, 2, 2]
+          crop_slice: "3:-3, : , :"
+
+
+      affinity_config:
+        global:
+          retain_mask: True # This keep a mask of the valid affinities (not involving the ignore-label)
+          retain_segmentation: False # This keeps the label image in the inputs
+          ignore_label: 0
+        0:
+          offsets:
+            # Short-ranges:
+            - [0, 0, -4]
+#            - [0, -4, 0]
+#            - [0, -4, -4]
+#            - [0, -4, +4]
+#            # Long-range ones:
+#            - [0, 0, -13]
+#            - [0, -13, 0]
+#            - [0, -13, -13]
+#            - [0, -13, +13]
+#            # 3D offsets:
+#            - [-1, 0, 0]
+#            - [-2, 0, 0]
+#            - [-3, 0, 0]
+#            - [-4, 0, 0]
+        1:
+          offsets:
+            # Short-ranges:
+            - [0, -2, 0]
+            - [0, 0, -2]
+            # Long-ranges:
+            - [0, -9, 0]
+            - [0, 0, -9]
+            - [0, -9, -9]
+            - [0, 9, -9]
+            - [0, -15, 0]
+            - [0, 0, -15]
+            - [0, -15, -15]
+            - [0, 15, -15]
+            # 3D offsets:
+            - [-1, 0, 0]
+            - [-2, 0, 0]
+            - [-3, 0, 0]
+#            - [-4, 0, 0]
+
+
+    # Specify configuration for the loader
+    loader_config:
+      # Number of processes to use for loading data. Set to (say) 10 if you wish to
+      # use 10 CPU cores, or to 0 if you wish to use the same process for training and
+      # data-loading (generally not recommended).
+      batch_size: 1
+      num_workers: 6
+      drop_last: True
+      pin_memory: False
+      shuffle: True
+
+
+
+  train:
+    names:
+      - A
+      - B
+      - C
+
+    # Specify how the data needs to be sliced before feeding to the network.
+    # We use a 3D sliding window over the dataset to extract patches, which
+    # are then fed to the network as batches.
+    slicing_config:
+      # Sliding window size
+      window_size:
+        A: &shape [28, 432, 432]
+        B: *shape
+        C: *shape
+      # Sliding window stride
+      stride:
+        A: *stride
+        B: *stride
+        C: *stride
+      # Data slice to iterate over.
+      data_slice:
+        A: ':, :, :'
+        B: ':, :, :'
+        C: ':75, :, :'
+
+    # Specify paths to volumes
+    volume_config:
+      # Raw data
+      raw:
+        path:
+          A: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleA_train.h5'
+          B: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleB_train.h5'
+          C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
+        path_in_file:
+          A: 'raw'
+          B: 'raw'
+          C: 'raw'
+        dtype: float32
+        sigma: 0.025
+      # Segmentation
+      segmentation:
+        path:
+          A: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleA_train.h5'
+          B: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleB_train.h5'
+          C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
+        path_in_file:
+          A: 'segmentations/groundtruth_fixed'
+          B: 'segmentations/groundtruth_fixed'
+          C: 'segmentations/groundtruth_fixed'
+        dtype: float32
+
+
+
+  val:
+    names:
+      - C
+
+    slicing_config:
+      window_size:
+        C: *shape
+      stride:
+        C: *stride
+      data_slice:
+        C: '75:, :, :'
+
+    volume_config:
+      raw:
+        path:
+          C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
+        path_in_file:
+          C: 'raw'
+        dtype: float32
+        sigma: 0.025
+      segmentation:
+        path:
+          C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
+        path_in_file:
+          C: 'segmentations/groundtruth_fixed'
+        dtype: float32
+
+
+
+model:
+  embeddingutils.models.unet.GeneralizedAffinitiesFromEmb:
+    path_model: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack1c/checkpoint.pytorch"
+    nb_offsets: 13
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/deb_affs/checkpoint.pytorch"
+
+
+
+
+trainer:
+  max_epochs: 1000 # basically infinite
+  num_targets: 1
+
+  criterion:
+    loss_name: "vaeAffs.models.losses.StackedAffinityLoss"
+    kwargs:
+      loss_type: "Dice" # "MSE"
+
+
+  optimizer:
+    Adam:
+      lr: 0.0001
+      weight_decay: 0.0005
+#      betas: [0.9, 0.999]
+
+  intervals:
+    save_every: [1000, 'iterations']
+    validate_every:
+      frequency : [100, 'iterations']
+      for_num_iterations: 5
+
+  tensorboard:
+    log_scalars_every: [1, 'iterations']
+    log_images_every: [100, 'iterations']
+    log_histograms_every: 'never'
+    send_image_at_batch_indices: [0]
+    send_image_at_channel_indices: [0]
+##    send_volume_at_z_indices: 'mid'
+#    split_config_keys: True
+#    log_anywhere: ['scalars']
+
+  callbacks:
+#    gradients:
+#      LogOutputGradients:
+#        frequency: 1
+
+    essentials:
+      SaveAtBestValidationScore:
+        smoothness: 0
+        verbose: True
+#      GradientClip:
+#        clip_value: 1e-3
+      SaveModelCallback:
+        save_every: 500
+      PlotReconstructedCallback:
+        plot_every: 100
+
+    scheduling:
+      AutoLR:
+        monitor: 'validation_loss'
+        factor: 0.99
+        patience: '100 iterations'
+        monitor_while: 'validating'
+        monitor_momentum: 0.75
+#        cooldown_duration: '50000 iterations'
+        consider_improvement_with_respect_to: 'previous'
+        verbose: True
+
+
+firelight:
+  stackedAffs:
+    ImageGridVisualizer:
+
+      input_mapping:
+        global: [B: 0] # the mapping specified in 'global' is applied to all keys
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 1  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'B', 'V']
+      column_specs: ['W', 'C', 'D']
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+##        # visualize raw input
+##        - IdentityVisualizer:
+##            input: ['prediction', index: 0, B: 0, D: "1:6", C: 0]
+##            cmap: gray
+        - IdentityVisualizer:
+            input: ['inputs', index: 1, C: 0, W: "42:-42", H: "42:-42", D: "3:-3"]
+            cmap: gray
+        - SegmentationVisualizer:
+            input: ['target', index: 1, C: 0, W: "42:-42", H: "42:-42", D: "3:-3"]
+            background_label: 0
+        - IdentityVisualizer:
+            input: ['prediction', index: 0, C: 0 ]
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['prediction', index: 0, C: 4 ]
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['prediction', index: 0, C: 9 ]
+            cmap: gray
+            value_range: [0,1]
+        - SegmentationVisualizer:
+            input: ['target', index: 1, C: 11, W: "42:-42", H: "42:-42", D: "3:-3"]
+            background_label: 0
+        - IdentityVisualizer:
+            input: ['prediction', index: 0, C: 11 ]
+            cmap: gray
+            value_range: [0,1]
+
+

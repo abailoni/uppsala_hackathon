@@ -98,7 +98,7 @@ loaders:
     slicing_config:
       # Sliding window size
       window_size:
-        A: &shape [16, 432, 432]
+        A: &shape [20, 432, 432]
         B: *shape
         C: *shape
       # Sliding window stride
@@ -110,7 +110,7 @@ loaders:
       data_slice:
         A: ':, :, :'
         B: ':, :, :'
-        C: ':, :, :'
+        C: ':75, :, :'
 
     # Specify paths to volumes
     volume_config:
@@ -122,7 +122,7 @@ loaders:
           C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
           A: 'raw'
-          B: 'raw_old'
+          B: 'raw'
           C: 'raw'
         dtype: float32
         sigma: 0.025
@@ -134,7 +134,7 @@ loaders:
           C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
           A: 'segmentations/groundtruth_fixed'
-          B: 'segmentations/groundtruth_fixed_OLD'
+          B: 'segmentations/groundtruth_fixed'
           C: 'segmentations/groundtruth_fixed'
         dtype: float32
 
@@ -169,20 +169,17 @@ loaders:
 
 model:
   embeddingutils.models.unet.GeneralizedStackedPyramidUNet3D:
-#    load_stacked_models_from:
-#      0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack0/checkpoint.pytorch"
-#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack1b/checkpoint.pytorch"
+    load_stacked_models_from:
+      0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack0/checkpoint.pytorch"
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack1b/checkpoint.pytorch"
     nb_stacked: 2 # Number of stacked models
     # If only model 1 is trained, then model 0 is run in inference mode. Atm there is no backprop between models:
     models_to_train: [1]
-    detach_stacked_models: False
-
     downscale_and_crop:
       0: # Crop and/or downscale the output of model 0 before to give it as an input
         ds_factor: [1, 1, 1]
 #        crop_factor: [1, 3, 3]
         crop_slice: ":,36:-36,36:-36"
-    type_of_model: 'GeneralizedUNet3D'
     # Parameters for each model in the stack:
     models_kwargs:
       global:
@@ -196,28 +193,19 @@ model:
           - [1, 2, 2]
           - [1, 3, 3]
           - [1, 2, 2]
-        res_blocks_3D:
-          - [False]
-          - [True]
-          - [True]
-          - [True]
-          - [True]
-        res_blocks_decoder_3D:
-          - [False]
-          - [True]
-          - [True]
-          - [True]
-          - [True]
-        decoder_fmaps: [128, 128, 192, 384, 512]
       0:
         in_channels: 1
-        encoder_fmaps: [32, 128, 192, 384]
+        encoder_fmaps: [32, 128, 192, 384, 512, 512]
+        res_blocks_3D:
+          - [False, False]
+          - [True, True, False, False]
+          - [True, True, True, False]
+          - [True, True]
+          - [True, True]
         decoder_crops:
-          1: "3:-3, 12:-12, 12:-12"
+          1: "3:-3, :, :"
         nb_patch_nets: 1
         patchNet_kwargs:
-#          global:
-#            placeholder: "temp"
           0:
             latent_variable_size: 128
             feature_maps: 16
@@ -226,16 +214,22 @@ model:
             patch_size: [7,19,19]
             patch_dws_fact: [1, 4, 4]
             patch_stride: [2, 36, 36]
-            crop_targets: [[0,0], [70, 70 ], [70 ,70 ]] # I don't need to crop as much as the prediction, because anyway there is the padding of the patches at the borders..
+            crop_targets: [[0,0], [80, 80 ], [80 ,80 ]]
             pred_dws_fact: [1, 3, 3]
-            max_random_crop: [1, 15, 15]
+            max_random_crop: [1, 25, 25]
             # Exclude a patch from training if the center does contain more than one gt label:
             central_shape: [1, 5, 5]
       1:
         in_channels: 129
-        encoder_fmaps: [128, 160, 256, 384]
+        encoder_fmaps: [128, 160, 256, 384, 512, 512]
+        res_blocks_3D:
+          - [False]
+          - [True, False]
+          - [True, False]
+          - [True]
+          - [True]
         decoder_crops:
-          1: "3:-3, 10:-10, 10:-10"
+          1: "3:-3, 14:-14, 14:-14"
         nb_patch_nets: 1
         patchNet_kwargs:
           global:
@@ -252,9 +246,9 @@ model:
             patch_size: [7,19,19]
             patch_dws_fact: [1, 2, 2]
             patch_stride: [2, 18, 18]
-            crop_targets: [[0,0], [11 ,11 ], [11 ,11 ]] # I don't need to crop as much as the prediction, because anyway there is the padding of the patches at the borders..
+            crop_targets: [[0,0], [30 ,30 ], [30 ,30 ]] # I don't need to crop as much as the prediction, because anyway there is the padding of the patches at the borders..
             pred_dws_fact: [1, 1, 1]
-            max_random_crop: [1, 10, 10]
+            max_random_crop: [1, 15, 15]
 #          1:
 #            depth_level: 1
 #            patch_size: [7,19,19]
@@ -360,18 +354,18 @@ firelight:
 
 #        # visualize raw input
         - SegmentationVisualizer:
-            input: ['target', index: 0, C: 0, W: "138:-138", H: "138:-138", D: "6:-6"]
+            input: ['target', index: 0, C: 0, W: "150:-150", H: "150:-150", D: "6:-6"]
             background_label: 0
 #        - IdentityVisualizer:
 #            input: ['prediction', index: 0, B: 0, D: "1:6", C: 0]
 #            cmap: gray
         - IdentityVisualizer:
-            input: ['inputs', index: 1, W: "30:-30", H: "30:-30", D: "3:-3"]
+            input: ['inputs', index: 1, W: "42:-42", H: "42:-42", D: "3:-3"]
             cmap: gray
         - PcaVisualizer:
             input: ['prediction', index: 0,]
         - PcaVisualizer:
-            input: ['prev_output', W: "30:-30", H: "30:-30", D: "3:-3"]
+            input: ['prev_output', W: "42:-42", H: "42:-42", D: "3:-3"]
 #        - PcaVisualizer:
 #            input: ['prediction', index: 1, ]
 
@@ -465,15 +459,6 @@ firelight:
             input: ['ptc_pred_l0']
             cmap: gray
             value_range: [0,1]
-#        - IdentityVisualizer:
-#            input: ['ptc_trg_l1']
-#            cmap: gray
-#            value_range: [0,1]
-#        - IdentityVisualizer:
-#            input: ['ptc_pred_l1']
-#            cmap: gray
-#            value_range: [0,1]
-
 ##        - IdentityVisualizer:
 ##            input: ['ptc_ign_l0']
 ##            cmap: gray

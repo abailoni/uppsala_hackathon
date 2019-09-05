@@ -329,6 +329,11 @@ class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
 
         # TODO: Assert
         self.offsets = offsets
+        if patch_size_per_offset is None:
+            patch_size_per_offset = [None for _ in range(len(offsets))]
+        else:
+            assert len(patch_size_per_offset) == len(offsets)
+        self.patch_size_per_offset = patch_size_per_offset
         self.stride = stride
         self.num_IoU_workers = num_IoU_workers
         if pre_crop_pred is not None:
@@ -386,7 +391,7 @@ class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
             kwargs_pool = {"stride": self.stride,
                            "patch_dws_fact": patch_dws_fact,
                            "patch_shape": patch_shape}
-            args_pool = zip(repeat(patches), self.offsets)
+            args_pool = zip(repeat(patches), self.offsets, self.patch_size_per_offset)
             pool = ThreadPool(processes=self.num_IoU_workers)
             results = starmap_with_kwargs(pool, IoU_worker, args_iter=args_pool,
                                           kwargs_iter=repeat(kwargs_pool))
@@ -429,7 +434,7 @@ class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
 
         # return torch.from_numpy(final_output).cuda()
 
-def IoU_worker(patches, offset, stride, patch_dws_fact,
+def IoU_worker(patches, offset, patch_target_size, stride, patch_dws_fact,
                   patch_shape):
     assert all([offs % strd == 0 for strd, offs in zip(stride, offset)])
     roll_offset = tuple(int(offs / strd) for strd, offs in zip(stride, offset))
@@ -443,6 +448,24 @@ def IoU_worker(patches, offset, stride, patch_dws_fact,
         print("Upsi upsi, offset should really be compatible with patch downscaling factor...")
         # assert all([offs % dws == 0 for dws, offs in zip(patch_dws_fact, offset)])
     patch_offset = tuple(int(offs / dws) for dws, offs in zip(patch_dws_fact, offset))
+
+    # According to the passed passed patch_size, crop the patch accordingly:
+    if patch_target_size is not None:
+        assert len(patch_shape) == 3
+        assert all([sh%2 != 0 or sh == 0 for sh in patch_target_size]), "Target patch-shape should be odd"
+        crop_slice = [slice(None), slice(None), slice(None)]
+        patch_shape = deepcopy(patch_shape)
+        for dim in range(3):
+            if patch_target_size[dim] == 0:
+                crop_slice.append(slice(None))
+            else:
+                pad = int((patch_shape[dim] - patch_target_size[dim]) / 2)
+                crop_slice.append(slice(pad,-pad))
+                patch_shape[dim] = patch_target_size[dim]
+        patches = patches[crop_slice]
+        rolled_patches = rolled_patches[crop_slice]
+
+
 
     # # FIXME: temp hack
     # if patch_offset[0] == 0:
@@ -477,11 +500,11 @@ def IoU_worker(patches, offset, stride, patch_dws_fact,
     # # patch_shape[1] = 9
     # # patch_shape[2] = 9
 
-    # Longer-range no-z context:
-    patches = patches[:, :, :, 3:-3]
-    rolled_patches = rolled_patches[:, :, :, 3:-3]
-    patch_shape = deepcopy(patch_shape)
-    patch_shape[0] = 1
+    # # Longer-range no-z context:
+    # patches = patches[:, :, :, 3:-3]
+    # rolled_patches = rolled_patches[:, :, :, 3:-3]
+    # patch_shape = deepcopy(patch_shape)
+    # patch_shape[0] = 1
     # patch_shape[1] = 9
     # patch_shape[2] = 9
 

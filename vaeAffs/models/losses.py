@@ -362,7 +362,10 @@ class PatchBasedLoss(nn.Module):
             pred_patches, _, _ = extract_patches_torch_new(pred, (1, 1, 1), stride=pred_strides,
                                                      crop_slice=crop_slice_pred,
                                                     limit_patches_to=nb_patches)
-            pred_embed = pred_patches[valid_batch_indices][:, :, 0, 0, 0]
+
+            assert valid_batch_indices.max() < pred_patches.shape[0], "Something went wrong, more target patches were collected than predicted: {} targets vs {} pred...".format(valid_batch_indices.max(), pred_patches.shape[0])
+            pred_embed = pred_patches[valid_batch_indices]
+            pred_embed = pred_embed[:, :, 0, 0, 0]
 
             # ----------------------------
             # Expand embeddings to patches using PatchNet models:
@@ -372,27 +375,29 @@ class PatchBasedLoss(nn.Module):
                 # In this case we are training a stacked model:
                 mdl_num = kwargs["model_number"]
                 ptch_num = kwargs["patchNet_number"]
-                pred_patches = data_parallel(self.model.models[mdl_num].patch_models[ptch_num], pred_embed, self.devices)[:, [0]]
+                expanded_patches = data_parallel(self.model.models[mdl_num].patch_models[ptch_num], pred_embed, self.devices)
             else:
-                pred_patches = data_parallel(self.model.patch_models[nb_patch_net], pred_embed, self.devices)[:, [0]]
+                expanded_patches = data_parallel(self.model.patch_models[nb_patch_net], pred_embed, self.devices)
+            assert expanded_patches.shape[1] == 1, "PatchNet should output only a one-channel mask!"
 
             # Some logs:
             log_image("ptc_trg_l{}".format(nb_patch_net), patch_targets)
-            log_image("ptc_pred_l{}".format(nb_patch_net), pred_patches)
+            log_image("ptc_pred_l{}".format(nb_patch_net), expanded_patches)
             # log_image("ptc_ign_l{}".format(nb_patch_net), patch_ignore_masks)
             log_scalar("avg_targets_l{}".format(nb_patch_net), patch_targets.float().mean())
 
             # ----------------------------
             # Apply ignore mask and compute loss:
             # ----------------------------
-            pred_patches[patch_ignore_masks] = 0
-            patch_targets[patch_ignore_masks] = 0
+            # FIXME: TEMP BUGGGG !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            # expanded_patches[patch_ignore_masks] = 0
+            # patch_targets[patch_ignore_masks] = 0
             with warnings.catch_warnings(record=True) as w:
-                loss_unet = data_parallel(self.loss, (pred_patches, patch_targets.float()), self.devices).mean()
+                loss_unet = data_parallel(self.loss, (expanded_patches, patch_targets.float()), self.devices).mean()
 
-            loss += loss_unet
+            loss = loss + loss_unet
             log_scalar("loss_l{}".format(nb_patch_net), loss_unet)
-            log_scalar("nb_patches_l{}".format(nb_patch_net), pred_patches.shape[0])
+            log_scalar("nb_patches_l{}".format(nb_patch_net), expanded_patches.shape[0])
 
         return loss
 
@@ -731,6 +736,10 @@ class PatchLoss(nn.Module):
 
             if valid_batch_indices.shape[0] == 0:
                 continue
+
+
+            print(valid_batch_indices.shape)
+
 
             # Downscale masks:
             # dw_slice = (slice(None), slice(None)) + tuple(slice(None,None,dw_fct) for dw_fct in patch_scale_fct)
