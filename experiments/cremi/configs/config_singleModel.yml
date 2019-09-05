@@ -91,7 +91,7 @@ loaders:
     slicing_config:
       # Sliding window size
       window_size:
-        A: &shape [16, 432, 432]
+        A: &shape [17, 432, 432]
         B: *shape
         C: *shape
       # Sliding window stride
@@ -164,9 +164,7 @@ loaders:
 
 model:
   embeddingutils.models.unet.GeneralizedStackedPyramidUNet3D:
-#    load_stacked_models_from:
-#      0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack0/checkpoint.pytorch"
-#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/refinedStackedModels_trainStack1b/checkpoint.pytorch"
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/newSingleUNet/checkpoint.pytorch"
     nb_stacked: 1 # Number of stacked models
     # If only model 1 is trained, then model 0 is run in inference mode. Atm there is no backprop between models:
     models_to_train: [0]
@@ -206,7 +204,7 @@ model:
           - [True]
           - [True]
           - [True]
-        decoder_fmaps: [128, 128, 128, 288, 512, 512]
+        decoder_fmaps: [128, 128, 144, 288, 512, 512]
       0:
         in_channels: 1
         encoder_fmaps: [16, 48, 144, 288, 512]
@@ -219,29 +217,30 @@ model:
             latent_variable_size: 128
             feature_maps: 16
             downscaling_factor: [1, 1, 1] # Inside patchNet, to reduce memory
-            downscale_and_crop_target:
-              ds_factor: [1, 1, 1]
-              crop_factor: [1, 1, 1]
-              crop_slice: "2:-2, 100:-100, 100:-100"
+#            downscale_and_crop_target:
+#              ds_factor: [1, 1, 1]
+#              crop_factor: [1, 1, 1]
+#              crop_slice: "2:-2, 100:-100, 100:-100"
           0:
             depth_level: 0
             patch_size: [7,19,19]
             patch_dws_fact: [1, 4, 4]
             patch_stride: [2, 36, 36]
-            crop_targets: [[0,0], [0, 0], [0, 0]] # I don't need to crop as much as the prediction, because anyway there is the padding of the patches at the borders..
+#            crop_targets: [[0,0], [0, 0], [0, 0]] # I don't need to crop as much as the prediction, because anyway there is the padding of the patches at the borders..
             pred_dws_fact: [1, 1, 1]
-            max_random_crop: [0, 15, 15]
+#            max_random_crop: [0, 0, 0] # [1, 15, 15]
+            max_random_crop: [1, 15, 15]
             # Exclude a patch from training if the center does contain more than one gt label:
-            central_shape: [1, 5, 5]
-#          1:
-#            depth_level: 0
-#            central_shape: [1, 3, 3]
-#            patch_size: [7,19,19]
-#            patch_dws_fact: [1, 2, 2]
-#            patch_stride: [2, 18, 18]
+            central_shape: [1, 3, 3]
+          1:
+            depth_level: 0
+            central_shape: [1, 3, 3]
+            patch_size: [7,19,19]
+            patch_dws_fact: [1, 2, 2]
+            patch_stride: [2, 18, 18]
 #            crop_targets: [[0,0], [19, 19], [19, 19]] # I don't need to crop as much as the prediction, because anyway there is the padding of the patches at the borders..
-#            pred_dws_fact: [1, 1, 1]
-#            max_random_crop: [1, 10, 10]
+            pred_dws_fact: [1, 1, 1]
+            max_random_crop: [1, 10, 10]
 
 
 #autoencoder:
@@ -314,18 +313,18 @@ trainer:
 
 firelight:
 #  TODO: normal visualizer
-  stackedModels:
+  pcaEmbeddings:
     ImageGridVisualizer:
 
       input_mapping:
-        global: [B: 0] # the mapping specified in 'global' is applied to all keys
+        global: [B: ":"] # the mapping specified in 'global' is applied to all keys
 
       pad_width: 1  # width of the border between images in pixels
       pad_value: .2  # intensity of the border pixels
       upsampling_factor: 2  # the whole grid is upsampled by this factor
 
-      row_specs: ['H', 'S', 'B', 'V']
-      column_specs: ['W', 'C', 'D']
+      row_specs: ['H', 'S', 'V']
+      column_specs: ['W', 'C', 'D', 'B',]
 
       # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
       visualizers:
@@ -346,6 +345,30 @@ firelight:
 #            input: ['prev_output', W: "30:-30", H: "30:-30", D: "3:-3"]
 #        - PcaVisualizer:
 #            input: ['prediction', index: 1, ]
+
+  modelInputs:
+    ImageGridVisualizer:
+
+      input_mapping:
+        global: [B: ":"] # the mapping specified in 'global' is applied to all keys
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 1  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'B', 'V']
+      column_specs: ['W', 'C', 'D']
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+#        # visualize raw input
+        - IdentityVisualizer:
+            input: ['inputs', index: 0, D: "5:-5"]
+            cmap: gray
+        - SegmentationVisualizer:
+            input: ['target', index: 0, C: 0, D: "5:-5"]
+            background_label: 0
 
 ###  TODO: debug first output visualizer
 #  stackedModels:
@@ -437,14 +460,14 @@ firelight:
             input: ['ptc_pred_l0']
             cmap: gray
             value_range: [0,1]
-#        - IdentityVisualizer:
-#            input: ['ptc_trg_l1']
-#            cmap: gray
-#            value_range: [0,1]
-#        - IdentityVisualizer:
-#            input: ['ptc_pred_l1']
-#            cmap: gray
-#            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['ptc_trg_l1']
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['ptc_pred_l1']
+            cmap: gray
+            value_range: [0,1]
 
 ##        - IdentityVisualizer:
 ##            input: ['ptc_ign_l0']

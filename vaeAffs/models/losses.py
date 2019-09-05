@@ -278,9 +278,9 @@ class PatchBasedLoss(nn.Module):
 
             # Check if I should precrop the targets:
             gt_segm = target
-            if nb_patch_net in self.downscale_and_crop_targets:
-                gt_segm = self.downscale_and_crop_targets[nb_patch_net].apply_to_torch_tensor(target)
-            full_target_shape = gt_segm.shape[-3:]
+
+
+
 
             # Collect options from config:
             patch_shape_input = kwargs.get("patch_size")
@@ -292,14 +292,34 @@ class PatchBasedLoss(nn.Module):
             central_shape = tuple(kwargs.get("central_shape", [1,3,3]))
             max_random_crop = tuple(kwargs.get("max_random_crop", [0,5,5]))
             real_patch_shape = tuple(pt*fc for pt, fc in zip(patch_shape_input, patch_dws_fact))
+
+            full_target_shape = gt_segm.shape[-3:]
             assert all([i <= j for i, j in zip(real_patch_shape, full_target_shape)]), "Real-sized patch is too large!"
+
+
+            # ----------------------------
+            # Deduce crop size of the prediction and select target patches accordingly:
+            # ----------------------------
+            crop_slice_targets, crop_slice_prediction = get_slicing_crops(pred.shape[2:], full_target_shape, pred_dws_fact, real_patch_shape)
+            gt_segm = gt_segm[crop_slice_targets]
+            pred = pred[crop_slice_prediction]
+            full_target_shape = gt_segm.shape[-3:]
+
+            # ----------------------------
+            # Get some random prediction embeddings:
+            # ----------------------------
+            pred_strides = get_prediction_strides(pred_dws_fact, stride)
+            pred_patches, crop_slice_pred, nb_patches = extract_patches_torch_new(pred, (1, 1, 1), stride=pred_strides,
+                                                           max_random_crop=max_random_crop)
+
+
 
             # ----------------------------
             # Collect gt_segm patches and corresponding center labels:
             # ----------------------------
-            gt_patches, crop_slice_targets, nb_patches = extract_patches_torch_new(gt_segm, real_patch_shape, stride=stride,
-                                  max_random_crop=max_random_crop,
-                                                                         precrop_target=precrop_target)
+            crop_slice_targets = tuple(slice(sl.start, None) for sl in crop_slice_pred)
+            gt_patches, _, _ = extract_patches_torch_new(gt_segm, real_patch_shape, stride=stride,
+                                  crop_slice=crop_slice_targets, limit_patches_to=nb_patches)
 
             # Make sure to crop some additional border and get the centers correctly:
             # TODO: this can be now easily done by cropping the gt_patches...
@@ -312,7 +332,7 @@ class PatchBasedLoss(nn.Module):
             # Ignore patches on the boundary or involving ignore-label:
             # ----------------------------
             # Ignore pixels involving ignore-labels:
-            # TODO: generalize
+            # TODO: generalize ignore_label
             ignore_masks = (gt_patches == 0)
             valid_patches = (center_labels != 0)
 
@@ -352,16 +372,6 @@ class PatchBasedLoss(nn.Module):
             # best targets for Dice loss are: meMask == 0; others == 1
             patch_targets = 1. - patch_targets
 
-            # ----------------------------
-            # Get corresponding prediction embeddings:
-            # (requires more care because prediction could be downscaled and/or cropped wrt the original targets)
-            # ----------------------------
-            crop_slice_pred, pred_strides = get_prediction_slice_crops(pred.shape[2:], full_target_shape, pred_dws_fact, stride, crop_slice_center_labels[2:])
-            crop_slice_pred = (slice(None), slice(None)) + crop_slice_pred
-
-            pred_patches, _, _ = extract_patches_torch_new(pred, (1, 1, 1), stride=pred_strides,
-                                                     crop_slice=crop_slice_pred,
-                                                    limit_patches_to=nb_patches)
 
             assert valid_batch_indices.max() < pred_patches.shape[0], "Something went wrong, more target patches were collected than predicted: {} targets vs {} pred...".format(valid_batch_indices.max(), pred_patches.shape[0])
             pred_embed = pred_patches[valid_batch_indices]
@@ -389,9 +399,9 @@ class PatchBasedLoss(nn.Module):
             # ----------------------------
             # Apply ignore mask and compute loss:
             # ----------------------------
-            # FIXME: TEMP BUGGGG !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            # expanded_patches[patch_ignore_masks] = 0
-            # patch_targets[patch_ignore_masks] = 0
+            patch_valid_masks = 1. - patch_ignore_masks.float()
+            expanded_patches = expanded_patches * patch_valid_masks
+            patch_targets = patch_targets * patch_valid_masks
             with warnings.catch_warnings(record=True) as w:
                 loss_unet = data_parallel(self.loss, (expanded_patches, patch_targets.float()), self.devices).mean()
 
@@ -402,33 +412,44 @@ class PatchBasedLoss(nn.Module):
         return loss
 
 
-def get_prediction_slice_crops(pred_shape, target_shape, pred_ds_factor, strides, crops_target_center_labels):
+def get_slicing_crops(pred_shape, target_shape, pred_ds_factor, real_patch_shape):
+    # Compute new left crops:
+    # (we do not care about the right crops, because anyway the extra patches are
+    # ignored with the option `limit_patches_to`)
+    upscaled_pred_shape = [sh*fctr for sh, fctr in zip(pred_shape, pred_ds_factor)]
+
+    shape_diff = [orig - trg for orig, trg in zip(target_shape, upscaled_pred_shape)]
+    assert all([diff >= 0 for diff in shape_diff]), "Prediction should be smaller or equal to the targets!"
+    assert all([diff % 2 == 0 for diff in shape_diff])
+    padding = [int(diff/2) for diff in shape_diff]
+
+    crop_slice_targets = [slice(None), slice(None)]
+    crop_slice_prediction = [slice(None), slice(None)]
+    for dim, pad in enumerate(padding):
+        # Consider the patch-padding:
+        real_pad = pad - int(real_patch_shape[dim]/2)
+        if real_pad > 0:
+            # We should crop targets
+            crop_slice_targets.append(slice(real_pad, -real_pad))
+            crop_slice_prediction.append(slice(None))
+        elif real_pad < 0:
+            # We should crop prediction:
+            crop_slice_targets.append(slice(-int(real_pad/pred_ds_factor[dim]), int(real_pad/pred_ds_factor[dim])))
+            crop_slice_targets.append(slice(None))
+
+    return tuple(crop_slice_targets), tuple(crop_slice_prediction)
+
+
+
+
+def get_prediction_strides(pred_ds_factor, strides):
     # Compute updated strides:
     assert all(strd % pred_fctr == 0 for strd, pred_fctr in
                zip(strides, pred_ds_factor)), "Stride {} should be divisible by downscaling factor {}".format(strides,
                                                                                                             pred_ds_factor)
     pred_strides = tuple(int(strd / pred_fctr) for strd, pred_fctr in zip(strides, pred_ds_factor))
 
-    # Compute new left crops:
-    # (we do not care about the right crops, because anyway the extra patches are
-    # ignored with the option `limit_patches_to`)
-    upscaled_pred_shape = [sh*fctr for sh, fctr in zip(pred_shape, pred_ds_factor)]
-    if any(trg!=pred for trg, pred in zip(target_shape, upscaled_pred_shape)):
-        diff = [orig - trg for orig, trg in zip(target_shape, upscaled_pred_shape)]
-        assert all([d >= 0 for d in diff]), "Something went wrong..."
-        left_crops = [int(d / 2) for d in diff]
-
-        # Now compute the updated crops:
-        assert all(orig_crop.start >= new_crop for orig_crop, new_crop in zip(crops_target_center_labels, left_crops)), "The prediction was cropped too much!"
-
-        new_crops = [orig_crop.start - new_crop for orig_crop, new_crop in zip(crops_target_center_labels, left_crops)]
-    else:
-        new_crops = [orig_crop.start for orig_crop in crops_target_center_labels]
-
-    # Even if it is not divisible, it should not be a problem because it is just an offset:
-    pred_crop_slice = tuple(slice(int(crp/pred_fctr), None) for crp, pred_fctr in zip(new_crops, pred_ds_factor))
-
-    return pred_crop_slice, pred_strides
+    return pred_strides
 
 def convert_central_shape_to_crop_slice(target_shape, central_shape):
     assert all(shp%2 == 1 for shp in central_shape), "Only odd center shape supported atm"

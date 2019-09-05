@@ -98,12 +98,12 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         return model
 
     def set_devices(self):
-        # n_gpus = torch.cuda.device_count()
-        # gpu_list = range(n_gpus)
-        # self.set("gpu_list", gpu_list)
-        # self.trainer.cuda(gpu_list)
-        self.set("gpu_list", [0])
-        self.trainer.cuda([0])
+        n_gpus = torch.cuda.device_count()
+        gpu_list = range(n_gpus)
+        self.set("gpu_list", gpu_list)
+        self.trainer.cuda(gpu_list)
+        # self.set("gpu_list", [0])
+        # self.trainer.cuda([0])
 
     def inferno_build_criterion(self):
         print("Building criterion")
@@ -135,6 +135,8 @@ if __name__ == '__main__':
 
     source_path = os.path.dirname(os.path.realpath(__file__))
     config_path = os.path.join(source_path, 'configs')
+    # from vaeAffs.utils.path_utils import get_trendytukan_drive_path
+    # experiments_path = os.path.join(get_trendytukan_drive_path(), 'projects/runs_embeddings')
     experiments_path = os.path.join(source_path, 'runs')
 
     sys.argv[1] = os.path.join(experiments_path, sys.argv[1])
