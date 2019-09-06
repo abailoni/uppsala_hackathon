@@ -72,10 +72,10 @@ class CremiDataset(ZipReject):
         self.segmentation_volume = SegmentationVolume(name=name,
                                                       **segmentation_volume_kwargs)
 
-        rejection_threshold = volume_config.get('rejection_threshold', 0.92)
+        rejection_threshold = volume_config.get('rejection_threshold', 0.5)
         super().__init__(self.raw_volume, self.segmentation_volume,
                          sync=True, rejection_dataset_indices=1,
-                         rejection_criterion=RejectSingleLabelVolumes(1.0, 0.5))
+                         rejection_criterion=RejectSingleLabelVolumes(1.0, rejection_threshold))
         # Set master config (for transforms)
         self.master_config = {} if master_config is None else deepcopy(master_config)
         # Get transforms

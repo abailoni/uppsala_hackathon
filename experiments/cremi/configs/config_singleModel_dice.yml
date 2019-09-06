@@ -65,6 +65,36 @@ loaders:
 #          crop_factor: [1, 2, 2]
 #          crop_slice: "3:-3, : , :"
 
+      affinity_config:
+        global:
+          retain_mask: True # This keep a mask of the valid affinities (not involving the ignore-label)
+          retain_segmentation: False # This keeps the label image in the inputs
+          ignore_label: 0
+        0:
+          offsets:
+            # Short-ranges:
+            - [0, -2, 0]
+            - [0, 0, -2]
+            # Mid-ranges:
+            - [0, -9, 0]
+            - [0, 0, -9]
+            - [0, -9, -9]
+            - [0, 9, -9]
+            - [0, -18, 0]
+            - [0, 0, -18]
+            - [0, -18, -18]
+            - [0, 18, -18]
+            # Long-ranges:
+            - [0, -27, 0]
+            - [0, 0, -27]
+            - [0, -27, -27]
+            - [0, 27, -27]
+            # 3D offsets:
+            - [-1, 0, 0]
+            - [-2, 0, 0]
+            - [-3, 0, 0]
+            - [-4, 0, 0]
+
 
     # Specify configuration for the loader
     loader_config:
@@ -183,7 +213,7 @@ model:
         upsampling_mode: 'nearest'
         stop_decoder_at_depth: 0
         pyramid_fmaps: 128
-        output_fmaps: 128
+        output_fmaps: 18
         scale_factor:
           - [1, 3, 3]
           - [1, 3, 3]
@@ -205,6 +235,7 @@ model:
           - [True]
           - [True]
         decoder_fmaps: [128, 128, 144, 288, 512, 512]
+        add_embedding_heads: True
       0:
         in_channels: 1
         encoder_fmaps: [16, 48, 144, 288, 512]
@@ -255,7 +286,7 @@ trainer:
   num_targets: 1
 
   criterion:
-    loss_name: "vaeAffs.models.losses.PatchBasedLoss"
+    loss_name: "vaeAffs.models.losses.StackedAffinityLoss"
     kwargs:
       loss_type: "Dice" # "MSE"
 
@@ -312,39 +343,48 @@ trainer:
 
 
 firelight:
-#  TODO: normal visualizer
-  pcaEmbeddings:
+  affinities:
     ImageGridVisualizer:
 
       input_mapping:
-        global: [B: ":"] # the mapping specified in 'global' is applied to all keys
+        global: [B: 0] # the mapping specified in 'global' is applied to all keys
 
       pad_width: 1  # width of the border between images in pixels
       pad_value: .2  # intensity of the border pixels
-      upsampling_factor: 2  # the whole grid is upsampled by this factor
+      upsampling_factor: 1  # the whole grid is upsampled by this factor
 
-      row_specs: ['H', 'S', 'V']
-      column_specs: ['W', 'C', 'D', 'B',]
+      row_specs: ['H', 'S', 'B', 'V']
+      column_specs: ['W', 'C', 'D']
 
       # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
       visualizers:
 
-#        # visualize raw input
-        - SegmentationVisualizer:
-            input: ['target', index: 0, C: 0, W: "138:-138", H: "138:-138", D: "5:-5"]
-            background_label: 0
-#        - IdentityVisualizer:
-#            input: ['prediction', index: 0, B: 0, D: "1:6", C: 0]
-#            cmap: gray
+##        # visualize raw input
+##        - IdentityVisualizer:
+##            input: ['prediction', index: 0, B: 0, D: "1:6", C: 0]
+##            cmap: gray
         - IdentityVisualizer:
             input: ['inputs', index: 0, W: "138:-138", H: "138:-138", D: "5:-5"]
             cmap: gray
-        - PcaVisualizer:
-            input: ['prediction', index: 0,]
-#        - PcaVisualizer:
-#            input: ['prev_output', W: "30:-30", H: "30:-30", D: "3:-3"]
-#        - PcaVisualizer:
-#            input: ['prediction', index: 1, ]
+        - SegmentationVisualizer:
+            input: ['target', index: 0, C: 0, W: "138:-138", H: "138:-138", D: "5:-5"]
+            background_label: 0
+        - IdentityVisualizer:
+            input: ['prediction', index: 0, C: 0 ]
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['prediction', index: 0, C: 4 ]
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['prediction', index: 0, C: 9 ]
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['prediction', index: 0, C: 11 ]
+            cmap: gray
+            value_range: [0,1]
 
   modelInputs:
     ImageGridVisualizer:
@@ -370,114 +410,3 @@ firelight:
             input: ['target', index: 0, C: 0, D: "5:-5"]
             background_label: 0
 
-###  TODO: debug first output visualizer
-#  stackedModels:
-#    ImageGridVisualizer:
-#
-#      input_mapping:
-#        global: [B: 0] # the mapping specified in 'global' is applied to all keys
-#
-#      pad_width: 1  # width of the border between images in pixels
-#      pad_value: .2  # intensity of the border pixels
-#      upsampling_factor: 2  # the whole grid is upsampled by this factor
-#
-#      row_specs: ['H', 'S', 'D']
-#      column_specs: ['W', 'C', 'B', 'V']
-#
-#      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
-#      visualizers:
-#
-##        # visualize raw input
-##        # visualize raw input
-#        - SegmentationVisualizer:
-#            input: ['target', C: 0, W: "::3", H: "::3", D: "3:-3"]
-#            background_label: 0
-##        - IdentityVisualizer:
-##            input: ['prediction', index: 0, B: 0, D: "1:6", C: 0]
-##            cmap: gray
-#        - IdentityVisualizer:
-#            input: ['inputs', index: 0, W: "24:-24", H: "24:-24", C: 0, D: "3:-3"]
-#            cmap: gray
-#        - PcaVisualizer:
-#            input: ['prediction', index: 0 ]
-
-#  raw_1:
-#    ImageGridVisualizer:
-#  #    input_mapping:
-#  #      global: [B: 0] # the mapping specified in 'global' is applied to all keys
-#
-#      pad_width: 1  # width of the border between images in pixels
-#      pad_value: .2  # intensity of the border pixels
-##      upsampling_factor: 2  # the whole grid is upsampled by this factor
-#
-#      row_specs: ['H', 'S', 'B']
-#      column_specs: ['W', 'C', 'D', 'V']
-#      visualizers:
-#        - IdentityVisualizer:
-#            input: ['inputs', index: 0, D: "3:-3"]
-#            cmap: gray
-#  raw_2:
-#    ImageGridVisualizer:
-#  #    input_mapping:
-#  #      global: [B: 0] # the mapping specified in 'global' is applied to all keys
-#
-#      pad_width: 1  # width of the border between images in pixels
-#      pad_value: .2  # intensity of the border pixels
-##      upsampling_factor: 2  # the whole grid is upsampled by this factor
-#
-#      row_specs: ['H', 'S', 'B']
-#      column_specs: ['W', 'C', 'D', 'V']
-#      visualizers:
-#        - IdentityVisualizer:
-#            input: ['inputs', index: 1,]
-#            cmap: gray
-#
-#  #      - IdentityVisualizer:
-#  #          input: ['inputs', index: 1, ]
-#  #          cmap: gray
-
-
-  rdmPatches:
-    ImageGridVisualizer:
-      input_mapping:
-        global: [B: ":3", D: ":"]
-
-      pad_width: 1  # width of the border between images in pixels
-      pad_value: .2  # intensity of the border pixels
-      upsampling_factor: 5  # the whole grid is upsampled by this factor
-
-      row_specs: ['H', 'S', 'D', 'C', 'B']
-      column_specs: ['W', 'V']
-
-      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
-      visualizers:
-
-        - IdentityVisualizer:
-            input: ['ptc_trg_l0']
-            cmap: gray
-            value_range: [0,1]
-        - IdentityVisualizer:
-            input: ['ptc_pred_l0']
-            cmap: gray
-            value_range: [0,1]
-        - IdentityVisualizer:
-            input: ['ptc_trg_l1']
-            cmap: gray
-            value_range: [0,1]
-        - IdentityVisualizer:
-            input: ['ptc_pred_l1']
-            cmap: gray
-            value_range: [0,1]
-
-##        - IdentityVisualizer:
-##            input: ['ptc_ign_l0']
-##            cmap: gray
-##            value_range: [0,1]
-#        - IdentityVisualizer:
-#            input: ['ptc_trg_l1']
-#            cmap: gray
-#            value_range: [0,1]
-#        - IdentityVisualizer:
-#            input: ['ptc_pred_l1']
-#            cmap: gray
-#            value_range: [0,1]
