@@ -314,12 +314,142 @@ class ComputeIoU(nn.Module):
 
 from embeddingutils.models.unet import GeneralizedStackedPyramidUNet3D
 
+
 class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
+    def __init__(self, offsets, num_IoU_workers=1,
+                 number_patchNet=0,
+                 pre_crop_pred=None,
+                 patch_size_per_offset=None,
+                 slicing_config=None,
+                 *super_args, **super_kwargs):
+        super(IntersectOverUnionUNet, self).__init__(*super_args, **super_kwargs)
+
+        # TODO: generalize
+        self.ptch_kwargs = [kwargs for i, kwargs in
+                                enumerate(self.collected_patchNet_kwargs) if
+                                i in self.trained_patchNets]
+        self.number_patchNet = number_patchNet
+        self.ptch_kwargs = self.ptch_kwargs[number_patchNet]
+
+        # TODO: Assert
+        self.slicing_config = slicing_config if slicing_config is not None else {}
+        self.offsets = offsets
+        if patch_size_per_offset is None:
+            patch_size_per_offset = [None for _ in range(len(offsets))]
+        else:
+            assert len(patch_size_per_offset) == len(offsets)
+        self.patch_size_per_offset = patch_size_per_offset
+        self.num_IoU_workers = num_IoU_workers
+        if pre_crop_pred is not None:
+            assert isinstance(pre_crop_pred, str)
+            pre_crop_pred = (slice(None), slice(None)) + parse_data_slice(pre_crop_pred)
+        self.pre_crop_pred = pre_crop_pred
+
+        # Deduce invalid affinity-padding from offsets (how much we should crop to get rid of invalid predictions)
+        offset_arr = np.array(self.offsets)
+        assert offset_arr.shape[1] == 3
+        padding = np.abs(offset_arr).max(axis=0)
+        self.invalid_crop = (slice(None),) + tuple(slice(pad, -pad) if pad !=0 else slice(None) for pad in padding)
+
+    def forward(self, *inputs):
+        pred = super(IntersectOverUnionUNet, self).forward(*inputs)
+
+        def make_sliding_windows(volume_shape, window_size, stride, downsampling_ratio=None):
+            from inferno.io.volumetric import volumetric_utils as vu
+            assert isinstance(volume_shape, tuple)
+            ndim = len(volume_shape)
+            if downsampling_ratio is None:
+                downsampling_ratio = [1] * ndim
+            elif isinstance(downsampling_ratio, int):
+                downsampling_ratio = [downsampling_ratio] * ndim
+            elif isinstance(downsampling_ratio, (list, tuple)):
+                # assert_(len(downsampling_ratio) == ndim, exception_type=ShapeError)
+                downsampling_ratio = list(downsampling_ratio)
+            else:
+                raise NotImplementedError
+
+            return list(vu.slidingwindowslices(shape=list(volume_shape),
+                                               ds=downsampling_ratio,
+                                               window_size=window_size,
+                                               strides=stride,
+                                               shuffle=False,
+                                               add_overhanging=True))
+
+        del inputs
+        # torch.cuda.empty_cache()
+        pred = pred[self.number_patchNet]
+        assert pred.shape[0] == 1, "Only batch == 1 is supported atm"
+
+        sliding_windows = make_sliding_windows(pred.shape[2:], **self.slicing_config)
+
+        kwargs = self.ptch_kwargs
+
+        # Collect options from config:
+        patch_shape = kwargs.get("patch_size")
+        assert all(i % 2 == 1 for i in patch_shape), "Patch should be odd"
+        patch_dws_fact = kwargs.get("patch_dws_fact", [1, 1, 1])
+        real_patch_shape = tuple(pt * fc for pt, fc in zip(patch_shape, patch_dws_fact))
+
+        # Pre-crop prediction:
+        pred = pred[self.pre_crop_pred] if self.pre_crop_pred is not None else pred
+
+        # return torch.cat((inputs[1][:,:,3:-3,75:-75, 75:-75], pred[:, :4]), dim=1)
+
+        # FIXME: here we no longer crop, so we will get invalid values
+        # # Compute crop slice after rolling:
+        # left_crop = [off if off > 0 else 0 for off in self.offset]
+        # right_crop = [sh + off if off < 0 else None for off, sh in zip(self.offset, pred.shape[2:])]
+        # crop_slice = (slice(None), slice(None)) + tuple(slice(lft, rgt) for lft, rgt in zip(left_crop, right_crop))
+
+        patches_collected = None
+
+        # Predict all patches:
+        for i, current_slice in enumerate(sliding_windows):
+            print("Iter {}".format(i))
+            full_slice = (slice(None), slice(None),) + current_slice
+            # TODO: Now this is simply doing a reshape...
+            emb_vectors, _, nb_patches = extract_patches_torch_new(pred[full_slice], shape=(1, 1, 1), stride=(1,1,1))
+            # TODO: Generalize to more models...?
+            patches = self.models[-1].patch_models[0](emb_vectors[:, :, 0, 0, 0])
+
+            # From now on we can work on the CPU (too memory consuming):
+            patches = patches.cpu().numpy()
+            patch_shape = patches.shape[2:]
+            patches = patches.reshape(*nb_patches, *patch_shape)
+
+            if patches_collected is None:
+                # Create output array with shape (volume_shape_z, ..., patch_shape_z, ...)
+                patches_collected = np.empty(pred.shape[2:] + patch_shape)
+
+            patches_collected[current_slice] = patches
+
+        # ----
+        # Roll axes and compute affinities with IoU scores:
+        # ----
+        kwargs_pool = {"stride": (1, 1, 1),
+                       "patch_dws_fact": patch_dws_fact,
+                       "patch_shape": patch_shape}
+        args_pool = zip(repeat(patches_collected), self.offsets, self.patch_size_per_offset)
+        pool = ThreadPool(processes=self.num_IoU_workers)
+        results = starmap_with_kwargs(pool, IoU_worker, args_iter=args_pool,
+                                      kwargs_iter=repeat(kwargs_pool))
+        pool.close()
+        pool.join()
+        affinities = np.stack([item[0] for item in results])
+        # valid_mask = np.stack([item[1] for item in results])
+
+        # Get rid of invalid predictions and add batch dim:
+        return np.expand_dims(affinities[self.invalid_crop], axis=0)
+
+
+
+
+class IntersectOverUnionUNetOld(GeneralizedStackedPyramidUNet3D):
     def __init__(self, offsets, stride, num_IoU_workers=1,
                  pre_crop_pred=None,
                  patch_size_per_offset=None,
                  *super_args, **super_kwargs):
-        super(IntersectOverUnionUNet, self).__init__(*super_args, **super_kwargs)
+        super(IntersectOverUnionUNetOld, self).__init__(*super_args, **super_kwargs)
 
         # TODO: generalize
         self.ptch_kwargs = [kwargs for i, kwargs in
@@ -342,7 +472,7 @@ class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
         self.pre_crop_pred = pre_crop_pred
 
     def forward(self, *inputs):
-        pred = super(IntersectOverUnionUNet, self).forward(*inputs)
+        pred = super(IntersectOverUnionUNetOld, self).forward(*inputs)
 
         # FIXME: delete again the inputs!
         del inputs
@@ -439,6 +569,8 @@ def IoU_worker(patches, offset, patch_target_size, stride, patch_dws_fact,
     assert all([offs % strd == 0 for strd, offs in zip(stride, offset)])
     roll_offset = tuple(int(offs / strd) for strd, offs in zip(stride, offset))
 
+    patch_shape = list(patch_shape) if isinstance(patch_shape, tuple) else patch_shape
+
     if not isinstance(patches, np.ndarray):
         rolled_patches = patches.roll(shifts=tuple(-offs for offs in roll_offset), dims=(0, 1, 2))
     else:
@@ -456,7 +588,7 @@ def IoU_worker(patches, offset, patch_target_size, stride, patch_dws_fact,
         crop_slice = [slice(None), slice(None), slice(None)]
         patch_shape = deepcopy(patch_shape)
         for dim in range(3):
-            if patch_target_size[dim] == 0:
+            if patch_target_size[dim] == 0 or patch_target_size[dim] == patch_shape[dim]:
                 crop_slice.append(slice(None))
             else:
                 pad = int((patch_shape[dim] - patch_target_size[dim]) / 2)

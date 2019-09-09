@@ -1,7 +1,7 @@
 from copy import deepcopy
 
 from inferno.io.core import ZipReject, Concatenate
-from inferno.io.transform import Compose
+from inferno.io.transform import Compose, Transform
 from inferno.io.transform.generic import AsTorchBatch
 from inferno.io.transform.volume import RandomFlip3D, VolumeAsymmetricCrop
 from inferno.io.transform.image import RandomRotate, ElasticTransform
@@ -130,6 +130,7 @@ class CremiDataset(ZipReject):
             global_kwargs = affs_config.pop("global", {})
             # TODO: define computed affs not in this way, but with a variable in config...
             nb_affs = len(affs_config)
+            num_inputs = 1
             assert nb_affs == num_inputs
             # all_affs_kwargs = [deepcopy(global_kwargs) for _ in range(nb_affs)]
             for input_index in affs_config:
@@ -200,6 +201,25 @@ class CremiDatasets(Concatenate):
                    slicing_config=slicing_config, master_config=master_config)
 
 
+class CheckBatchAndChannelDim(Transform):
+    def __init__(self, dimensionality, *super_args, **super_kwargs):
+        super(CheckBatchAndChannelDim, self).__init__(*super_args, **super_kwargs)
+        self.dimensionality = dimensionality
+
+    def batch_function(self, batch):
+        output_batch = []
+        for tensor in batch:
+            if tensor.ndimension() == self.dimensionality:
+                output_batch.append(tensor.unsqueeze(0).unsqueeze(0))
+            elif tensor.ndimension() == self.dimensionality + 1:
+                output_batch.append(tensor.unsqueeze(0))
+            elif tensor.ndimension() == self.dimensionality + 2:
+                output_batch.append(tensor)
+            else:
+                raise ValueError
+        return tuple(output_batch)
+
+
 class CremiDatasetInference(RawVolume):
     def __init__(self, master_config, **super_kwargs):
         super(CremiDatasetInference, self).__init__(return_index_spec=True,
@@ -209,6 +229,7 @@ class CremiDatasetInference(RawVolume):
     def get_additional_transforms(self, master_config):
         transforms = self.transforms if self.transforms is not None else Compose()
 
+        master_config = {} if master_config is None else master_config
         # TODO: somehow merge with the trainer loader...
 
         # Replicate and downscale batch:
@@ -250,7 +271,9 @@ class CremiDatasetInference(RawVolume):
             # computation being warped into the FOV.
             transforms.add(VolumeAsymmetricCrop(**crop_config))
 
-        transforms.add(AsTorchBatch(3))
+        transforms.add(AsTorchBatch(3, add_channel_axis_if_necessary=True))
+
+        transforms.add(CheckBatchAndChannelDim(3))
 
         return transforms
 

@@ -199,8 +199,8 @@ class StackedAffinityLoss(nn.Module):
         else:
             mdl_to_train = self.model_kwargs["models_to_train"]
         assert len(mdl_to_train) == 1
-        trg_index = mdl_to_train[0]
-        targets = auto_crop_tensor_to_shape(targets[trg_index], predictions.shape,
+        # trg_index = mdl_to_train[0]
+        targets = auto_crop_tensor_to_shape(targets, predictions.shape,
                                             ignore_channel_and_batch_dims=True)
         assert targets.shape[1] % 2 == 0, "I should have both affinities and masks"
 
@@ -266,7 +266,6 @@ class PatchBasedLoss(nn.Module):
         nb_preds = len(all_predictions)
         assert len(ptch_kwargs) == nb_preds
 
-
         # Collect loss from some random patches:
         loss = 0
         for nb_patch_net in range(nb_preds):
@@ -275,7 +274,7 @@ class PatchBasedLoss(nn.Module):
             # ----------------------------
             pred = all_predictions[nb_patch_net]
             kwargs = ptch_kwargs[nb_patch_net]
-
+            # print(pred.shape)
             # Check if I should precrop the targets:
             gt_segm = target
 
