@@ -20,7 +20,6 @@ import numpy as np
 
 from neurofire.criteria.loss_transforms import InvertTarget
 
-
 class RejectSingleLabelVolumes(object):
     def __init__(self, threshold, threshold_zero_label=1.):
         """
@@ -99,11 +98,12 @@ class CremiDataset(ZipReject):
                                                 order=elastic_transform_config.get('order', 0)))
 
         # random slide augmentation
-        if self.master_config.get('random_slides', False):
+        if self.master_config.get('random_slides') is not None:
             # TODO slide probability
-            ouput_shape = self.master_config.get('shape_after_slide', None)
-            max_misalign = self.master_config.get('max_misalign', None)
-            transforms.add(RandomSlide(output_image_size=ouput_shape, max_misalign=max_misalign))
+            random_slides_config = deepcopy(self.master_config.get('random_slides'))
+            ouput_shape = random_slides_config.pop('shape_after_slide', None)
+            max_misalign = random_slides_config.pop('max_misalign', None)
+            transforms.add(RandomSlide(output_image_size=ouput_shape, max_misalign=max_misalign,**random_slides_config))
 
         # Replicate and downscale batch:
         input_indices, target_indices = [0], [1]
@@ -273,7 +273,7 @@ class CremiDatasetInference(RawVolume):
 
         transforms.add(AsTorchBatch(3, add_channel_axis_if_necessary=True))
 
-        transforms.add(CheckBatchAndChannelDim(3))
+        # transforms.add(CheckBatchAndChannelDim(3))
 
         return transforms
 

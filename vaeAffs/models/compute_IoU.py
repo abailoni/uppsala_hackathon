@@ -321,6 +321,7 @@ class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
                  pre_crop_pred=None,
                  patch_size_per_offset=None,
                  slicing_config=None,
+                 IoU_on_GPU=False,
                  *super_args, **super_kwargs):
         super(IntersectOverUnionUNet, self).__init__(*super_args, **super_kwargs)
 
@@ -331,8 +332,12 @@ class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
         self.number_patchNet = number_patchNet
         self.ptch_kwargs = self.ptch_kwargs[number_patchNet]
 
+        assert 'window_size' in slicing_config and slicing_config is not None
+        slicing_config['stride'] = slicing_config['window_size']
+        self.slicing_config = slicing_config
+
         # TODO: Assert
-        self.slicing_config = slicing_config if slicing_config is not None else {}
+        self.IoU_on_GPU = IoU_on_GPU
         self.offsets = offsets
         if patch_size_per_offset is None:
             patch_size_per_offset = [None for _ in range(len(offsets))]
@@ -348,8 +353,10 @@ class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
         # Deduce invalid affinity-padding from offsets (how much we should crop to get rid of invalid predictions)
         offset_arr = np.array(self.offsets)
         assert offset_arr.shape[1] == 3
-        padding = np.abs(offset_arr).max(axis=0)
-        self.invalid_crop = (slice(None),) + tuple(slice(pad, -pad) if pad !=0 else slice(None) for pad in padding)
+        padding_left = np.abs(np.minimum(offset_arr, 0)).max(axis=0)
+        padding_right = np.abs(np.maximum(offset_arr, 0)).max(axis=0)
+        self.final_asym_crop_pred = [[lft, rgt] for lft, rgt in zip(padding_left, padding_right)]
+        # self.invalid_crop = (slice(None),) + tuple(slice(pad, -pad) if pad !=0 else slice(None) for pad in padding)
 
     def forward(self, *inputs):
         pred = super(IntersectOverUnionUNet, self).forward(*inputs)
@@ -380,6 +387,9 @@ class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
         pred = pred[self.number_patchNet]
         assert pred.shape[0] == 1, "Only batch == 1 is supported atm"
 
+        device = pred.get_device()
+
+
         sliding_windows = make_sliding_windows(pred.shape[2:], **self.slicing_config)
 
         kwargs = self.ptch_kwargs
@@ -401,27 +411,50 @@ class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
         # right_crop = [sh + off if off < 0 else None for off, sh in zip(self.offset, pred.shape[2:])]
         # crop_slice = (slice(None), slice(None)) + tuple(slice(lft, rgt) for lft, rgt in zip(left_crop, right_crop))
 
+        # if self.IoU_on_GPU:
+        #     initial_shape = pred.shape
+        #     pred = pred.reshape(*initial_shape[:2], -1) # Compress spatial dimensions
+        #     pred = pred.permute(0,2,1)
+        #     pred = pred.reshape(-1, initial_shape[1]) # Put them in the batch dimension
+        #
+        #     # Predict patches:
+        #     pred = self.models[-1].patch_models[self.number_patchNet](pred)
+        #     # Reshape:
+        #     pred = pred.view(*initial_shape[-3:], *patch_shape)
+        # else:
         patches_collected = None
+        # print("Initial shape:", pred.shape)
 
         # Predict all patches:
+        # print("Sliding windows: ", len(sliding_windows))
         for i, current_slice in enumerate(sliding_windows):
-            print("Iter {}".format(i))
+            # print("Iter {}".format(i))
             full_slice = (slice(None), slice(None),) + current_slice
             # TODO: Now this is simply doing a reshape...
+            # print("Prima: ", pred[full_slice].shape)
             emb_vectors, _, nb_patches = extract_patches_torch_new(pred[full_slice], shape=(1, 1, 1), stride=(1,1,1))
+            # print("Dopo: ", emb_vectors.shape)
             # TODO: Generalize to more models...?
-            patches = self.models[-1].patch_models[0](emb_vectors[:, :, 0, 0, 0])
+            patches = self.models[-1].patch_models[self.number_patchNet](emb_vectors[:, :, 0, 0, 0])
 
             # From now on we can work on the CPU (too memory consuming):
-            patches = patches.cpu().numpy()
             patch_shape = patches.shape[2:]
-            patches = patches.reshape(*nb_patches, *patch_shape)
+            if not self.IoU_on_GPU:
+                patches = patches.cpu().numpy()
+                patches = patches.reshape(*nb_patches, *patch_shape)
+            else:
+                patches = patches.view(*nb_patches, *patch_shape)
+
 
             if patches_collected is None:
                 # Create output array with shape (volume_shape_z, ..., patch_shape_z, ...)
-                patches_collected = np.empty(pred.shape[2:] + patch_shape)
+                if self.IoU_on_GPU:
+                    patches_collected = torch.zeros(pred.shape[2:] + patch_shape).cuda(patches.get_device())
+                else:
+                    patches_collected = np.empty(pred.shape[2:] + patch_shape)
 
             patches_collected[current_slice] = patches
+        pred = patches_collected
 
         # ----
         # Roll axes and compute affinities with IoU scores:
@@ -429,17 +462,20 @@ class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
         kwargs_pool = {"stride": (1, 1, 1),
                        "patch_dws_fact": patch_dws_fact,
                        "patch_shape": patch_shape}
-        args_pool = zip(repeat(patches_collected), self.offsets, self.patch_size_per_offset)
+        args_pool = zip(repeat(pred), self.offsets, self.patch_size_per_offset)
         pool = ThreadPool(processes=self.num_IoU_workers)
         results = starmap_with_kwargs(pool, IoU_worker, args_iter=args_pool,
                                       kwargs_iter=repeat(kwargs_pool))
         pool.close()
         pool.join()
-        affinities = np.stack([item[0] for item in results])
-        # valid_mask = np.stack([item[1] for item in results])
+        if self.IoU_on_GPU:
+            return torch.stack([item[0] for item in results]).unsqueeze(0)
+        else:
+            affinities = np.stack([item[0] for item in results])
+            # Get rid of invalid predictions and add batch dim:
+            # valid_mask = np.stack([item[1] for item in results])
+            return torch.from_numpy(np.expand_dims(affinities, axis=0)).cuda(device)
 
-        # Get rid of invalid predictions and add batch dim:
-        return np.expand_dims(affinities[self.invalid_crop], axis=0)
 
 
 
@@ -594,6 +630,7 @@ def IoU_worker(patches, offset, patch_target_size, stride, patch_dws_fact,
                 pad = int((patch_shape[dim] - patch_target_size[dim]) / 2)
                 crop_slice.append(slice(pad,-pad))
                 patch_shape[dim] = patch_target_size[dim]
+        crop_slice = tuple(crop_slice)
         patches = patches[crop_slice]
         rolled_patches = rolled_patches[crop_slice]
 
