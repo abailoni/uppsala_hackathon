@@ -11,8 +11,9 @@ def get_abailoni_hci_home_path():
             return '/net/hciserver03/storage/abailoni/'
         elif hostname == 'ialgpu01' or hostname == 'birdperson' or hostname == 'sirherny':
             return '/home/abailoni/local_copy_home/'
-        elif hostname == 'sfb1129gpu01':
-            return '/net/hcihome/storage/abailoni/ial_local_home/'
+            # return '/home/abailoni/hci_home/'
+        # elif hostname == 'sfb1129gpu01':
+        #     return '/net/hcihome/storage/abailoni/ial_local_home/'
         elif hostname == 'quadxeon5':
             return '/srv/scratch/abailoni'
         else:

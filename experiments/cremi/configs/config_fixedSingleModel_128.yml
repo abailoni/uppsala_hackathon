@@ -16,12 +16,13 @@ loaders:
 
 
     defect_augmentation_config:
+        max_contiguous_defected_slices: 2
         p_missing_slice: 0.03
         p_low_contrast: 0.03
         p_deformed_slice: 0.03
         p_artifact_source: 0.03
         deformation_mode: 'compress'
-        deformation_strength: 16
+        deformation_strength: 26
         artifact_source:
             min_masking_ratio: .5
             slicing_config:
@@ -49,8 +50,11 @@ loaders:
         alpha: 2000.
         sigma: 50.
         order: 0
-      random_slides: False
-      shape_after_slide: [85, 87]   #change to x, y of window size
+#      random_slides:
+#        shape_after_slide: [405, 405]   #change to x, y of window size
+##        max_misalign: [30, 30]   #change to x, y of window size
+#        shift_vs_slide_proba: 1.
+#        apply_proba: 1.
 
       random_flip: True
 
@@ -85,7 +89,6 @@ loaders:
       - A
       - B
       - C
-
 
     # Specify how the data needs to be sliced before feeding to the network.
     # We use a 3D sliding window over the dataset to extract patches, which
@@ -167,7 +170,7 @@ loaders:
 model:
   embeddingutils.models.unet.GeneralizedStackedPyramidUNet3D:
 #    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/newSingleUNet_b/checkpoint.pytorch"
-    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/fixedSingleModel_128/checkpoint.pytorch"
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/fixedSingleModel_128_b/checkpoint.pytorch"
     nb_stacked: 1 # Number of stacked models
     # If only model 1 is trained, then model 0 is run in inference mode. Atm there is no backprop between models:
     models_to_train: [0]
@@ -370,10 +373,10 @@ firelight:
 
 #        # visualize raw input
         - IdentityVisualizer:
-            input: ['inputs', index: 0, D: "6:-6"]
+            input: ['inputs', index: 0, D: ":"]
             cmap: gray
         - SegmentationVisualizer:
-            input: ['target', index: 0, C: 0, D: "6:-6"]
+            input: ['target', index: 0, C: 0, D: ":"]
             background_label: 0
 
 ###  TODO: debug first output visualizer

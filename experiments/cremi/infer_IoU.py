@@ -53,7 +53,7 @@ class BaseCremiExperiment(BaseExperiment, AffinityInferenceMixin):
 
         self.set_devices()
 
-        self.build_infer_loader()
+        # self.build_infer_loader()
         self.model_class = list(self.get('model').keys())[0]
 
 
@@ -77,18 +77,16 @@ class BaseCremiExperiment(BaseExperiment, AffinityInferenceMixin):
                 mdl_state_dict = torch.load(stck_mdl_path)["_model"].models[mdl].state_dict()
                 model.models[mdl].load_state_dict(mdl_state_dict)
 
-
         return model
 
     def set_devices(self):
-        # n_gpus = torch.cuda.device_count()
-        # gpu_list = range(n_gpus)
-        # self.set("gpu_list", gpu_list)
-        # self.trainer.cuda(gpu_list)
-        # print("GPU:",gpu_list)
-        #
-        self.set("gpu_list", [0])
-        self.trainer.cuda([0])
+        n_gpus = torch.cuda.device_count()
+        gpu_list = range(n_gpus)
+        self.set("gpu_list", gpu_list)
+        self.trainer.cuda(gpu_list)
+        print("GPU:",gpu_list)
+        # self.set("gpu_list", [0])
+        # self.trainer.cuda([0])
 
     def inferno_build_criterion(self):
         print("Building criterion")
@@ -124,9 +122,6 @@ class BaseCremiExperiment(BaseExperiment, AffinityInferenceMixin):
         kwargs = deepcopy(self.get('loaders/infer'))
         # kwargs["volume_config"]["scaling_factors"] = scaling_factors
         loader = get_cremi_loader(kwargs)
-        self.set("full_volume_infer_shape", loader.dataset.volume.shape)
-        self.set("inference/global_padding", loader.dataset.padding)
-        self.set("inference/global_ds_ratio", loader.dataset.downsampling_ratio)
 
         return loader
 
@@ -137,8 +132,10 @@ class BaseCremiExperiment(BaseExperiment, AffinityInferenceMixin):
         from segmfriends.utils.various import check_dir_and_create
         dir_path = os.path.join(get_trendytukan_drive_path(), "projects/pixel_embeddings", self.get("name_experiment", default="generic_experiment"))
         check_dir_and_create(dir_path)
-        with h5py.File(os.path.join(dir_path, "predictions_sample_{}.h5".format(self.get("loaders/infer/name"))), 'w') as f:
+        filename = os.path.join(dir_path, "predictions_sample_{}.h5".format(self.get("loaders/infer/name")))
+        with h5py.File(filename, 'w') as f:
             f.create_dataset('data', data=output.astype(np.float16), compression='gzip')
+            print("Saved to ", filename)
 
 if __name__ == '__main__':
     print(sys.argv[1])
