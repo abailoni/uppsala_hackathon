@@ -8,7 +8,7 @@ def get_abailoni_hci_home_path():
     hostname = socket.gethostname()
     if username == 'abailoni':
         if hostname == 'trendytukan':
-            return '/net/hciserver03/storage/abailoni/'
+            return '/net/hcihome/storage/abailoni/'
         elif hostname == 'ialgpu01' or hostname == 'birdperson' or hostname == 'sirherny':
             return '/home/abailoni/local_copy_home/'
             # return '/home/abailoni/hci_home/'
@@ -19,7 +19,10 @@ def get_abailoni_hci_home_path():
         else:
             return '/net/hcihome/storage/abailoni/'
     elif hostname == 'trendytukan' and username == 'abailoni_local':
-        return '/home/abailoni_local/hci_home/'
+        # return '/home/abailoni_local/hci_home/'
+        return '/home/abailoni_local/ialgpu1_local_home/'
+    elif username == 'abailoni_local' and hostname == 'fatchicken':
+        return '/home/abailoni_local/local_copy_home/'
 
 def get_trendytukan_drive_path():
     username = getpass.getuser()
@@ -29,8 +32,10 @@ def get_trendytukan_drive_path():
         return '/mnt/localdata0/abailoni/'
     elif hostname == 'trendytukan' and username == 'abailoni_local':
         return '/home/abailoni_local/trendyTukan_localdata0/'
-    elif (hostname == 'ialgpu01' or hostname == 'birdperson' or hostname == 'sirherny') and username == 'abailoni':
+    elif (hostname == 'ialgpu01' or hostname == 'birdperson' or hostname == 'sirherny') and (username == 'abailoni'):
         return '/home/abailoni/trendyTukan_drive/'
+    elif username == 'abailoni_local' and hostname == 'fatchicken':
+        return '/home/abailoni_local/trendyTukan_drive/'
     elif hostname == 'quadxeon5' and username == 'abailoni':
         return '/srv/scratch/abailoni'
     else:

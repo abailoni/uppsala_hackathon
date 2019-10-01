@@ -164,7 +164,7 @@ def auto_crop_tensor_to_shape(to_be_cropped, target_tensor_shape, return_slice=F
 
 
 class StackedAffinityLoss(nn.Module):
-    def __init__(self, model, loss_type="Dice", model_kwargs=None, devices=(0,1)):
+    def __init__(self, model, loss_type="Dice", model_kwargs=None, devices=(0,1), add_borders=False):
         super(StackedAffinityLoss, self).__init__()
         if loss_type == "Dice":
             self.loss = SorensenDiceLoss()
@@ -175,6 +175,7 @@ class StackedAffinityLoss(nn.Module):
         else:
             raise ValueError
 
+        self.add_borders = add_borders
         self.devices = devices
         self.model_kwargs = model_kwargs
         self.MSE_loss = nn.MSELoss()
@@ -202,6 +203,14 @@ class StackedAffinityLoss(nn.Module):
         # trg_index = mdl_to_train[0]
         targets = auto_crop_tensor_to_shape(targets, predictions.shape,
                                             ignore_channel_and_batch_dims=True)
+
+        if self.add_borders:
+            # print("Adding borders!")
+            assert targets.shape[1] % 2 != 0, "I should have affinities, masks and segmentation"
+            boundary_mask, ignore_label_mask = get_boundary_mask(targets[:,[0]], (1, 3, 3))
+            targets = targets[:,1:]
+            log_image("targets_plus_border", targets)
+
         assert targets.shape[1] % 2 == 0, "I should have both affinities and masks"
 
         # Get ignore-mask and affinities:
@@ -209,7 +218,12 @@ class StackedAffinityLoss(nn.Module):
         gt_affs = targets[:,:nb_channels]
         valid_pixels = targets[:,nb_channels:]
 
-        # Invert affinities for Dice loss:
+        if self.add_borders:
+            valid_pixels = valid_pixels * (1. - ignore_label_mask)
+            # Here boundary should predicted zero:
+            gt_affs = gt_affs * (1. - boundary_mask)
+
+        # Invert affinities for Dice loss: (1 boundary, 0 otherwise)
         gt_affs = 1. - gt_affs
 
         predictions = predictions*valid_pixels
@@ -268,6 +282,27 @@ class PatchBasedLoss(nn.Module):
 
         # Collect loss from some random patches:
         loss = 0
+
+        # ----------------------------
+        # Loss on boundaries:
+        # ----------------------------
+        if hasattr(self.model, 'foreground_module'):
+            # TODO: generalize size of the patch
+            cropped_gt_segm = auto_crop_tensor_to_shape(target, all_predictions[-1].shape)
+            boundary_mask, ignore_label_mask = get_boundary_mask(cropped_gt_segm, (1, 3, 3))
+            foregound_pred = data_parallel(self.model.foreground_module, (all_predictions[-1], ), self.devices)
+            foregound_pred = foregound_pred * (1. - ignore_label_mask)
+            boundary_mask = boundary_mask * (1. - ignore_label_mask)
+            with warnings.catch_warnings(record=True) as w:
+                loss_foreground = data_parallel(self.loss, (foregound_pred, boundary_mask), self.devices).mean()
+            loss = loss + loss_foreground
+            log_image("foreground_target", boundary_mask)
+            log_image("foreground_pred", foregound_pred)
+            log_scalar("loss_foreground", loss_foreground)
+
+        # ----------------------------
+        # Loss on patches:
+        # ----------------------------
         for nb_patch_net in range(nb_preds):
             # ----------------------------
             # Initializations:
@@ -277,9 +312,6 @@ class PatchBasedLoss(nn.Module):
             # print(pred.shape)
             # Check if I should precrop the targets:
             gt_segm = target
-
-
-
 
             # Collect options from config:
             patch_shape_input = kwargs.get("patch_size")
@@ -295,7 +327,6 @@ class PatchBasedLoss(nn.Module):
             full_target_shape = gt_segm.shape[-3:]
             assert all([i <= j for i, j in zip(real_patch_shape, full_target_shape)]), "Real-sized patch is too large!"
 
-
             # ----------------------------
             # Deduce crop size of the prediction and select target patches accordingly:
             # ----------------------------
@@ -310,7 +341,6 @@ class PatchBasedLoss(nn.Module):
             pred_strides = get_prediction_strides(pred_dws_fact, stride)
             pred_patches, crop_slice_pred, nb_patches = extract_patches_torch_new(pred, (1, 1, 1), stride=pred_strides,
                                                            max_random_crop=max_random_crop)
-
 
 
             # ----------------------------
@@ -338,22 +368,28 @@ class PatchBasedLoss(nn.Module):
             # Exclude a patch from training if the central region contains more than one gt label
             # (i.e. it is really close to a boundary):
             central_crop = (slice(None), slice(None)) + convert_central_shape_to_crop_slice(gt_patches.shape[-3:], central_shape)
+            # mean_central_crop_labels = gt_patches[central_crop].mean(dim=-1, keepdim=True) \
+            #     .mean(dim=-2, keepdim=True) \
+            #     .mean(dim=-3, keepdim=True)
+            # boundary_patches = mean_central_crop_labels == center_labels
             mean_central_crop_labels = gt_patches[central_crop].mean(dim=-1, keepdim=True)\
-                .mean(dim=-1, keepdim=True)\
-                .mean(dim=-1, keepdim=True)
+                .mean(dim=-2, keepdim=True)\
+                .mean(dim=-3, keepdim=True)
             valid_patches = valid_patches & (mean_central_crop_labels == center_labels)
 
             # Delete redundant patches from batch:
             valid_batch_indices = np.argwhere(valid_patches[:, 0, 0, 0, 0].cpu().detach().numpy())[:, 0]
             if valid_batch_indices.shape[0] == 0:
-                raise ValueError("ZERO patches! Delete torch cache!")
+                raise ValueError("ZERO valid patches! Delete torch cache!")
                 # continue
 
             # ----------------------------
-            # Compute the actual MeMasks targets:
+            # Compute the actual (inverted) MeMasks targets: (0 is me, 1 are the others)
+            # best targets for Dice loss (usually more me than others)
+            # moreover, during the maxPool, better shrink me mask than expanding (avoid merge predictions)
             # ----------------------------
             center_labels_repeated = center_labels.repeat(1, 1, *real_patch_shape)
-            me_masks = gt_patches == center_labels_repeated
+            me_masks = gt_patches != center_labels_repeated
 
             # Downscale MeMasks using MaxPooling (preserve narrow processes):
             if all(fctr == 1 for fctr in patch_dws_fact):
@@ -367,10 +403,11 @@ class PatchBasedLoss(nn.Module):
             patch_targets = maxpool(me_masks[valid_batch_indices].float()).float()
             patch_ignore_masks = maxpool(ignore_masks[valid_batch_indices].float()).byte()
 
+
             # Invert MeMasks:
             # best targets for Dice loss are: meMask == 0; others == 1
-            patch_targets = 1. - patch_targets
-
+            if patch_dws_fact[1] > 5:
+                patch_targets = 1. - patch_targets
 
             assert valid_batch_indices.max() < pred_patches.shape[0], "Something went wrong, more target patches were collected than predicted: {} targets vs {} pred...".format(valid_batch_indices.max(), pred_patches.shape[0])
             pred_embed = pred_patches[valid_batch_indices]
@@ -409,6 +446,34 @@ class PatchBasedLoss(nn.Module):
             log_scalar("nb_patches_l{}".format(nb_patch_net), expanded_patches.shape[0])
 
         return loss
+
+
+def get_boundary_mask(segm_tensor, kernel_size, ignore_label=0):
+    assert segm_tensor.dim() == 5
+    assert len(kernel_size) == 3
+    conv = torch.nn.functional.conv3d
+    shift_kernel = np.expand_dims(np.expand_dims(np.ones(kernel_size), axis=0), axis=0)
+    shift_kernel = torch.from_numpy(shift_kernel).cuda(segm_tensor.get_device()).float()
+    assert kernel_size == (1,3,3)
+    current_mask = conv(input=segm_tensor,
+                    weight=shift_kernel,
+                    padding=(0,1,1))
+    current_mask = current_mask / np.array(kernel_size).prod().item()
+    current_mask = (current_mask != segm_tensor).float()
+
+    ignore_mask = (segm_tensor == ignore_label).float()
+    # FIXME: generalize
+    pad = torch.nn.modules.ConstantPad3d((1, 1, 1, 1, 0, 0), 1.)
+    pooling = torch.nn.MaxPool3d(kernel_size=kernel_size,
+                                 padding=0,
+                                 stride=(1,1,1))
+    # print("1:", ignore_mask.shape)
+    ignore_mask = pad(ignore_mask)
+    # print("2:", ignore_mask.shape)
+    ignore_mask = pooling(ignore_mask)
+    # print("3:", ignore_mask.shape)
+
+    return current_mask, ignore_mask
 
 
 def get_slicing_crops(pred_shape, target_shape, pred_ds_factor, real_patch_shape):

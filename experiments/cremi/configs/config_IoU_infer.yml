@@ -19,7 +19,7 @@ loaders:
     master_config:
     volume_config:
       # Sliding window size
-      window_size: &shape [20, 405, 405]  # 288
+      window_size: &shape [17, 351, 351]  # 288
 #        A:
 #        B: *shape
 #        C: *shape
@@ -31,7 +31,7 @@ loaders:
       # Data slice to iterate over.
 #      data_slice: '70:100,200:800,200:800'
 #      data_slice: ":20, 90:, 580: 1900"
-      data_slice: ':,:,:'
+      data_slice: '8:25,:660,:1000'
 
 #      padding_mode: "constant"
 #      padding:
@@ -74,6 +74,7 @@ model:
     # EXTRA ARGS:
 #    pre_crop_pred: ":, 33:-33, 33:-33"
 #    stride: [1, 2, 2]
+    IoU_on_GPU: True
     number_patchNet: 1
     num_IoU_workers: 6
     offsets:
@@ -100,22 +101,22 @@ model:
 #       - [-3, 0, 0]
     patch_size_per_offset: # They should be even (zero means that nothing is cropped)
       - [3, 0, 0]
-      - [1, 0, 0]
-      - [1, 0, 0]
-      - [1, 0, 0]
-      - [1, 0, 0]
-      - [1, 0, 0]
-      - [1, 0, 0]
-      - [1, 0, 0]
-      - [1, 0, 0]
-      - [1, 0, 0]
-      - [1, 0, 0]
+      - [3, 0, 0]
+      - [3, 0, 0]
+      - [3, 0, 0]
+      - [3, 0, 0]
+      - [3, 0, 0]
+      - [3, 0, 0]
+      - [3, 0, 0]
+      - [3, 0, 0]
+      - [3, 0, 0]
+      - [3, 0, 0]
       - [3, 0, 0]
 #      - [0, 0, 0]
 
 
     slicing_config:
-      window_size: [2, 74, 74]
+      window_size: [1, 61, 61]
 
     loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/fixedSingleModel_128_b/checkpoint.pytorch"
     nb_stacked: 1 # Number of stacked models
