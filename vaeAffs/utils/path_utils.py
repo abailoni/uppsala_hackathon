@@ -23,6 +23,9 @@ def get_abailoni_hci_home_path():
         return '/home/abailoni_local/ialgpu1_local_home/'
     elif username == 'abailoni_local' and hostname == 'fatchicken':
         return '/home/abailoni_local/local_copy_home/'
+    elif hostname == 'sfb1129gpu02' and username == 'abailoni_tmp':
+        # return '/home/abailoni_local/hci_home/'
+        return '/home_sdb/abailoni_tmp/local_copy_home/'
 
 def get_trendytukan_drive_path():
     username = getpass.getuser()
@@ -38,6 +41,8 @@ def get_trendytukan_drive_path():
         return '/home/abailoni_local/trendyTukan_drive/'
     elif hostname == 'quadxeon5' and username == 'abailoni':
         return '/srv/scratch/abailoni'
+    elif hostname == 'sfb1129gpu02' and username == 'abailoni_tmp':
+        return '/home_sdb/abailoni_tmp/trendyTukan_drive/'
     else:
         # raise NotImplementedError("Trendytukan local drive not accessible by the current user")
         return '/net/hcihome/storage/abailoni/trendyTukan_drive/'

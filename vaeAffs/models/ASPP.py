@@ -41,7 +41,7 @@ class ASPP3D(nn.Module):
         self.conv1 = nn.Conv3d(inner_planes*(len(dilations)+1), inner_planes, 1, bias=False)
         self.bn1 = nn.GroupNorm(num_channels=inner_planes, num_groups=num_norm_groups)
         self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(0.5)
+        # self.dropout = nn.Dropout(0.5)
         self._init_weight()
 
     def forward(self, x):

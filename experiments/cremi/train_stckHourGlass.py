@@ -39,6 +39,8 @@ from vaeAffs.datasets.cremi_stackedHourGlass import get_cremi_loader
 from vaeAffs.utils.path_utils import get_source_dir
 
 
+# torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = True
 
 class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
     def __init__(self, experiment_directory=None, config=None):
@@ -64,10 +66,9 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         self.model_class = list(self.get('model').keys())[0]
 
         if self.get("loaders/general/master_config/downscale_and_crop") is not None:
-            # TODO: improve this...
-            # FIXME: bug when replicate_targets is missing...
-            ds_config = self.get("loaders/general/master_config/downscale_and_crop")
-            nb_targets = len(ds_config) - 1
+            ds_config = deepcopy(self.get("loaders/general/master_config/downscale_and_crop"))
+            repl_targets = ds_config.pop("replicate_targets", False)
+            nb_targets = len(ds_config) if repl_targets else 1
             self.set("trainer/num_targets", nb_targets)
         else:
             self.set("trainer/num_targets", 1)
@@ -98,12 +99,12 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         return model
 
     def set_devices(self):
-        n_gpus = torch.cuda.device_count()
-        gpu_list = range(n_gpus)
-        self.set("gpu_list", gpu_list)
-        self.trainer.cuda(gpu_list)
-        # self.set("gpu_list", [0])
-        # self.trainer.cuda([0])
+        # n_gpus = torch.cuda.device_count()
+        # gpu_list = range(n_gpus)
+        # self.set("gpu_list", gpu_list)
+        # self.trainer.cuda(gpu_list)
+        self.set("gpu_list", [0])
+        self.trainer.cuda([0])
 
     def inferno_build_criterion(self):
         print("Building criterion")

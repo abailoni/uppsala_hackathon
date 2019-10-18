@@ -37,6 +37,7 @@ from vaeAffs.datasets.cremi_stackedHourGlass import get_cremi_loader
 from vaeAffs.utils.path_utils import get_source_dir
 from speedrun.py_utils import create_instance
 
+torch.backends.cudnn.benchmark = True
 
 class BaseCremiExperiment(BaseExperiment, AffinityInferenceMixin):
     def __init__(self, experiment_directory=None, config=None):

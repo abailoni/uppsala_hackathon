@@ -93,7 +93,7 @@ class DownsampleAndCrop3D(Transform):
 
     def volume_function(self, volume):
         # Downscale the volume:
-        downscaled =  volume
+        downscaled = volume
         if (np.array(self.ds_factor) != 1).any():
             downscaled = zoom(volume, tuple(1./fct for fct in self.ds_factor), order=self.order)
 

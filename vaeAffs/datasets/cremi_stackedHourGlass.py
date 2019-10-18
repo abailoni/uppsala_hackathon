@@ -107,6 +107,7 @@ class CremiDataset(ZipReject):
 
         # Replicate and downscale batch:
         input_indices, target_indices = [0], [1]
+        num_inputs = 1
         if self.master_config.get("downscale_and_crop") is not None:
             ds_config = self.master_config.get("downscale_and_crop")
             replicate_targets = ds_config.pop("replicate_targets", False)
@@ -129,9 +130,9 @@ class CremiDataset(ZipReject):
             affs_config = self.master_config.get("affinity_config")
             global_kwargs = affs_config.pop("global", {})
             # TODO: define computed affs not in this way, but with a variable in config...
-            nb_affs = len(affs_config)
-            num_inputs = 1
-            assert nb_affs == num_inputs
+            # nb_affs = len(affs_config)
+            # num_inputs = 1
+            # assert nb_affs == num_inputs
             # all_affs_kwargs = [deepcopy(global_kwargs) for _ in range(nb_affs)]
             for input_index in affs_config:
                 affs_kwargs = deepcopy(global_kwargs)
