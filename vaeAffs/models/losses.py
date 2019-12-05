@@ -285,10 +285,9 @@ class PatchBasedLoss(nn.Module):
 
 
     def forward(self, all_predictions, target):
-        # # FIXME:
         # inputs = all_predictions[-2:]
         # all_predictions = all_predictions[:-2]
-        target = target[0] if isinstance(target, (list, tuple)) else target
+        # target = target[0] if isinstance(target, (list, tuple)) else target
 
         mdl_kwargs = self.model_kwargs
         ptch_kwargs = mdl_kwargs["patchNet_kwargs"]
@@ -310,9 +309,11 @@ class PatchBasedLoss(nn.Module):
             # ----------------------------
             pred = all_predictions[nb_patch_net]
             kwargs = ptch_kwargs[nb_patch_net]
-            # print(pred.shape)
-            # Check if I should precrop the targets:
-            gt_segm = target
+            if isinstance(target, (list, tuple)):
+                assert "nb_target" in kwargs, "Multiple targets passed. Target should be specified"
+                gt_segm = target[kwargs["nb_target"]]
+            else:
+                gt_segm = target
 
             # Collect options from config:
             patch_shape_input = kwargs.get("patch_size")
@@ -444,6 +445,7 @@ class PatchBasedLoss(nn.Module):
                         valid_batch_indices = np.random.choice(valid_batch_indices, int(limit*valid_batch_indices.shape[0]), replace=False)
                 if valid_batch_indices.shape[0] == 0:
                     print("ZERO valid patches at level {}!!!! Delete torch cache!".format(nb_patch_net))
+                    loss += pred_patches.sum() * 0.
                     continue
 
                 # ----------------------------

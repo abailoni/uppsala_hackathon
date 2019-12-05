@@ -28,7 +28,7 @@ class _ASPPModule3D(nn.Module):
                 m.bias.data.zero_()
 
 class ASPP3D(nn.Module):
-    def __init__(self, inplanes, inner_planes, dilations, num_norm_groups=None):
+    def __init__(self, inplanes, inner_planes, dilations, num_norm_groups=None, output_planes=None):
         super(ASPP3D, self).__init__()
 
         aspp_modules = []
@@ -38,21 +38,32 @@ class ASPP3D(nn.Module):
                                             num_norm_groups=num_norm_groups))
         self.aspp_modules = nn.ModuleList(aspp_modules)
 
-        self.conv1 = nn.Conv3d(inner_planes*(len(dilations)+1), inner_planes, 1, bias=False)
-        self.bn1 = nn.GroupNorm(num_channels=inner_planes, num_groups=num_norm_groups)
-        self.relu = nn.ReLU()
+        self.output_planes = output_planes if output_planes is not None else inner_planes
+
+        in_planes_conv1x1_1 = inner_planes*(len(dilations)+1)
+        self.conv1x1_1 = nn.Conv3d(in_planes_conv1x1_1, inner_planes, 1, bias=False)
+        self.bn_1 = nn.GroupNorm(num_channels=inner_planes, num_groups=num_norm_groups)
+        self.relu_1 = nn.ReLU()
+        self.conv1x1_2 = nn.Conv3d(inner_planes, self.output_planes, 1, bias=False)
+        self.bn_2 = nn.GroupNorm(num_channels=self.output_planes, num_groups=num_norm_groups)
+        self.relu_2 = nn.ReLU()
         # self.dropout = nn.Dropout(0.5)
         self._init_weight()
+
+        self.num_norm_groups = num_norm_groups
 
     def forward(self, x):
         intermediate = tuple(assp_module(x) for assp_module in self.aspp_modules)
         x = torch.cat(intermediate, dim=1)
 
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
+        x = self.conv1x1_1(x)
+        x = self.bn_1(x)
+        x = self.relu_1(x)
 
-        # return self.dropout(x)
+        x = self.conv1x1_2(x)
+        x = self.bn_2(x)
+        x = self.relu_2(x)
+
         return x
 
     def _init_weight(self):
