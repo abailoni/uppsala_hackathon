@@ -464,9 +464,14 @@ class PatchBasedLoss(nn.Module):
                          stride=patch_dws_fact,
                          padding=0)
 
+                # Downsclaing patch:
+                down_sc_slice = (slice(None), slice(None)) + tuple(slice(int(dws_fact/2), None, dws_fact) for dws_fact in patch_dws_fact)
+
                 # Final targets:
-                patch_targets = maxpool(me_masks[valid_batch_indices].float()).float()
-                patch_ignore_masks = maxpool(ignore_masks[valid_batch_indices].float()).byte()
+                # patch_targets = maxpool(me_masks[valid_batch_indices].float()).float()
+                # patch_ignore_masks = maxpool(ignore_masks[valid_batch_indices].float()).byte()
+                patch_targets = me_masks[valid_batch_indices].float()[down_sc_slice]
+                patch_ignore_masks = ignore_masks[valid_batch_indices][down_sc_slice].byte()
 
 
                 # Invert MeMasks:
