@@ -248,7 +248,7 @@ class StackedAffinityLoss(nn.Module):
 
 
 class PatchBasedLoss(nn.Module):
-    def __init__(self, model, loss_type="Dice", model_kwargs=None, devices=(0,1)):
+    def __init__(self, model, apply_checkerboard=False, loss_type="Dice", model_kwargs=None, devices=(0,1)):
         super(PatchBasedLoss, self).__init__()
         if loss_type == "Dice":
             self.loss = SorensenDiceLoss()
@@ -258,6 +258,8 @@ class PatchBasedLoss(nn.Module):
             self.loss = nn.BCELoss()
         else:
             raise ValueError
+
+        self.apply_checkerboard = apply_checkerboard
 
         self.devices = devices
         self.model_kwargs = model_kwargs
@@ -387,7 +389,7 @@ class PatchBasedLoss(nn.Module):
                 # ----------------------------
                 pred_strides = get_prediction_strides(pred_dws_fact, stride)
                 pred_patches, crop_slice_pred, nb_patches = extract_patches_torch_new(pred, (1, 1, 1), stride=pred_strides,
-                                                               max_random_crop=max_random_crop)
+                                                                                      max_random_crop=max_random_crop)
 
 
                 # Try to get some raw patches:
@@ -400,14 +402,14 @@ class PatchBasedLoss(nn.Module):
                 # ----------------------------
                 crop_slice_targets = tuple(slice(sl.start, None) for sl in crop_slice_pred)
                 gt_patches, _, _ = extract_patches_torch_new(gt_segm, real_patch_shape, stride=stride,
-                                      crop_slice=crop_slice_targets, limit_patches_to=nb_patches)
+                                                             crop_slice=crop_slice_targets, limit_patches_to=nb_patches)
 
                 # Make sure to crop some additional border and get the centers correctly:
                 # TODO: this can be now easily done by cropping the gt_patches...
                 crop_slice_center_labels = (slice(None), slice(None)) + tuple(slice(slc.start+int(sh/2), slc.stop) for slc, sh in zip(crop_slice_targets[2:], real_patch_shape))
                 center_labels, _, _ = extract_patches_torch_new(gt_segm, (1,1,1), stride=stride,
-                                                            crop_slice=crop_slice_center_labels,
-                                                            limit_patches_to=nb_patches)
+                                                                crop_slice=crop_slice_center_labels,
+                                                                limit_patches_to=nb_patches)
 
                 # ----------------------------
                 # Ignore patches on the boundary or involving ignore-label:
@@ -424,8 +426,8 @@ class PatchBasedLoss(nn.Module):
                 #     .mean(dim=-2, keepdim=True) \
                 #     .mean(dim=-3, keepdim=True)
                 # boundary_patches = mean_central_crop_labels == center_labels
-                mean_central_crop_labels = gt_patches[central_crop].mean(dim=-1, keepdim=True)\
-                    .mean(dim=-2, keepdim=True)\
+                mean_central_crop_labels = gt_patches[central_crop].mean(dim=-1, keepdim=True) \
+                    .mean(dim=-2, keepdim=True) \
                     .mean(dim=-3, keepdim=True)
                 if center_labels.shape[0] != gt_patches.shape[0]:
                     print(center_labels.shape, gt_patches.shape, pred_patches.shape)
@@ -461,8 +463,8 @@ class PatchBasedLoss(nn.Module):
                     maxpool = Identity()
                 else:
                     maxpool = nn.MaxPool3d(kernel_size=patch_dws_fact,
-                         stride=patch_dws_fact,
-                         padding=0)
+                                           stride=patch_dws_fact,
+                                           padding=0)
 
                 # Downsclaing patch:
                 down_sc_slice = (slice(None), slice(None)) + tuple(slice(int(dws_fact/2), None, dws_fact) for dws_fact in patch_dws_fact)
@@ -504,10 +506,36 @@ class PatchBasedLoss(nn.Module):
                     # log_image("ptc_ign_l{}".format(nb_patch_net), patch_ignore_masks)
                     log_scalar("avg_targets_l{}".format(nb_patch_net), patch_targets.float().mean())
 
+                # Train only checkerboard pattern:
+                if self.apply_checkerboard:
+                    checkerboard = np.zeros(patch_shape_input)
+                    # Verticals:
+                    center_coord = [int(sh/2) for sh in patch_shape_input]
+                    checkerboard[:,center_coord[1],:] = 1
+                    checkerboard[:,:,center_coord[2]] = 1
+                    # Two diagonals:
+                    indices = np.indices(patch_shape_input)
+                    checkerboard[indices[1] == indices[2]] = 1
+                    checkerboard[indices[1] == (patch_shape_input[2] - indices[2] - 1)] = 1
+                    # Reduce z-context:
+                    z_mask = np.zeros_like(checkerboard)
+                    z_mask[center_coord[0]] = 1
+                    for z in range(patch_shape_input[0]):
+                        offs = abs(center_coord[0]-z)
+                        if offs != 0:
+                            z_mask[z,offs:-offs, offs:-offs] = 1
+                    checkerboard[np.logical_not(z_mask)] = 0
+                    # Expand channels and wrap:
+                    checkerboard = torch.from_numpy(checkerboard).cuda(patch_ignore_masks.get_device()).float()
+                    checkerboard = checkerboard.unsqueeze(0).unsqueeze(0)
+                    checkerboard = checkerboard.repeat(*patch_ignore_masks.shape[:2], 1, 1, 1)
+
                 # ----------------------------
                 # Apply ignore mask and compute loss:
                 # ----------------------------
                 patch_valid_masks = 1. - patch_ignore_masks.float()
+                if self.apply_checkerboard:
+                    patch_valid_masks = patch_valid_masks * checkerboard
                 expanded_patches = expanded_patches * patch_valid_masks
                 patch_targets = patch_targets * patch_valid_masks
                 with warnings.catch_warnings(record=True) as w:
