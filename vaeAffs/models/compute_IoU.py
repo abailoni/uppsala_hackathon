@@ -37,12 +37,160 @@ from itertools import repeat
 from segmfriends.utils.various import starmap_with_kwargs
 
 
-
 class IoULoss(nn.Module):
+    """Used as a regularizer in the training of patch-embeddings (they should be consistent)"""
+
+    def __init__(self, model, loss_type="Dice", model_kwargs=None, devices=(0, 1),
+                 min_random_offset_orig_res=(0,3,3)):
+        super(IoULoss, self).__init__()
+
+        if loss_type == "Dice":
+            self.loss = SorensenDiceLoss()
+        elif loss_type == "MSE":
+            self.loss = nn.MSELoss()
+        elif loss_type == "BCE":
+            self.loss = nn.BCELoss()
+        else:
+            raise ValueError
+
+        self.devices = devices
+        self.model_kwargs = model_kwargs
+
+        self.model = model
+        assert isinstance(min_random_offset_orig_res, (tuple, list))
+        self.min_random_offset_orig_res = min_random_offset_orig_res if isinstance(min_random_offset_orig_res, tuple) else tuple(min_random_offset_orig_res)
+
+    def get_random_offset(self, patch_size, patch_dws_fact, size=1, min_random_offset_orig_res=None):
+        assert isinstance(size, int)
+
+        min_random_offset_orig_res = min_random_offset_orig_res if min_random_offset_orig_res is not None else self.min_random_offset_orig_res
+
+        all_real_offsets = np.array([np.arange(-int(sz/2)*dws, (int(sz/2)+1)*dws, dws) for sz, dws in zip(patch_size, patch_dws_fact)])
+        mask_allowed_offs = np.array([abs(all_real_offsets[i]) >= min for i, min in enumerate(min_random_offset_orig_res)])
+        random_offs = [[np.random.choice(all_real_offsets[i][mask_allowed_offs[i]].flatten()).item() for i in range(3)] for _ in range(size)]
+
+        return random_offs
+
+    def forward(self, all_predictions, all_targets):
+        mdl_kwargs = self.model_kwargs
+        ptch_kwargs = mdl_kwargs["patchNet_kwargs"]
+        nb_preds = len(all_predictions)
+
+        loss = 0
+
+        for nb_patch_net, pred in enumerate(all_predictions):
+            kwargs = ptch_kwargs[nb_patch_net]
+
+            if "IoU_kwargs" not in kwargs:
+                continue
+
+            IoU_kwargs = kwargs["IoU_kwargs"]
+
+            # Collect options from config:
+            patch_shape = kwargs.get("patch_size")
+            assert all(i % 2 ==  1 for i in patch_shape), "Patch should be odd"
+            patch_dws_fact = kwargs.get("patch_dws_fact", [1,1,1])
+            pred_dws_fact = kwargs.get("pred_dws_fact", [1,1,1])
+
+            # Process prediction and target:
+            if isinstance(all_targets, (list, tuple)):
+                assert "nb_target" in kwargs, "Multiple targets passed. Target should be specified"
+                gt_segm = all_targets[kwargs["nb_target"]]
+            else:
+                gt_segm = all_targets
+
+            precrop_pred = kwargs.get("precrop_pred", None)
+            from segmfriends.utils.various import parse_data_slice
+            if precrop_pred is not None:
+                precrop_pred_slice = (slice(None), slice(None)) + parse_data_slice(precrop_pred)
+            else:
+                precrop_pred_slice = slice(None)
+            processed_pred = pred[precrop_pred_slice]
+
+            crop_slice_targets, crop_slice_prediction = get_slicing_crops(processed_pred.shape, gt_segm.shape, pred_dws_fact)
+            processed_pred = processed_pred[crop_slice_prediction]
+            processed_gt_segm = gt_segm[crop_slice_targets]
+            dws_crop_slice = (slice(None), slice(None)) + tuple(slice(None, None, dws) for dws in pred_dws_fact)
+            processed_gt_segm = processed_gt_segm[dws_crop_slice]
+
+            # Get random offset:
+            nb_random_IoU = IoU_kwargs.get("nb_random_IoU", 1)
+            min_random_offset_orig_res = IoU_kwargs.get("min_random_offset", None)
+
+            # TODO: we could be on a boundary...
+            random_offsets = self.get_random_offset(patch_shape, patch_dws_fact, size=nb_random_IoU,
+                                                    min_random_offset_orig_res=min_random_offset_orig_res)
+
+
+            for offs in random_offsets:
+                assert all([of%dws == 0 for of, dws in zip(offs, pred_dws_fact)]), "Pred. dws factor should be compatible with patch dws"
+                stride = [abs(int(of/dws)) if of != 0 else 1 for of, dws in zip(offs, pred_dws_fact)]
+                patches, crop_slice, nb_patches = extract_patches_torch_new(processed_pred, shape=(1, 1, 1), stride=stride,
+                                                                   max_random_crop=stride)
+                patches = data_parallel(self.model.models[-1].patch_models[nb_patch_net], patches[:, :, 0, 0, 0], self.devices)[
+                          :, [0]]
+                patches = patches.view(*nb_patches, *patch_shape)
+
+                invert_masks = patch_dws_fact[1] <= 6
+                IoU, valid_predictions = IoU_worker(patches, offs, patch_target_size=None, stride=stride, patch_dws_fact=patch_dws_fact, patch_shape=patch_shape,
+                                                    invert_masks=invert_masks)
+
+                # Compute targets:
+                gt_labels, _, _ = extract_patches_torch_new(processed_gt_segm, shape=(1, 1, 1), stride=stride,
+                                                                            crop_slice=crop_slice, limit_patches_to=nb_patches)
+                gt_labels = gt_labels.view(*nb_patches)
+                IoU_targets, valid_predictions_1 = compute_IoU_targets(gt_labels, offs, patch_target_size=None, stride=stride,
+                                                                       patch_dws_fact=patch_dws_fact,
+                                                                       patch_shape=patch_shape, ignore_label=0)
+
+                # ------------ Compute loss ----------------
+                # Invert targets (most common case is IoU == 0)
+                valid_predictions = (valid_predictions*valid_predictions_1).float()
+                IoU = (1. - IoU) * valid_predictions
+                IoU_targets = (1. - IoU_targets.float()) * valid_predictions
+                loss = loss + self.loss(IoU, IoU_targets)
+        return loss
+
+
+
+def get_slicing_crops(pred_shape, target_shape, pred_ds_factor):
+    """
+    Decide how to crop the prediction and targets to get consistent tensors
+    """
+    assert len(pred_shape) == 5 and len(target_shape) == 5
+    pred_shape = pred_shape[2:]
+    target_shape = target_shape[2:]
+    # Compute new left crops:
+    upscaled_pred_shape = [sh*fctr for sh, fctr in zip(pred_shape, pred_ds_factor)]
+
+    shape_diff = [orig - trg for orig, trg in zip(target_shape, upscaled_pred_shape)]
+    assert all([diff >= 0 for diff in shape_diff]), "Prediction should be smaller or equal to the targets!"
+    assert all([diff % 2 == 0 for diff in shape_diff])
+    padding = [int(diff/2) for diff in shape_diff]
+
+    crop_slice_targets = [slice(None), slice(None)]
+    crop_slice_prediction = [slice(None), slice(None)]
+    for dim, pad in enumerate(padding):
+        if pad > 0:
+            # Crop targets
+            crop_slice_targets.append(slice(pad, -pad))
+            crop_slice_prediction.append(slice(None))
+        else:
+            # No need to crop:
+            crop_slice_targets.append(slice(None))
+            crop_slice_prediction.append(slice(None))
+
+    return tuple(crop_slice_targets), tuple(crop_slice_prediction)
+
+
+
+
+class IoULossOld(nn.Module):
+    """MOST PROBABLY DEPRECATED"""
     def __init__(self, model, loss_type="Dice", model_kwargs=None, devices=(0, 1),
                  offset=(0, 5, 5),
                  stride=None, pre_crop_pred=None):
-        super(IoULoss, self).__init__()
+        super(IoULossOld, self).__init__()
         if loss_type == "Dice":
             self.loss = SorensenDiceLoss()
         elif loss_type == "MSE":
@@ -190,6 +338,7 @@ def compute_intersection_over_union(mask1, mask2):
 
 
 class ComputeIoU(nn.Module):
+    """MOST PROBABLY DEPRECATED"""
     def __init__(self, model, offsets, ptch_kwargs, loss_type="Dice", model_kwargs=None, devices=(0, 1),
                  stride=None, pre_crop_pred=None):
         super(ComputeIoU, self).__init__()
@@ -601,7 +750,10 @@ class IntersectOverUnionUNetOld(GeneralizedStackedPyramidUNet3D):
         # return torch.from_numpy(final_output).cuda()
 
 def IoU_worker(patches, offset, patch_target_size, stride, patch_dws_fact,
-                  patch_shape):
+                  patch_shape, invert_masks=True):
+    """
+    Mask should be 1 where active
+    """
     assert all([offs % strd == 0 for strd, offs in zip(stride, offset)])
     roll_offset = tuple(int(offs / strd) for strd, offs in zip(stride, offset))
 
@@ -613,7 +765,7 @@ def IoU_worker(patches, offset, patch_target_size, stride, patch_dws_fact,
         rolled_patches = np.roll(patches, shift=tuple(-offs for offs in roll_offset), axis=(0, 1, 2))
 
     if not all([offs % dws == 0 for dws, offs in zip(patch_dws_fact, offset)]):
-        print("Upsi upsi, offset should really be compatible with patch downscaling factor...")
+        print("Upsi daisy, offset should really be compatible with patch downscaling factor...")
         # assert all([offs % dws == 0 for dws, offs in zip(patch_dws_fact, offset)])
     patch_offset = tuple(int(offs / dws) for dws, offs in zip(patch_dws_fact, offset))
 
@@ -636,49 +788,6 @@ def IoU_worker(patches, offset, patch_target_size, stride, patch_dws_fact,
 
 
 
-    # # FIXME: temp hack
-    # if patch_offset[0] == 0:
-    # Only for affinities along xy:
-    # patches = patches[:,:,:,2:-2, 5:-5, 5:-5]
-    # rolled_patches = rolled_patches[:,:,:,2:-2, 5:-5, 5:-5]
-    # patch_shape = deepcopy(patch_shape)
-    # patch_shape[0] = 3
-    # patch_shape[1] = 9
-    # patch_shape[2] = 9
-
-    # patches = patches[:, :, :, 3:-3, 7:-7, 7:-7]
-    # rolled_patches = rolled_patches[:, :, :, 3:-3, 7:-7, 7:-7]
-    # patch_shape = deepcopy(patch_shape)
-    # patch_shape[0] = 1
-    # patch_shape[1] = 5
-    # patch_shape[2] = 5
-
-    # # Local predictions:
-    # patches = patches[:, :, :, 2:-2, 5:-5, 5:-5]
-    # rolled_patches = rolled_patches[:, :, :, 2:-2, 5:-5, 5:-5]
-    # patch_shape = deepcopy(patch_shape)
-    # patch_shape[0] = 3
-    # patch_shape[1] = 9
-    # patch_shape[2] = 9
-
-    # # Longer-range predictions:
-    # patches = patches[:, :, :, 2:-2]
-    # rolled_patches = rolled_patches[:, :, :, 2:-2]
-    # patch_shape = deepcopy(patch_shape)
-    # patch_shape[0] = 3
-    # # patch_shape[1] = 9
-    # # patch_shape[2] = 9
-
-    # # Longer-range no-z context:
-    # patches = patches[:, :, :, 3:-3]
-    # rolled_patches = rolled_patches[:, :, :, 3:-3]
-    # patch_shape = deepcopy(patch_shape)
-    # patch_shape[0] = 1
-    # patch_shape[1] = 9
-    # patch_shape[2] = 9
-
-
-
     # Get crop slices patch_1:
     left_crop = [off if off > 0 else 0 for off in patch_offset]
     right_crop = [sh + off if off < 0 else None for off, sh in zip(patch_offset, patch_shape)]
@@ -692,15 +801,55 @@ def IoU_worker(patches, offset, patch_target_size, stride, patch_dws_fact,
 
 
     # Crop and compute IoU:
-    output = compute_intersection_over_union(1. - patches[crop_slice_patches],
+    if invert_masks:
+        output = compute_intersection_over_union(1. - patches[crop_slice_patches],
                                     1. - rolled_patches[crop_slice_rolled_patches])
+    else:
+        output = compute_intersection_over_union(patches[crop_slice_patches],
+                                                 rolled_patches[crop_slice_rolled_patches])
     # if not isinstance(output, np.ndarray):
     #     output = output.cpu().numpy()
 
     left_crop = [-off if off < 0 else 0 for off in roll_offset]
     right_crop = [sh - off if off > 0 else None for off, sh in zip(roll_offset, patches.shape[:3])]
     valid_crop = tuple(slice(lft, rgt) for lft, rgt in zip(left_crop, right_crop))
-    valid_predictions = np.zeros(patches.shape[:3], dtype='uint8')
+    if isinstance(patches, np.ndarray):
+        valid_predictions = np.zeros(patches.shape[:3], dtype='uint8')
+    else:
+        valid_predictions = torch.zeros(patches.shape[:3], dtype=torch.uint8).to(patches.get_device())
+
     valid_predictions[valid_crop] = 1
 
     return output, valid_predictions
+
+
+def compute_IoU_targets(target_labels, offset, patch_target_size, stride, patch_dws_fact,
+                        patch_shape, ignore_label=0):
+    assert all([offs % strd == 0 for strd, offs in zip(stride, offset)])
+    roll_offset = tuple(int(offs / strd) for strd, offs in zip(stride, offset))
+
+    if not isinstance(target_labels, np.ndarray):
+        rolled_labels = target_labels.roll(shifts=tuple(-offs for offs in roll_offset), dims=(0, 1, 2))
+    else:
+        rolled_labels = np.roll(target_labels, shift=tuple(-offs for offs in roll_offset), axis=(0, 1, 2))
+
+    if not all([offs % dws == 0 for dws, offs in zip(patch_dws_fact, offset)]):
+        print("Upsi daisy, offset should really be compatible with patch downscaling factor...")
+        # assert all([offs % dws == 0 for dws, offs in zip(patch_dws_fact, offset)])
+
+    output = target_labels == rolled_labels
+
+    left_crop = [-off if off < 0 else 0 for off in roll_offset]
+    right_crop = [sh - off if off > 0 else None for off, sh in zip(roll_offset, target_labels.shape[:3])]
+    valid_crop = tuple(slice(lft, rgt) for lft, rgt in zip(left_crop, right_crop))
+    if isinstance(target_labels, np.ndarray):
+        valid_predictions = np.zeros(target_labels.shape[:3], dtype='uint8')
+    else:
+        valid_predictions = torch.zeros(target_labels.shape[:3] , dtype=torch.uint8).to(target_labels.get_device())
+    valid_predictions[valid_crop] = 1
+
+    valid_predictions[target_labels == ignore_label] = 0
+    valid_predictions[rolled_labels == ignore_label] = 0
+
+    return output, valid_predictions
+

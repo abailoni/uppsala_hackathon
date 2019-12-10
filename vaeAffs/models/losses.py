@@ -248,7 +248,9 @@ class StackedAffinityLoss(nn.Module):
 
 
 class PatchBasedLoss(nn.Module):
-    def __init__(self, model, apply_checkerboard=False, loss_type="Dice", model_kwargs=None, devices=(0,1)):
+    def __init__(self, model, apply_checkerboard=False, loss_type="Dice",
+                 IoU_loss_kwargs=None,
+                 model_kwargs=None, devices=(0,1)):
         super(PatchBasedLoss, self).__init__()
         if loss_type == "Dice":
             self.loss = SorensenDiceLoss()
@@ -260,6 +262,11 @@ class PatchBasedLoss(nn.Module):
             raise ValueError
 
         self.apply_checkerboard = apply_checkerboard
+        self.add_IoU_loss = False
+        if IoU_loss_kwargs is not None:
+            self.add_IoU_loss = True
+            from .compute_IoU import IoULoss
+            self.IoU_loss = IoULoss(model, model_kwargs=model_kwargs, devices=devices, **IoU_loss_kwargs)
 
         self.devices = devices
         self.model_kwargs = model_kwargs
@@ -299,7 +306,8 @@ class PatchBasedLoss(nn.Module):
         # Collect loss from some random patches:
         loss = 0
 
-        # print("Loss start, memory {}, {}".format(torch.cuda.memory_allocated(0)/1000000, torch.cuda.memory_cached(0)/1000000))
+        if self.add_IoU_loss:
+            loss = loss + self.IoU_loss(all_predictions, target)
 
         boundary_loss_computed = False
         # ----------------------------
@@ -478,6 +486,7 @@ class PatchBasedLoss(nn.Module):
 
                 # Invert MeMasks:
                 # best targets for Dice loss are: meMask == 0; others == 1
+                # FIXME: generalize
                 if patch_dws_fact[1] > 6:
                     patch_targets = 1. - patch_targets
 
@@ -652,8 +661,14 @@ def extract_patches_torch_new(tensor, shape, stride, precrop_target=None, max_ra
     else:
         precrop_target = [(0, 0) for _ in range(dim)]
 
-    max_random_crop = [0 for _ in range(dim)] if max_random_crop is None else max_random_crop
+    max_random_crop = [0 for _ in range(dim)] if max_random_crop is None else deepcopy(max_random_crop)
     assert len(max_random_crop) == dim
+    if isinstance(max_random_crop, tuple):
+        max_random_crop = list(max_random_crop)
+    for d in range(dim):
+        max = tensor.shape[2 + d] - precrop_target[d][0] - precrop_target[d][1] - shape[d]
+        if max_random_crop[d] > max:
+            max_random_crop[d] = max
 
     # if downscale_fct is not None:
     #     assert len(downscale_fct) == dim
