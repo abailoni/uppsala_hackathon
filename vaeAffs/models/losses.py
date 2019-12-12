@@ -319,6 +319,8 @@ class PatchBasedLoss(nn.Module):
             # ----------------------------
             pred = all_predictions[nb_patch_net]
             kwargs = ptch_kwargs[nb_patch_net]
+            if kwargs.get("skip_standard_patch_loss", False):
+                continue
             if isinstance(target, (list, tuple)):
                 assert "nb_target" in kwargs, "Multiple targets passed. Target should be specified"
                 gt_segm = target[kwargs["nb_target"]]

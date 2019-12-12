@@ -60,14 +60,23 @@ class IoULoss(nn.Module):
         assert isinstance(min_random_offset_orig_res, (tuple, list))
         self.min_random_offset_orig_res = min_random_offset_orig_res if isinstance(min_random_offset_orig_res, tuple) else tuple(min_random_offset_orig_res)
 
-    def get_random_offset(self, patch_size, patch_dws_fact, size=1, min_random_offset_orig_res=None):
+    def get_random_offset(self, patch_size, patch_dws_fact, size=1, min_random_offset=None):
+        """
+        Each offset is such that, along each direction, its value is either 0 or greater than min_random_offset.
+        (0, 0, 0) is never allowed, but (0, 0, 12) yes (assuming that 12 >= min_offset)
+        """
         assert isinstance(size, int)
 
-        min_random_offset_orig_res = min_random_offset_orig_res if min_random_offset_orig_res is not None else self.min_random_offset_orig_res
-
-        all_real_offsets = np.array([np.arange(-int(sz/2)*dws, (int(sz/2)+1)*dws, dws) for sz, dws in zip(patch_size, patch_dws_fact)])
-        mask_allowed_offs = np.array([abs(all_real_offsets[i]) >= min for i, min in enumerate(min_random_offset_orig_res)])
-        random_offs = [[np.random.choice(all_real_offsets[i][mask_allowed_offs[i]].flatten()).item() for i in range(3)] for _ in range(size)]
+        min_random_offset = min_random_offset if min_random_offset is not None else [1, 1, 1]
+        counter = 0
+        random_offs = []
+        while True:
+            candidate = [np.random.randint(-int(sz/2), int(sz/2)+1) for sz in patch_size]
+            if all([cd==0 or abs(cd)>=minimum for cd, minimum in zip(candidate, min_random_offset)]) and any([cd != 0 for cd in candidate]):
+                random_offs.append([cd*dws for cd, dws in zip(candidate, patch_dws_fact)])
+                counter += 1
+                if counter >= size:
+                    break
 
         return random_offs
 
@@ -113,18 +122,31 @@ class IoULoss(nn.Module):
             dws_crop_slice = (slice(None), slice(None)) + tuple(slice(None, None, dws) for dws in pred_dws_fact)
             processed_gt_segm = processed_gt_segm[dws_crop_slice]
 
+            # Select random subcrop of the prediction, if needed:
+            subcrop_shape = IoU_kwargs.get("subcrop_shape", None)
+            subcrop_slice = get_random_subcrop(processed_pred.shape, subcrop_shape=subcrop_shape)
+            processed_pred, processed_gt_segm = processed_pred[subcrop_slice], processed_gt_segm[subcrop_slice]
+
             # Get random offset:
             nb_random_IoU = IoU_kwargs.get("nb_random_IoU", 1)
-            min_random_offset_orig_res = IoU_kwargs.get("min_random_offset", None)
+            min_random_offset = IoU_kwargs.get("min_random_offset", None)
+            min_stride = IoU_kwargs.get("min_stride", [1,1,1])
+            assert all([strd>0 for strd in min_stride]), "Minimum stride should be at least 1..."
 
             # TODO: we could be on a boundary...
             random_offsets = self.get_random_offset(patch_shape, patch_dws_fact, size=nb_random_IoU,
-                                                    min_random_offset_orig_res=min_random_offset_orig_res)
+                                                    min_random_offset=min_random_offset)
 
-
-            for offs in random_offsets:
+            nonzero_losses = 0
+            IoU_loss = 0
+            for i, offs in enumerate(random_offsets):
+                # Downscale the offsets and the stride if the pred is downscaled:
                 assert all([of%dws == 0 for of, dws in zip(offs, pred_dws_fact)]), "Pred. dws factor should be compatible with patch dws"
-                stride = [abs(int(of/dws)) if of != 0 else 1 for of, dws in zip(offs, pred_dws_fact)]
+                assert all([ptch%dws == 0 for ptch, dws in zip(patch_dws_fact, pred_dws_fact)]), "Pred. dws factor should be compatible with patch dws"
+                stride = [abs(int(of/dws)) if of != 0 else strd for of, dws, strd in zip(offs, pred_dws_fact, min_stride)]
+                offs = [int(of/dws) for of, dws in zip(offs, pred_dws_fact)]
+                patch_dws_fact_mod = [ptch/dws for ptch, dws in zip(patch_dws_fact, pred_dws_fact)]
+
                 patches, crop_slice, nb_patches = extract_patches_torch_new(processed_pred, shape=(1, 1, 1), stride=stride,
                                                                    max_random_crop=stride)
                 patches = data_parallel(self.model.models[-1].patch_models[nb_patch_net], patches[:, :, 0, 0, 0], self.devices)[
@@ -132,7 +154,7 @@ class IoULoss(nn.Module):
                 patches = patches.view(*nb_patches, *patch_shape)
 
                 invert_masks = patch_dws_fact[1] <= 6
-                IoU, valid_predictions = IoU_worker(patches, offs, patch_target_size=None, stride=stride, patch_dws_fact=patch_dws_fact, patch_shape=patch_shape,
+                IoU, valid_predictions = IoU_worker(patches, offs, patch_target_size=None, stride=stride, patch_dws_fact=patch_dws_fact_mod, patch_shape=patch_shape,
                                                     invert_masks=invert_masks)
 
                 # Compute targets:
@@ -140,7 +162,7 @@ class IoULoss(nn.Module):
                                                                             crop_slice=crop_slice, limit_patches_to=nb_patches)
                 gt_labels = gt_labels.view(*nb_patches)
                 IoU_targets, valid_predictions_1 = compute_IoU_targets(gt_labels, offs, patch_target_size=None, stride=stride,
-                                                                       patch_dws_fact=patch_dws_fact,
+                                                                       patch_dws_fact=patch_dws_fact_mod,
                                                                        patch_shape=patch_shape, ignore_label=0)
 
                 # ------------ Compute loss ----------------
@@ -148,10 +170,43 @@ class IoULoss(nn.Module):
                 valid_predictions = (valid_predictions*valid_predictions_1).float()
                 IoU = (1. - IoU) * valid_predictions
                 IoU_targets = (1. - IoU_targets.float()) * valid_predictions
-                loss = loss + self.loss(IoU, IoU_targets)
+
+
+                # Reshape and apply loss:
+                IoU = IoU.unsqueeze(0).unsqueeze(0)
+                IoU_targets = IoU_targets.unsqueeze(0).unsqueeze(0)
+                new_IoU_loss = self.loss(IoU, IoU_targets)
+                IoU_loss = IoU_loss + new_IoU_loss
+                if new_IoU_loss < 0.:
+                    nonzero_losses += 1
+
+                if i == 0:
+                    log_image("IoU_l{}".format(nb_patch_net), IoU)
+                    log_image("IoU_targets_l{}".format(nb_patch_net), IoU_targets)
+
+            nonzero_losses = 1 if nonzero_losses == 0 else nonzero_losses
+            log_scalar("loss_IoU_l{}".format(nb_patch_net), IoU_loss/nonzero_losses)
+            loss = loss + IoU_loss
+
         return loss
 
+def get_random_subcrop(pred_shape, subcrop_shape=None):
+    if subcrop_shape is not None:
+        assert len(subcrop_shape) == 3
+        assert len(pred_shape) == 5
+        pred_shape = pred_shape[2:]
 
+        # If a zero is passed in the shape, then we take all of it:
+        subcrop_shape = [cr if cr>0 else pred_shape[i] for i, cr in enumerate(subcrop_shape)]
+        assert all(sh>=cr for sh, cr in zip(pred_shape, subcrop_shape)), "Subcrop shape is bigger than prediction!"
+
+        # Get random crop:
+        diff = [sh-cr for sh, cr in zip(pred_shape, subcrop_shape)]
+        random_left_corner = [np.random.randint(df+1) for df in diff]
+        out_slice = (slice(None), slice(None)) + tuple(slice(crn, crn+sh) for crn, sh in zip(random_left_corner,subcrop_shape))
+    else:
+        out_slice = tuple(slice(None) for _ in range(5))
+    return out_slice
 
 def get_slicing_crops(pred_shape, target_shape, pred_ds_factor):
     """
@@ -785,8 +840,6 @@ def IoU_worker(patches, offset, patch_target_size, stride, patch_dws_fact,
         crop_slice = tuple(crop_slice)
         patches = patches[crop_slice]
         rolled_patches = rolled_patches[crop_slice]
-
-
 
     # Get crop slices patch_1:
     left_crop = [off if off > 0 else 0 for off in patch_offset]
