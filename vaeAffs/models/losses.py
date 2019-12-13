@@ -203,12 +203,12 @@ class StackedAffinityLoss(nn.Module):
             crop_slc = (slice(None), slice(None)) + parse_data_slice(self.precrop_pred)
             predictions = predictions[crop_slc]
 
-        # TODO: improve this shit
-        if hasattr(self.model, "stacked_model"):
-            mdl_to_train = self.model.stacked_model.models_to_train
-        else:
-            mdl_to_train = self.model_kwargs["models_to_train"]
-        assert len(mdl_to_train) == 1
+        # # TODO: improve this shit
+        # if hasattr(self.model, "backbone_model"):
+        #     mdl_to_train = self.model.stacked_model.models_to_train
+        # else:
+        #     mdl_to_train = self.model_kwargs["models_to_train"]
+        # assert len(mdl_to_train) == 1
         if self.target_index is not None:
             targets = targets[self.target_index]
         targets = auto_crop_tensor_to_shape(targets, predictions.shape,

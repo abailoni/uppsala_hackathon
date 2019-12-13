@@ -127,17 +127,16 @@ class CremiDataset(ZipReject):
         # # affinity transforms for affinity targets
         # # we apply the affinity target calculation only to the segmentation (1)
         if self.master_config.get("affinity_config") is not None:
-            affs_config = self.master_config.get("affinity_config")
+            affs_config = deepcopy(self.master_config.get("affinity_config"))
             global_kwargs = affs_config.pop("global", {})
-            # TODO: define computed affs not in this way, but with a variable in config...
-            # nb_affs = len(affs_config)
-            # num_inputs = 1
-            # assert nb_affs == num_inputs
-            # all_affs_kwargs = [deepcopy(global_kwargs) for _ in range(nb_affs)]
+
+            use_dynamic_offsets = affs_config.pop("use_dynamic_offsets", False)
+            aff_transform = Segmentation2AffinitiesDynamicOffsets if use_dynamic_offsets else affinity_config_to_transform
+
             for input_index in affs_config:
                 affs_kwargs = deepcopy(global_kwargs)
                 affs_kwargs.update(affs_config[input_index])
-                transforms.add(affinity_config_to_transform(apply_to=[input_index+num_inputs], **affs_kwargs))
+                transforms.add(aff_transform(apply_to=[input_index+num_inputs], **affs_kwargs))
 
         # crop invalid affinity labels and elastic augment reflection padding assymetrically
         crop_config = self.master_config.get('crop_after_target', {})

@@ -68,7 +68,11 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         if self.get("loaders/general/master_config/downscale_and_crop") is not None:
             ds_config = deepcopy(self.get("loaders/general/master_config/downscale_and_crop"))
             repl_targets = ds_config.pop("replicate_targets", False)
-            nb_targets = len(ds_config) if repl_targets else 1
+            master_conf = self.get("loaders/general/master_config")
+            if master_conf.get("affinity_config", {}).get("use_dynamic_offsets", False):
+                nb_targets = 1
+            else:
+                nb_targets = len(ds_config) if repl_targets else 1
             self.set("trainer/num_targets", nb_targets)
         else:
             self.set("trainer/num_targets", 1)
