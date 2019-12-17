@@ -294,18 +294,20 @@ class PatchBasedLoss(nn.Module):
 
 
     def forward(self, all_predictions, target):
-        # inputs = all_predictions[-2:]
-        # all_predictions = all_predictions[:-2]
-        # target = target[0] if isinstance(target, (list, tuple)) else target
-
         mdl_kwargs = self.model_kwargs
         ptch_kwargs = mdl_kwargs["patchNet_kwargs"]
+
+        # Plot some patches with the raw:
+        if self.model.models[-1].keep_raw:
+            raw_inputs = all_predictions[-len(target):]
+            all_predictions = all_predictions[:-len(target)]
+
         nb_preds = len(all_predictions)
         assert len(ptch_kwargs) == nb_preds
 
-        # Collect loss from some random patches:
         loss = 0
 
+        # IoU loss:
         if self.add_IoU_loss:
             loss = loss + self.IoU_loss(all_predictions, target)
 
@@ -319,8 +321,6 @@ class PatchBasedLoss(nn.Module):
             # ----------------------------
             pred = all_predictions[nb_patch_net]
             kwargs = ptch_kwargs[nb_patch_net]
-            if kwargs.get("skip_standard_patch_loss", False):
-                continue
             if isinstance(target, (list, tuple)):
                 assert "nb_target" in kwargs, "Multiple targets passed. Target should be specified"
                 gt_segm = target[kwargs["nb_target"]]
@@ -384,6 +384,76 @@ class PatchBasedLoss(nn.Module):
             pred = pred[crop_slice_prediction]
             full_target_shape = gt_segm.shape[-3:]
 
+            # # ----------------------------
+            # # Plot some random patches with associated raw patch:
+            # # ----------------------------
+            if self.model.models[-1].keep_raw:
+                raw = raw_inputs[kwargs["nb_target"]]
+                raw_to_plot, gt_labels_to_plot, gt_masks_to_plot, pred_emb_to_plot = [], [], [], []
+                for n in range(5):
+                    # Select a random pixel and define sliding-window crop slices:
+                    selected_coord = [np.random.randint(shp) for shp in pred.shape[2:]]
+                    full_patch_slice = (slice(None), slice(None)) + tuple(
+                        slice(selected_coord[i], selected_coord[i] + real_patch_shape[i]) for i in range(len(selected_coord)))
+                    emb_slice = (slice(None), slice(None)) + tuple(slice(selected_coord[i] + int(real_patch_shape[i] / 2),
+                                                                          selected_coord[i] + int(
+                                                                              real_patch_shape[i] / 2) + 1) for i in
+                                                                    range(len(selected_coord)))
+                    pred_center_coord = [int(selected_coord[i] / pred_dws_fact[i]) for i in range(len(selected_coord))]
+                    emb_slice_pred = (slice(None), slice(None)) + tuple(
+                        slice(pred_center_coord[i], pred_center_coord[i] + 1)
+                        for i in range(len(selected_coord)))
+
+                    # Collect data for current sliding window:
+                    center_label = gt_segm[emb_slice]
+                    center_label_repeated = center_label.repeat(1, 1, *real_patch_shape)
+                    gt_patch_labels = gt_segm[full_patch_slice]
+                    gt_masks_to_plot.append(gt_patch_labels != center_label_repeated)
+                    gt_labels_to_plot.append(gt_patch_labels)
+                    # ignore_mask_patch = (gt_patch_labels == 0)
+                    pred_emb_to_plot.append(pred[emb_slice_pred])
+
+                    raw_to_plot.append(raw[full_patch_slice])
+
+                # Highlight center pixel:
+                raw_to_plot = torch.cat(raw_to_plot, dim=0)
+                center_pixel_coord = (slice(None), 0) + tuple(int(shp / 2) for shp in real_patch_shape)
+                raw_to_plot[center_pixel_coord] = raw_to_plot.min() - 1.
+
+                gt_labels_to_plot = torch.cat(gt_labels_to_plot, dim=0)
+                gt_masks_to_plot = torch.cat(gt_masks_to_plot, dim=0)
+                pred_emb_to_plot = torch.cat(pred_emb_to_plot, dim=0)
+
+                # Decode embeddings:
+                mdl_num = kwargs["model_number"]
+                ptch_num = kwargs["patchNet_number"]
+                pred_patch_to_plot = data_parallel(self.model.models[mdl_num].patch_models[ptch_num], pred_emb_to_plot[:, :, 0, 0, 0], self.devices)
+
+                # Downscale and rescale targets:
+                down_sc_slice = (slice(None), slice(None)) + tuple(
+                    slice(int(dws_fact / 2), None, dws_fact) for dws_fact in patch_dws_fact)
+                gt_masks_to_plot = torch.nn.functional.interpolate(gt_masks_to_plot[down_sc_slice].float(), scale_factor=tuple(patch_dws_fact))
+                pred_patch_to_plot = torch.nn.functional.interpolate(pred_patch_to_plot,
+                                                                     scale_factor=tuple(patch_dws_fact))
+
+                gt_masks_to_plot = 1. - gt_masks_to_plot
+                if patch_dws_fact[1] <= 6:
+                    pred_patch_to_plot = 1. - pred_patch_to_plot
+
+                log_image("raw_patch_l{}".format(nb_patch_net), raw_to_plot)
+                log_image("gt_label_patch_l{}".format(nb_patch_net), gt_labels_to_plot)
+                log_image("gt_mask_patch_l{}".format(nb_patch_net), gt_masks_to_plot)
+                log_image("pred_patch_l{}".format(nb_patch_net), pred_patch_to_plot)
+
+
+
+
+
+            # # ----------------------------
+            # # Patch-Loss:
+            # # ----------------------------
+            if kwargs.get("skip_standard_patch_loss", False):
+                continue
 
             # If multiple strides were given, process all of them:
             all_strides = stride if isinstance(stride[0], list) else [stride]
