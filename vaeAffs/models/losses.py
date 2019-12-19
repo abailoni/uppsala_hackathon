@@ -509,10 +509,7 @@ class PatchBasedLoss(nn.Module):
                 mean_central_crop_labels = gt_patches[central_crop].mean(dim=-1, keepdim=True) \
                     .mean(dim=-2, keepdim=True) \
                     .mean(dim=-3, keepdim=True)
-                if center_labels.shape[0] != gt_patches.shape[0]:
-                    print(center_labels.shape, gt_patches.shape, pred_patches.shape)
-                    print(nb_patches, crop_slice_targets, crop_slice_prediction)
-                    print(pred.shape, gt_segm.shape)
+
                 valid_patches = valid_patches & (mean_central_crop_labels == center_labels)
 
                 # Delete redundant patches from batch:
