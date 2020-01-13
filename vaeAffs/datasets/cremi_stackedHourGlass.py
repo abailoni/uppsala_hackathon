@@ -21,19 +21,73 @@ import numpy as np
 from neurofire.criteria.loss_transforms import InvertTarget
 
 class RejectSingleLabelVolumes(object):
-    def __init__(self, threshold, threshold_zero_label=1.):
+    def __init__(self, threshold, threshold_zero_label=1.,
+                 defected_label=None):
         """
         :param threshold: If the biggest segment takes more than 'threshold', batch is rejected
-        : param threshold_zero_label: if the percentage of non-zero-labels is less than this, reject
+        :param threshold_zero_label: if the percentage of non-zero-labels is less than this, reject
         """
         self.threshold = threshold
         self.threshold_zero_label = threshold_zero_label
+        self.defected_label = defected_label
 
     def __call__(self, fetched):
+        # Check if we have a defected slice at the beginning of the batch:
+        if self.defected_label is not None:
+            if ((fetched[0].astype('int64') == self.defected_label).sum() != 0) or \
+                    (fetched[-1].astype('int64') == self.defected_label).sum() != 0:
+                # Check if we should reject:
+                print("!!!!!!!!!!!!!!!!!!!!!!!!! WARNING !!!!!!!!!!!!!!!!!!!!!!!!!!)")
+                print("Batch rejected because of defected slice first/last!")
+                return True
+
         _, counts = np.unique(fetched, return_counts=True)
         # Check if we should reject:
         return ((float(np.max(counts)) / fetched.size) > self.threshold) or (
                     (np.count_nonzero(fetched) / fetched.size) < self.threshold_zero_label)
+
+class DuplicateGtDefectedSlices(Transform):
+    def __init__(self, defected_label=-1, **super_kwargs):
+        self.defected_label = defected_label
+        super(DuplicateGtDefectedSlices, self).__init__(**super_kwargs)
+
+    def batch_function(self, batch):
+        assert len(batch) == 3
+        raw, defected_mask, GT = batch
+
+        new_GT = GT.copy()
+
+        # Check for defected slices in the dataset: (entirely labelled with defected_label)
+        for z_idx in range(new_GT.shape[0]):
+            if (new_GT[z_idx].astype('int64') == self.defected_label).sum() != 0:
+                if z_idx == 0:
+                    print("!!!!!!!!!!!!!!!!!!!!!!!!! WARNING 1 !!!!!!!!!!!!!!!!!!!!!!!!!!)")
+                    continue
+                # assert z_idx != 0, "The first slice should never be defected"
+                # Copy ground truth from previous slice:
+                new_GT[z_idx] = new_GT[z_idx-1]
+
+        # Modify new_GT for defect-augmented slices:
+        for z_idx, is_defected in enumerate(defected_mask[:,0,0]):
+            if is_defected:
+                if z_idx == 0:
+                    print("!!!!!!!!!!!!!!!!!!!!!!!!! WARNING 2 !!!!!!!!!!!!!!!!!!!!!!!!!!)")
+                    continue
+
+                # assert z_idx != 0, "The first slice should never be defected"
+                # Copy ground truth from previous slice:
+                new_GT[z_idx] = new_GT[z_idx-1]
+
+        return (raw, new_GT)
+
+class AdjustBatch(Transform):
+
+    def batch_function(self, batch):
+        assert len(batch) == 2
+        raw_inputs, GT = batch
+        assert len(raw_inputs) == 2
+        raw, defected_mask = raw_inputs
+        return (raw, defected_mask, GT)
 
 
 class CremiDataset(ZipReject):
@@ -74,7 +128,8 @@ class CremiDataset(ZipReject):
         rejection_threshold = volume_config.get('rejection_threshold', 0.5)
         super().__init__(self.raw_volume, self.segmentation_volume,
                          sync=True, rejection_dataset_indices=1,
-                         rejection_criterion=RejectSingleLabelVolumes(1.0, rejection_threshold))
+                         rejection_criterion=RejectSingleLabelVolumes(1.0, rejection_threshold,
+                                                                      defected_label=2147483646))
         # Set master config (for transforms)
         self.master_config = {} if master_config is None else deepcopy(master_config)
         # Get transforms
@@ -84,8 +139,13 @@ class CremiDataset(ZipReject):
         transforms = Compose()
 
         if self.master_config.get('random_flip', False):
+            transforms.add(AdjustBatch())
             transforms.add(RandomFlip3D())
             transforms.add(RandomRotate())
+
+        if self.master_config.get('duplicate_GT_defected_slices', False):
+            transforms.add(DuplicateGtDefectedSlices(self.master_config['duplicate_GT_defected_slices'].get('defect_label', -1)))
+
 
         # Elastic transforms can be skipped by
         # setting elastic_transform to false in the

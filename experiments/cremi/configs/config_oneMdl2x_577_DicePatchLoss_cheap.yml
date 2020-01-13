@@ -1,0 +1,797 @@
+global:
+  offsets: null
+
+
+device: cuda
+
+loaders:
+  general:
+    volume_config:
+      rejection_threshold: 0.40
+      segmentation:
+        affinity_config:
+          retain_mask: False # This keep a mask of the valid affinities (not involving the ignore-label)
+          retain_segmentation: True # This keeps the label image in the inputs
+          ignore_label: 0
+
+    defect_augmentation_config:
+        keep_track_of_defected_slices: True
+        max_contiguous_defected_slices: 2
+        p_missing_slice: 0.002
+        p_low_contrast: 0.000
+        p_deformed_slice: 0.000
+        p_artifact_source: 0.01
+        deformation_mode: 'compress'
+        deformation_strength: 16
+        artifact_source:
+            min_masking_ratio: .5
+            slicing_config:
+              window_size: [1, 764, 764]
+              stride: [1, 600, 600]
+              downsampling_ratio: [1, 1, 1]
+            volume_config:
+              artifacts:
+                path: '$HCI_HOME/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
+                path_in_h5_dataset: 'defect_sections/raw'
+                dtype: float32
+              alpha_mask:
+                path: '$HCI_HOME/datasets/cremi/constantin_data/sample_ABC_padded_20160501.defects.hdf'
+                path_in_h5_dataset: 'defect_sections/mask'
+            master_config:
+              elastic_transform:
+                alpha: 2000.
+                sigma: 50.
+
+    # Configuration for the master dataset.
+    master_config:
+      # We might need order 0 interpolation if we have segmentation in there somewhere.
+      elastic_transform:
+        apply: False
+        alpha: 2000.
+        sigma: 50.
+        order: 0
+      random_slides:
+        shape_after_slide: [704, 704]   #change to x, y of window size
+#        max_misalign: [30, 30]   #change to x, y of window size
+        shift_vs_slide_proba: 0.5
+        apply_proba: 0.01  # TODO: CHANGE
+        apply_to: [0] #TODO: generalize if I have more inputs...
+
+      random_flip: True
+
+      duplicate_GT_defected_slices:
+        defect_label: -2
+
+#      crop_after_target:
+#        crop_left: [0, 30, 30]
+#        crop_right: [0, 30, 30]
+      downscale_and_crop:
+        replicate_targets: True
+        0:
+          ds_factor: [1, 2, 2]
+          crop_factor: [1, 2, 2]
+        1:
+          ds_factor: [1, 4, 4]
+          crop_factor: [1, 1, 1]
+#        1:
+#          ds_factor: [1, 2, 2]
+##          crop_factor: [1, 2, 2]
+#          crop_slice: ":, 42:-42, 42:-42"
+#        2:
+#          ds_factor: [1, 1, 1]
+##          crop_factor: [1, 3, 3]
+#          crop_slice: ":, 124:-124, 124:-124"
+
+
+    # Specify configuration for the loader
+    loader_config:
+      # Number of processes to use for loading data. Set to (say) 10 if you wish to
+      # use 10 CPU cores, or to 0 if you wish to use the same process for training and
+      # data-loading (generally not recommended).
+      batch_size: 1
+      num_workers: 8
+      drop_last: True
+      pin_memory: False
+      shuffle: True
+
+
+
+  train:
+    names:
+      - A
+      - B
+      - C
+
+    # Specify how the data needs to be sliced before feeding to the network.
+    # We use a 3D sliding window over the dataset to extract patches, which
+    # are then fed to the network as batches.
+    slicing_config:
+      # Sliding window size
+      window_size:
+        A: &shape [14, 764, 764] # 25
+        B: *shape
+        C: *shape
+      # Sliding window stride
+      stride:
+        A: &stride [10, 200, 200]
+        B: *stride
+        C: *stride
+      # Data slice to iterate over.
+      data_slice:
+        A: ':, :, :'
+        B: ':, :, :'
+#        B: '10:30, :, :'
+        C: ':, :, :'
+
+    # Specify paths to volumes
+    volume_config:
+      # Raw data
+      raw:
+        path:
+          A: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleA_train.h5'
+          B: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleB_train.h5'
+          C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
+        path_in_file:
+          A: 'raw'
+          B: 'raw_old'
+          C: 'raw'
+        dtype: float32
+        sigma: 0.025
+        padding_mode: "reflect"
+        padding: &dataset_padding [[2,2], [100,100], [100,100]]
+#        padding: &dataset_padding [[0,0], [0,0], [0,0]]
+
+      # Segmentation
+      segmentation:
+        path:
+          A: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleA_train.h5'
+          B: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleB_train.h5'
+          C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
+        path_in_file:
+          A: 'segmentations/groundtruth_plus_boundary_defectMod'
+          B: 'segmentations/groundtruth_plus_boundary_defectMod_OLD'
+          C: 'segmentations/groundtruth_plus_boundary_defectMod'
+        dtype: float32
+        padding_mode: "constant"
+        padding: *dataset_padding
+        label_components: False
+        preserved_label:
+          label: [2147483647, 2147483646]
+          reset_to: [-1, -2]
+
+
+
+  val:
+    names:
+      - C
+
+    slicing_config:
+      window_size:
+        C: *shape
+      stride:
+        C: *stride
+      data_slice:
+        C: '75:, :, :'
+
+    volume_config:
+      raw:
+        path:
+          C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
+        path_in_file:
+          C: 'raw'
+        dtype: float32
+        sigma: 0.025
+        padding_mode: "reflect"
+        padding: *dataset_padding
+      segmentation:
+        path:
+          C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
+        path_in_file:
+          C: 'segmentations/groundtruth_plus_boundary_defectMod'
+        dtype: float32
+        padding_mode: "constant"
+        padding: *dataset_padding
+        label_components: False
+        preserved_label:
+          label: [2147483647, 2147483646]
+          reset_to: [-1, -2]
+
+  infer:
+    inference_mode: True
+    loader_config:
+      # Number of processes to use for loading data. Set to (say) 10 if you wish to
+      # use 10 CPU cores, or to 0 if you wish to use the same process for training and
+      # data-loading (generally not recommended).
+      batch_size: 1
+      num_workers: 4
+      drop_last: False
+      #      pin_memory: False
+      shuffle: False
+    name: C
+
+    master_config:
+      downscale_and_crop:
+        replicate_targets: True
+        0:
+          ds_factor: [1, 2, 2]
+          crop_factor: [1, 2, 2]
+        1:
+          ds_factor: [1, 4, 4]
+#          crop_factor: [1, 1, 1]
+#          crop_slice: ":,36:-36,36:-36"
+
+    volume_config:
+      # Sliding window size
+      window_size: [8, 704, 704]  # 288
+      #        A:
+      #        B: *shape
+      #        C: *shape
+      # Sliding window stride
+      stride: [40, 40, 40] # Not needed anymore, automatically deduced
+      #        A:
+      #        B: *stride
+      #        C: *stride
+      # Data slice to iterate over.
+      #      data_slice: '70:100,200:800,200:800'
+      #      data_slice: ":20, 90:, 580: 1900"
+      data_slice: ':,:,:'
+#      data_slice: ':8, :704, :704'
+
+      padding_mode: "reflect"
+      padding: *dataset_padding
+      # PATHS:
+      path:
+        A: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleA_train.h5'
+        B: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleB_train.h5'
+        C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
+        B+: '$HCI_HOME/datasets/cremi/testvol/test_samples/sampleB+_cropped_plus_mask.h5'
+        A+: '$HCI_HOME/datasets/cremi/testvol/test_samples/sampleA+_cropped_plus_mask.h5'
+        C+: '$HCI_HOME/datasets/cremi/testvol/test_samples/sampleC+_cropped_plus_mask.h5'
+      path_in_file:
+        A: 'raw'
+        B: 'raw_old'
+        C: 'raw'
+        A+: "volumes/raw"
+        B+: "volumes/raw"
+        C+: "volumes/raw"
+      dtype: float32
+  #      sigma: 0.025
+
+inference:
+  crop_prediction: # How much I crop the predicted tensor: (local_crop in the output resolution)
+    - [0,0]
+    - [0,0]
+    - [0,0]
+  return_patch_mask: False # Make sure to exclude the invalid affinities
+  input_dws_fact: [1, 4, 4]
+  output_dws_fact: [1, 2, 2]
+#  autopad_dataset: True #TODO: this would be nice, but not clear how to do it...
+
+model:
+  embeddingutils.models.unet.GeneralizedStackedPyramidUNet3D:
+#  vaeAffs.models.compute_IoU.ProbabilisticBoundaryFromEmb:
+#    offsets:
+#      - [[0,1,0], [0]]
+#      - [[1,0,0], [0,1]]
+#      - [[0,0,1], [0]]
+#      - [[-1,0,0], [0,1]]
+#      - [[0,-1,0], [0]]
+#      - [[0,0,-1], [0]]
+#      - [[0,8,0], [1]]
+#      - [[0,0,8], [1]]
+#      - [[0,-8,0], [1]]
+#      - [[0,0,-8], [1]]
+#    pre_crop_pred: "2:-2,:,:"
+#    slicing_config:
+#      window_size: [4,160,160]
+
+
+#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/deb_longRange/checkpoint.pytorch"
+#    load_stacked_models_from:
+#      0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stacked3x_dim64_7_15_15_mdl0_c/checkpoint.pytorch"
+#      1: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stacked3x_dim128_5_15_15_mdl1/checkpoint.pytorch"
+    nb_stacked: 1 # Number of stacked models
+    # If only model 1 is trained, then model 0 is run in inference mode. Atm there is no backprop between models:
+    models_to_train: [0]
+    detach_stacked_models: True
+    add_foreground_prediction_module: True
+    nb_inputs_per_model: 2
+
+#    stacked_upscl_fact:
+#      - [1,2,2]
+#      - [1,2,2]
+#    downscale_and_crop:
+#      0: # Crop and/or downscale the output of model 0 before to give it as an input
+#        ds_factor: [1, 1, 1]
+##        crop_factor: [1, 3, 3]
+#        crop_slice: ":,36:-36,36:-36"
+    type_of_model: 'MultiScaleInputsUNet3D'
+    # Parameters for each model in the stack:
+    models_kwargs:
+      global:
+        depth: 3
+        strided_res_blocks: False
+        upsampling_mode: 'nearest'
+        stop_decoder_at_depth: 0
+        pyramid_fmaps: 32
+        output_fmaps: 32
+        res_blocks_3D: [[True], [True], [True], [True]]
+        res_blocks_decoder_3D: [[True], [True], [True], [True]]
+        encoder_fmaps: [32, 64, 128]
+        decoder_fmaps: [32, 64, 128, 256]
+        pre_kernel_size_res_block: [1,3,3]
+        add_final_conv_in_res_block: False
+        add_embedding_heads: True
+        keep_raw: True
+      0:
+        in_channels: 1
+        scale_factor:
+          - [1, 2, 2]
+          - [1, 2, 2]
+          - [1, 2, 2]
+        #          - [1, 2, 2]
+        decoder_crops: # Crops AFTER the res_blocks at each level (at zero, we crop at the end)
+          0: ":, 8:-8, 8:-8"
+          1: ":, 4:-4, 4:-4"
+          2: ":, 2:-2, 2:-2"
+        nb_patch_nets: 4
+        patchNet_kwargs:
+          global:
+            latent_variable_size: 32
+            feature_maps: 16
+            downscaling_factor: [1, 1, 1] # Inside patchNet, to reduce memory
+            precrop_pred: "2:-2,:,:" # Pre-crop part of prediction to avoid training on borders
+          0:
+            depth_level: 0
+            nb_target: 0
+            #            skip_standard_patch_loss: True
+            patch_size: [5,7,7]
+            patch_dws_fact: [1, 1, 1]
+            pred_dws_fact: [1, 1, 1]
+            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+            patch_stride: # in the original resolution (of the target)
+              - [2, 7, 7]
+            limit_nb_patches: # 'factor', 'number'
+              - [120, 'number']
+            max_random_crop: [1, 7, 7] # in the donwscaled res!! #TODO: update z-crop when more context
+            ASPP_kwargs:
+              inner_planes: 32
+#              dilations: [[1,3,3], [2,3,3]]
+              dilations: []
+          #            IoU_kwargs:
+          #              nb_random_IoU: 10
+          #              min_random_offset: [0, 3, 3] # In patch-pixels
+          #              min_stride: [2, 9, 9] # If offset is 0 along a given dim, this stride is applied
+          #              subcrop_shape: [0, 50, 50]
+          1:
+            depth_level: 0
+            nb_target: 0
+            #            skip_standard_patch_loss: True
+            patch_size: [5,7,7]
+            patch_dws_fact: [1, 8, 8] # With respect to the given target!
+            pred_dws_fact: [1, 1, 1]
+            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+            patch_stride: # in the original resolution (of the target)
+              - [2, 7, 7]
+            limit_nb_patches: # 'factor', 'number'
+              - [120, 'number']
+            max_random_crop: [1, 7, 7] # in the donwscaled res!! #TODO: update z-crop when more context
+            ASPP_kwargs:
+              inner_planes: 32
+#              dilations: [[1,8,8], [1,16,16], [1,24,24], [2,8,8], [2,16,16]]
+              dilations: []
+          #            IoU_kwargs:
+          #              nb_random_IoU: 10
+          #              min_random_offset: [0, 1, 1] # In patch-pixels
+          #              min_stride: [1, 7, 7] # If offset is 0 along a given dim, this stride is applied
+          2:
+            depth_level: 1
+            nb_target: 1
+            #            skip_standard_patch_loss: True
+            patch_size: [5,7,7]
+            patch_dws_fact: [1, 2, 2] # With respect to the given target!
+            pred_dws_fact: [1, 1, 1]
+            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+            patch_stride: [2, 7, 7] # in the original resolution (of the target)
+            limit_nb_patches: [120, 'number'] # 'factor', 'number'
+            max_random_crop: [1, 4, 4] # in the donwscaled res!!
+            ASPP_kwargs:
+              inner_planes: 32
+#              dilations: [[1,2,2], [1,6,6], [2,2,2]]
+              dilations: []
+          #            IoU_kwargs:
+          #              nb_random_IoU: 10
+          #              min_random_offset: [0, 2, 2] # In patch-pixels
+          #              subcrop_shape: [0, 50, 50]
+          #              min_stride: [2, 9, 9] # If offset is 0 along a given dim, this stride is applied
+          3:
+            depth_level: 2
+            nb_target: 1
+            #            skip_standard_patch_loss: True
+            patch_dws_fact: [1, 4, 4] # With respect to the given target!
+            pred_dws_fact: [1, 2, 2] # With respect to the given target!
+            patch_size: [5,7,7]
+            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+            patch_stride: [2, 14, 14] # in the original resolution (of the target)
+            limit_nb_patches: [90, 'number'] # 'factor', 'number'
+#            limit_nb_patches: [0.25, 'factor'] # 'factor', 'number'
+            max_random_crop: [1, 2, 2] # in the donwscaled res!!
+            ASPP_kwargs:
+              inner_planes: 64
+#              dilations: [[1,4,4], [1,8,8], [1,12,12], [2,4,4], [2,8,8]]
+              dilations: []
+    #            IoU_kwargs:
+    #              nb_random_IoU: 10
+    #              min_random_offset: [0, 2, 2] # In patch-pixels
+    #              min_stride: [1, 5, 5] # If offset is 0 along a given dim, this stride is applied
+
+
+
+
+
+trainer:
+  max_epochs: 1000 # basically infinite
+  num_targets: 1
+
+  criterion:
+    loss_name: "vaeAffs.models.losses.PatchBasedLoss"
+    kwargs:
+      loss_type: "Dice" # "MSE"
+      apply_checkerboard: False
+      boundary_label: -1
+
+
+  optimizer:
+    Adam:
+      lr: 0.0001
+      weight_decay: 0.0005
+      amsgrad: True
+#      betas: [0.9, 0.999]
+
+  intervals:
+    save_every: [1000, 'iterations']
+    validate_every:
+      frequency : [100, 'iterations']
+      for_num_iterations: 5
+
+  tensorboard:
+    log_scalars_every: [1, 'iterations']
+    log_images_every: [500, 'iterations']
+    log_histograms_every: 'never'
+    send_image_at_batch_indices: [0]
+    send_image_at_channel_indices: [0]
+##    send_volume_at_z_indices: 'mid'
+#    split_config_keys: True
+#    log_anywhere: ['scalars']
+
+  callbacks:
+#    gradients:
+#      LogOutputGradients:
+#        frequency: 1
+
+    essentials:
+      SaveAtBestValidationScore:
+        smoothness: 0
+        verbose: True
+#      GradientClip:
+#        clip_value: 1e-3
+      SaveModelCallback:
+        save_every: 500
+      PlotReconstructedCallback:
+        plot_every: 100
+
+    scheduling:
+      AutoLR:
+        monitor: 'validation_loss'
+        factor: 0.99
+        patience: '100 iterations'
+        monitor_while: 'validating'
+        monitor_momentum: 0.75
+#        cooldown_duration: '50000 iterations'
+        consider_improvement_with_respect_to: 'previous'
+        verbose: True
+
+
+
+firelight:
+  pcaEmbeddings_lvl0:
+    ImageGridVisualizer:
+
+      input_mapping:
+        global: [B: ":", D: "2:7"] # the mapping specified in 'global' is applied to all keys
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 2  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'B', 'V']
+      column_specs: ['W', 'C', 'D', ]
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        #        # visualize raw input
+        - SegmentationVisualizer:
+            input: ['target', index: 0, C: 0, W: "8:-8", H: "8:-8"]
+            background_label: 0
+        - IdentityVisualizer:
+            input: ['inputs', index: 0, W: "8:-8", H: "8:-8"]
+            cmap: gray
+        - PcaVisualizer:
+            input: ['prediction', index: 0]
+        - PcaVisualizer:
+            input: ['prediction', index: 1]
+
+
+
+
+  pcaEmbeddings_lvl1:
+    ImageGridVisualizer:
+
+      input_mapping:
+        global: [B: ":", D: "2:7"] # the mapping specified in 'global' is applied to all keys
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 2  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'B', 'V']
+      column_specs: ['W', 'C', 'D', ]
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        - SegmentationVisualizer:
+            input: ['target', index: 1, C: 0, W: "8:-8", H: "8:-8"]
+            background_label: 0
+        - IdentityVisualizer:
+            input: ['inputs', index: 1, W: "8:-8", H: "8:-8"]
+            cmap: gray
+
+#        # visualize raw input
+        - PcaVisualizer:
+            input: ['prediction', index: 2]
+  pcaEmbeddings_lvl2:
+    ImageGridVisualizer:
+
+      input_mapping:
+        global: [B: ":"] # the mapping specified in 'global' is applied to all keys
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 2  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'B', 'V']
+      column_specs: ['W', 'C', 'D', ]
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        #        # visualize raw input
+        - PcaVisualizer:
+            input: ['prediction', index: 3,  D: "2: 7"]
+
+
+#  debug_depth_0:
+#    ImageGridVisualizer:
+#
+#      input_mapping:
+#        global: [B: ":"] # the mapping specified in 'global' is applied to all keys
+#
+#      pad_width: 1  # width of the border between images in pixels
+#      pad_value: .2  # intensity of the border pixels
+#      upsampling_factor: 2  # the whole grid is upsampled by this factor
+#
+#      row_specs: ['H', 'S', 'B', 'V']
+#      column_specs: ['W', 'C', 'D', ]
+#
+#      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+#      visualizers:
+#
+#        - IdentityVisualizer:
+#            input: ['inputs', index: 1, ]
+#            cmap: gray
+#        - IdentityVisualizer:
+#            input: ['input_ds']
+#            cmap: gray
+#        - PcaVisualizer:
+#            input: ['mid_layer']
+
+
+  debug_depth_1:
+    ImageGridVisualizer:
+      input_mapping:
+        global: [B: ":", W: "::2", H: "::2", D: "2:7"] # the mapping specified in 'global' is applied to all keys
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 2  # the whole grid is upsampled by this factor
+      row_specs: ['H', 'S', 'B', 'V']
+      column_specs: ['W', 'C', 'D', ]
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+        - PcaVisualizer:
+            input: ['encoder_layer_depth_1']
+  debug_depth_2:
+    ImageGridVisualizer:
+      input_mapping:
+        global: [B: ":", D: "2:7"] # the mapping specified in 'global' is applied to all keys
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 2  # the whole grid is upsampled by this factor
+      row_specs: ['H', 'S', 'B', 'V']
+      column_specs: ['W', 'C', 'D', ]
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+        - PcaVisualizer:
+            input: ['encoder_layer_depth_2']
+#  debug_depth_3:
+#    ImageGridVisualizer:
+#      input_mapping:
+#        global: [B: ":"] # the mapping specified in 'global' is applied to all keys
+#      pad_width: 1  # width of the border between images in pixels
+#      pad_value: .2  # intensity of the border pixels
+#      upsampling_factor: 2  # the whole grid is upsampled by this factor
+#      row_specs: ['H', 'S', 'B', 'V']
+#      column_specs: ['W', 'C', 'D', ]
+#      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+#      visualizers:
+#        - PcaVisualizer:
+#            input: ['encoder_layer_depth_3']
+  debug_depth_base:
+    ImageGridVisualizer:
+      input_mapping:
+        global: [B: ":", D: "2:7"] # the mapping specified in 'global' is applied to all keys
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 2  # the whole grid is upsampled by this factor
+      row_specs: ['H', 'S', 'B', 'V']
+      column_specs: ['W', 'C', 'D', ]
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+        - PcaVisualizer:
+            input: ['encoder_layer_depth_base']
+
+
+  rdmPatches_l0:
+    ImageGridVisualizer:
+      input_mapping:
+        global: [B: ":", D: ":"]
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 5  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'D', 'C', 'B']
+      column_specs: ['W', 'V']
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        - OverlayVisualizer:
+            visualizers:
+              - SegmentationVisualizer:
+                  input: ['gt_label_patch_l0']
+                  background_label: 0
+                  opacity: 0.5 # Make output only partially opaque.
+              - IdentityVisualizer:
+                  input: ['raw_patch_l0']
+                  cmap: gray
+#        - IdentityVisualizer:
+#            input: ['raw_patch_l0']
+#            cmap: gray
+        - IdentityVisualizer:
+            input: ['gt_mask_patch_l0']
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['pred_patch_l0']
+            cmap: gray
+            value_range: [0,1]
+
+  rdmPatches_l1:
+    ImageGridVisualizer:
+      input_mapping:
+        global: [B: ":", D: ":"]
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 1  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'D', 'C', 'B']
+      column_specs: ['W', 'V']
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        - OverlayVisualizer:
+            visualizers:
+              - SegmentationVisualizer:
+                  input: ['gt_label_patch_l1']
+                  background_label: 0
+                  opacity: 0.5 # Make output only partially opaque.
+              - IdentityVisualizer:
+                  input: ['raw_patch_l1']
+                  cmap: gray
+#        - IdentityVisualizer:
+#            input: ['raw_patch_l1']
+#            cmap: gray
+        - IdentityVisualizer:
+            input: ['gt_mask_patch_l1']
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['pred_patch_l1']
+            cmap: gray
+            value_range: [0,1]
+
+  rdmPatches_l2:
+    ImageGridVisualizer:
+      input_mapping:
+        global: [B: ":", D: ":"]
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 2  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'D', 'C', 'B']
+      column_specs: ['W', 'V']
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        - OverlayVisualizer:
+            visualizers:
+              - SegmentationVisualizer:
+                  input: ['gt_label_patch_l2']
+                  background_label: 0
+                  opacity: 0.5 # Make output only partially opaque.
+              - IdentityVisualizer:
+                  input: ['raw_patch_l2']
+                  cmap: gray
+#        - IdentityVisualizer:
+#            input: ['raw_patch_l2']
+#            cmap: gray
+        - IdentityVisualizer:
+            input: ['gt_mask_patch_l2']
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['pred_patch_l2']
+            cmap: gray
+            value_range: [0,1]
+
+  rdmPatches_l3:
+    ImageGridVisualizer:
+      input_mapping:
+        global: [B: ":", D: ":"]
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 2  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'D', 'C', 'B']
+      column_specs: ['W', 'V']
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        - OverlayVisualizer:
+            visualizers:
+              - SegmentationVisualizer:
+                  input: ['gt_label_patch_l3']
+                  background_label: 0
+                  opacity: 0.5 # Make output only partially opaque.
+              - IdentityVisualizer:
+                  input: ['raw_patch_l3']
+                  cmap: gray
+#        - IdentityVisualizer:
+#            input: ['raw_patch_l3']
+#            cmap: gray
+        - IdentityVisualizer:
+            input: ['gt_mask_patch_l3']
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['pred_patch_l3']
+            cmap: gray
+            value_range: [0,1]

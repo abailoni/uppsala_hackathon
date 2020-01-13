@@ -249,6 +249,7 @@ class StackedAffinityLoss(nn.Module):
 
 class PatchBasedLoss(nn.Module):
     def __init__(self, model, apply_checkerboard=False, loss_type="Dice",
+                 boundary_label=None,
                  IoU_loss_kwargs=None,
                  model_kwargs=None, devices=(0,1)):
         super(PatchBasedLoss, self).__init__()
@@ -262,6 +263,7 @@ class PatchBasedLoss(nn.Module):
             raise ValueError
 
         self.apply_checkerboard = apply_checkerboard
+        self.boundary_label = boundary_label
         self.add_IoU_loss = False
         if IoU_loss_kwargs is not None:
             self.add_IoU_loss = True
@@ -309,6 +311,7 @@ class PatchBasedLoss(nn.Module):
 
         # IoU loss:
         if self.add_IoU_loss:
+            assert self.boundary_label is None
             loss = loss + self.IoU_loss(all_predictions, target)
 
         boundary_loss_computed = False
@@ -353,6 +356,7 @@ class PatchBasedLoss(nn.Module):
             # # ----------------------------
             if hasattr(self.model, 'foreground_module') and kwargs.get('compute_foreground_loss', False):
                 assert not boundary_loss_computed, "Boundary loss computed multiple times!"
+                assert self.boundary_label is None
                 boundary_loss_computed = True
 
                 if any(fct!=1 for fct in pred_dws_fact):
@@ -476,7 +480,6 @@ class PatchBasedLoss(nn.Module):
                 # TODO: the factor is simply the level in the UNet
                 # get_slicing_crops(pred.shape[2:], full_target_shape, [1,1,1], real_patch_shape)
 
-
                 # ----------------------------
                 # Collect gt_segm patches and corresponding center labels:
                 # ----------------------------
@@ -499,24 +502,25 @@ class PatchBasedLoss(nn.Module):
                 ignore_masks = (gt_patches == 0)
                 valid_patches = (center_labels != 0)
 
-                # Exclude a patch from training if the central region contains more than one gt label
-                # (i.e. it is really close to a boundary):
-                central_crop = (slice(None), slice(None)) + convert_central_shape_to_crop_slice(gt_patches.shape[-3:], central_shape)
-                # mean_central_crop_labels = gt_patches[central_crop].mean(dim=-1, keepdim=True) \
-                #     .mean(dim=-2, keepdim=True) \
-                #     .mean(dim=-3, keepdim=True)
-                # boundary_patches = mean_central_crop_labels == center_labels
-                mean_central_crop_labels = gt_patches[central_crop].mean(dim=-1, keepdim=True) \
-                    .mean(dim=-2, keepdim=True) \
-                    .mean(dim=-3, keepdim=True)
+                if self.boundary_label is None:
+                    # Exclude a patch from training if the central region contains more than one gt label
+                    # (i.e. it is really close to a boundary):
+                    central_crop = (slice(None), slice(None)) + convert_central_shape_to_crop_slice(gt_patches.shape[-3:], central_shape)
+                    mean_central_crop_labels = gt_patches[central_crop].mean(dim=-1, keepdim=True) \
+                        .mean(dim=-2, keepdim=True) \
+                        .mean(dim=-3, keepdim=True)
 
-                valid_patches = valid_patches & (mean_central_crop_labels == center_labels)
+                    valid_patches = valid_patches & (mean_central_crop_labels == center_labels)
+                    is_on_boundary_mask = None
+                else:
+                    # 1 if patch is on boundary, 0 otherwise
+                    is_on_boundary_mask = (center_labels.int() == self.boundary_label).repeat(1, 1, *real_patch_shape)
 
                 # Delete redundant patches from batch:
                 valid_batch_indices = np.argwhere(valid_patches[:, 0, 0, 0, 0].cpu().detach().numpy())[:, 0]
                 if limit_nb_patches is not None:
                     limit = limit_nb_patches[0]
-                    if limit_nb_patches[1] == 'number:':
+                    if limit_nb_patches[1] == 'number':
                         if valid_batch_indices.shape[0] > limit:
                             valid_batch_indices = np.random.choice(valid_batch_indices, limit, replace=False)
                     elif limit_nb_patches[1] == 'factor':
@@ -534,6 +538,10 @@ class PatchBasedLoss(nn.Module):
                 # ----------------------------
                 center_labels_repeated = center_labels.repeat(1, 1, *real_patch_shape)
                 me_masks = gt_patches != center_labels_repeated
+
+                if is_on_boundary_mask is not None:
+                    # If on boundary, we make (inverted) me_masks completely 1 (split from everything)
+                    me_masks = me_masks | is_on_boundary_mask
 
                 # Downscale MeMasks using MaxPooling (preserve narrow processes):
                 if all(fctr == 1 for fctr in patch_dws_fact):
