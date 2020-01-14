@@ -30,6 +30,8 @@ from speedrun.log_anywhere import log_image, log_embedding, log_scalar
 import warnings
 import gc
 
+from segmfriends.utils.various import parse_data_slice
+
 
 class EncodingLoss(nn.Module):
     def __init__(self, path_autoencoder_model):
@@ -244,7 +246,102 @@ class StackedAffinityLoss(nn.Module):
         return loss
 
 
+class MultiLevelAffinityLoss(nn.Module):
+    """
+    Perform deep supervision by applying loss at several depth levels of a U-Net like architecture.
+    """
+    def __init__(self, model, loss_type="Dice", model_kwargs=None, devices=(0,1),
+                 predictions_specs=None,
+                 target_has_label_segm=False,
+                 precrop_pred=None):
+        super(MultiLevelAffinityLoss, self).__init__()
+        if loss_type == "Dice":
+            self.loss = SorensenDiceLoss()
+        elif loss_type == "MSE":
+            self.loss = nn.MSELoss()
+        elif loss_type == "BCE":
+            self.loss = nn.BCELoss()
+        else:
+            raise ValueError
 
+        self.devices = devices
+        self.model_kwargs = model_kwargs
+        self.MSE_loss = nn.MSELoss()
+        self.smoothL1_loss = nn.SmoothL1Loss()
+        # TODO: use nn.BCEWithLogitsLoss()
+        self.BCE = nn.BCELoss()
+        self.soresen_loss = SorensenDiceLoss()
+
+        from vaeAffs.models.vanilla_vae import VAE_loss
+        self.VAE_loss = VAE_loss()
+
+        self.model = model
+        assert predictions_specs is not None, "A dictionary should be passed"
+        self.predictions_specs = predictions_specs
+        self.precrop_pred = precrop_pred
+        self.target_has_label_segm = target_has_label_segm
+
+    def forward(self, predictions, all_targets):
+        predictions = [predictions] if not isinstance(predictions, (list, tuple)) else predictions
+        all_targets = [all_targets] if not isinstance(all_targets, (list, tuple)) else all_targets
+
+        assert len(predictions) == len(self.predictions_specs)
+
+        loss = 0
+
+        for nb_pred, pred in enumerate(predictions):
+            # TODO: add precrop_pred?
+            # if self.precrop_pred is not None:
+            #     from segmfriends.utils.various import parse_data_slice
+            #     crop_slc = (slice(None), slice(None)) + parse_data_slice(self.precrop_pred)
+            #     predictions = predictions[crop_slc]
+            pred_specs = self.predictions_specs[nb_pred]
+            target = all_targets[pred_specs.get("target", 0)]
+
+            target_dws_fact = pred_specs.get("target_dws_fact", None)
+            if target_dws_fact is not None:
+                assert isinstance(target_dws_fact, list) and len(target_dws_fact) == 3
+                target = target[(slice(None), slice(None)) + tuple(slice(None,None,dws) for dws in target_dws_fact)]
+
+            target = auto_crop_tensor_to_shape(target, pred.shape,
+                                            ignore_channel_and_batch_dims=True)
+
+            if self.target_has_label_segm:
+                target = target[:,1:]
+            assert target.shape[1] % 2 == 0, "Target should include both affinities and masks"
+
+            # Get ignore-mask and affinities:
+            nb_channels = int(target.shape[1] / 2)
+
+            affs_channels = pred_specs.get("affs_channels", None)
+            if affs_channels is not None:
+                if isinstance(affs_channels, str):
+                    affs_slice = parse_data_slice(affs_channels)[0]
+                elif isinstance(affs_channels, list):
+                    # TODO: make as a tuple???
+                    affs_slice = affs_channels
+                else:
+                    raise ValueError("The passed affinities channels are not compatible")
+            else:
+                affs_slice = slice(None)
+
+            gt_affs = target[:,:nb_channels][:, affs_slice]
+
+            assert gt_affs.shape[1] == pred.shape[1], "Prediction has a wrong number of offset channels"
+
+            valid_pixels = target[:,nb_channels:][:, affs_slice]
+
+            # Invert affinities for Dice loss: (1 boundary, 0 otherwise)
+            gt_affs = 1. - gt_affs
+
+            pred = pred*valid_pixels
+            gt_affs = gt_affs*valid_pixels
+
+            with warnings.catch_warnings(record=True) as w:
+                loss = loss + data_parallel(self.loss, (pred, gt_affs), self.devices).mean()
+
+        torch.cuda.empty_cache()
+        return loss
 
 
 class PatchBasedLoss(nn.Module):

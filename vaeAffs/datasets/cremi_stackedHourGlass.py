@@ -32,14 +32,14 @@ class RejectSingleLabelVolumes(object):
         self.defected_label = defected_label
 
     def __call__(self, fetched):
-        # Check if we have a defected slice at the beginning of the batch:
-        if self.defected_label is not None:
-            if ((fetched[0].astype('int64') == self.defected_label).sum() != 0) or \
-                    (fetched[-1].astype('int64') == self.defected_label).sum() != 0:
-                # Check if we should reject:
-                print("!!!!!!!!!!!!!!!!!!!!!!!!! WARNING !!!!!!!!!!!!!!!!!!!!!!!!!!)")
-                print("Batch rejected because of defected slice first/last!")
-                return True
+        # # Check if we have a defected slice at the beginning of the batch:
+        # if self.defected_label is not None:
+        #     if ((fetched[0].astype('int64') == self.defected_label).sum() != 0) or \
+        #             (fetched[-1].astype('int64') == self.defected_label).sum() != 0:
+        #         # Check if we should reject:
+        #         print("!!!!!!!!!!!!!!!!!!!!!!!!! WARNING !!!!!!!!!!!!!!!!!!!!!!!!!!)")
+        #         print("Batch rejected because of defected slice first/last!")
+        #         return True
 
         _, counts = np.unique(fetched, return_counts=True)
         # Check if we should reject:
@@ -68,17 +68,24 @@ class DuplicateGtDefectedSlices(Transform):
                 new_GT[z_idx] = new_GT[z_idx-1]
 
         # Modify new_GT for defect-augmented slices:
+        counter = 0
         for z_idx, is_defected in enumerate(defected_mask[:,0,0]):
             if is_defected:
                 if z_idx == 0:
                     print("!!!!!!!!!!!!!!!!!!!!!!!!! WARNING 2 !!!!!!!!!!!!!!!!!!!!!!!!!!)")
                     continue
 
+                counter += 1
                 # assert z_idx != 0, "The first slice should never be defected"
                 # Copy ground truth from previous slice:
                 new_GT[z_idx] = new_GT[z_idx-1]
 
-        return (raw, new_GT)
+        # if defected_mask.max() or counter != 0:
+        #     print("Defected: {}; number: {}".format(defected_mask.max(), counter))
+
+
+
+        return (raw, new_GT.astype('int64'))
 
 class AdjustBatch(Transform):
 
@@ -129,7 +136,7 @@ class CremiDataset(ZipReject):
         super().__init__(self.raw_volume, self.segmentation_volume,
                          sync=True, rejection_dataset_indices=1,
                          rejection_criterion=RejectSingleLabelVolumes(1.0, rejection_threshold,
-                                                                      defected_label=2147483646))
+                                                                      defected_label=master_config.get('duplicate_GT_defected_slices', {}).get('defect_label', -1)))
         # Set master config (for transforms)
         self.master_config = {} if master_config is None else deepcopy(master_config)
         # Get transforms

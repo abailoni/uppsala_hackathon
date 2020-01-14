@@ -28,7 +28,9 @@ class _ASPPModule3D(nn.Module):
                 m.bias.data.zero_()
 
 class ASPP3D(nn.Module):
-    def __init__(self, inplanes, inner_planes, dilations, num_norm_groups=None, output_planes=None):
+    def __init__(self, inplanes, inner_planes, dilations, num_norm_groups=None, output_planes=None,
+                 final_act="ReLU",
+                 apply_final_norm=True):
         super(ASPP3D, self).__init__()
 
         aspp_modules = []
@@ -45,12 +47,18 @@ class ASPP3D(nn.Module):
         self.bn_1 = nn.GroupNorm(num_channels=inner_planes, num_groups=num_norm_groups)
         self.relu_1 = nn.ReLU()
         self.conv1x1_2 = nn.Conv3d(inner_planes, self.output_planes, 1, bias=False)
-        self.bn_2 = nn.GroupNorm(num_channels=self.output_planes, num_groups=num_norm_groups)
-        self.relu_2 = nn.ReLU()
+        self.bn_2 = nn.GroupNorm(num_channels=self.output_planes, num_groups=num_norm_groups if self.output_planes % num_norm_groups == 0 else self.output_planes)
+        if final_act == "ReLU":
+            self.relu_2 = nn.ReLU()
+        elif final_act == "sigmoid":
+            self.relu_2 = nn.Sigmoid()
+        else:
+            raise ValueError
         # self.dropout = nn.Dropout(0.5)
         self._init_weight()
 
         self.num_norm_groups = num_norm_groups
+        self.apply_final_norm = apply_final_norm
 
     def forward(self, x):
         intermediate = tuple(assp_module(x) for assp_module in self.aspp_modules)
@@ -61,7 +69,9 @@ class ASPP3D(nn.Module):
         x = self.relu_1(x)
 
         x = self.conv1x1_2(x)
-        x = self.bn_2(x)
+
+        if self.apply_final_norm:
+            x = self.bn_2(x)
         x = self.relu_2(x)
 
         return x
