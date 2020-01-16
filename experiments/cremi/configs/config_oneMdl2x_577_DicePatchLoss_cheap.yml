@@ -222,7 +222,7 @@ loaders:
 
     volume_config:
       # Sliding window size
-      window_size: [8, 704, 704]  # 288
+      window_size: [14, 704, 704]  # 288
       #        A:
       #        B: *shape
       #        C: *shape
@@ -235,6 +235,8 @@ loaders:
       #      data_slice: '70:100,200:800,200:800'
       #      data_slice: ":20, 90:, 580: 1900"
       data_slice: ':,:,:'
+#      data_slice: ':40,:,:'
+#      data_slice: ':8, :704, :704'
 #      data_slice: ':8, :704, :704'
 
       padding_mode: "reflect"
@@ -259,9 +261,12 @@ loaders:
 
 inference:
   crop_prediction: # How much I crop the predicted tensor: (local_crop in the output resolution)
-    - [0,0]
-    - [0,0]
-    - [0,0]
+    - [2,2]
+    - [24,24]
+    - [24,24]
+#    - [3,3]
+#    - [40,40]
+#    - [40,40]
   return_patch_mask: False # Make sure to exclude the invalid affinities
   input_dws_fact: [1, 4, 4]
   output_dws_fact: [1, 2, 2]
@@ -271,22 +276,27 @@ model:
   embeddingutils.models.unet.GeneralizedStackedPyramidUNet3D:
 #  vaeAffs.models.compute_IoU.ProbabilisticBoundaryFromEmb:
 #    offsets:
-#      - [[0,1,0], [0]]
-#      - [[1,0,0], [0,1]]
-#      - [[0,0,1], [0]]
-#      - [[-1,0,0], [0,1]]
-#      - [[0,-1,0], [0]]
-#      - [[0,0,-1], [0]]
-#      - [[0,8,0], [1]]
-#      - [[0,0,8], [1]]
-#      - [[0,-8,0], [1]]
-#      - [[0,0,-8], [1]]
+#      - [[1,0,0], [0,1], "1:-1"]
+#      - [[0,1,0], [0], "2:-2"]
+##      - [[0,0,1], [0]]
+#      - [[0,3,0], [0], "2:-2"]
+#      - [[0,0,3], [0], "2:-2"]
+##      - [[-1,0,0], [0,1]]
+##      - [[0,-1,0], [0]]
+##      - [[0,0,-1], [0]]
+#      - [[0,8,0], [1], "2:-2"]
+#      - [[0,16,0], [1], "2:-2"]
+##      - [[0,-8,0], [1]]
+##      - [[0,0,-8], [1]]
 #    pre_crop_pred: "2:-2,:,:"
+##    pre_crop_pred: ":,:,:"
+##    pre_crop_pred: "4:-4,40:-40,40:-40"
 #    slicing_config:
-#      window_size: [4,160,160]
-
-
-#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/deb_longRange/checkpoint.pytorch"
+#      window_size: [2,160,160]
+##      window_size: [3,80,80]
+#
+#
+#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/patchLoss_dim32_775_cheap1/checkpoint.pytorch"
 #    load_stacked_models_from:
 #      0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stacked3x_dim64_7_15_15_mdl0_c/checkpoint.pytorch"
 #      1: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stacked3x_dim128_5_15_15_mdl1/checkpoint.pytorch"
