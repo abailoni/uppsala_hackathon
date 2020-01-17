@@ -47,8 +47,9 @@ class RejectSingleLabelVolumes(object):
                     (np.count_nonzero(fetched) / fetched.size) < self.threshold_zero_label)
 
 class DuplicateGtDefectedSlices(Transform):
-    def __init__(self, defected_label=-1, **super_kwargs):
+    def __init__(self, defected_label=-1, keep_defected_mask=False, **super_kwargs):
         self.defected_label = defected_label
+        self.keep_defected_mask = keep_defected_mask
         super(DuplicateGtDefectedSlices, self).__init__(**super_kwargs)
 
     def batch_function(self, batch):
@@ -84,8 +85,10 @@ class DuplicateGtDefectedSlices(Transform):
         #     print("Defected: {}; number: {}".format(defected_mask.max(), counter))
 
 
-
-        return (raw, new_GT.astype('int64'))
+        if self.keep_defected_mask:
+            return (raw, defected_mask.astype('int64'), new_GT.astype('int64'))
+        else:
+            return (raw, new_GT.astype('int64'))
 
 class AdjustBatch(Transform):
 
@@ -151,7 +154,7 @@ class CremiDataset(ZipReject):
             transforms.add(RandomRotate())
 
         if self.master_config.get('duplicate_GT_defected_slices', False):
-            transforms.add(DuplicateGtDefectedSlices(self.master_config['duplicate_GT_defected_slices'].get('defect_label', -1)))
+            transforms.add(DuplicateGtDefectedSlices(**self.master_config['duplicate_GT_defected_slices']))
 
 
         # Elastic transforms can be skipped by
@@ -170,7 +173,9 @@ class CremiDataset(ZipReject):
             random_slides_config = deepcopy(self.master_config.get('random_slides'))
             ouput_shape = random_slides_config.pop('shape_after_slide', None)
             max_misalign = random_slides_config.pop('max_misalign', None)
-            transforms.add(RandomSlide(output_image_size=ouput_shape, max_misalign=max_misalign,**random_slides_config))
+            transforms.add(RandomSlide(output_image_size=ouput_shape, max_misalign=max_misalign,
+                                       index_mask_defected_slices=1 if self.master_config["duplicate_GT_defected_slices"].get("keep_defected_mask", False) else None,
+                                       **random_slides_config))
 
         # Replicate and downscale batch:
         input_indices, target_indices = [0], [1]

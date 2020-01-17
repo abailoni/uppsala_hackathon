@@ -15,9 +15,20 @@ loaders:
           ignore_label: 0
 
     defect_augmentation_config:
-        keep_track_of_defected_slices: True
+        keep_track_of:
+          - "artifacts"
+          - "missing_slice"
         max_contiguous_defected_slices: 2
-        p_missing_slice: 0.002
+        # TODO: update to accept names of dataset
+        ignore_slice_list:
+          - 15 # B
+          - 16 # B
+          - 44 # B
+          - 45 # B
+          - 14 # C
+          - 74 # C
+          - 86 # C
+        p_missing_slice: 0.01
         p_low_contrast: 0.000
         p_deformed_slice: 0.000
         p_artifact_source: 0.01
@@ -53,8 +64,9 @@ loaders:
       random_slides:
         shape_after_slide: [704, 704]   #change to x, y of window size
 #        max_misalign: [30, 30]   #change to x, y of window size
-        shift_vs_slide_proba: 0.5
-        apply_proba: 0.01  # TODO: CHANGE
+        shift_vs_slide_proba: 0.
+        apply_proba: 0.2
+        # Here we make sure that shifting (only one slice) does not change the GT:
         apply_to: [0] #TODO: generalize if I have more inputs...
 
       random_flip: True
@@ -234,8 +246,8 @@ loaders:
       # Data slice to iterate over.
       #      data_slice: '70:100,200:800,200:800'
       #      data_slice: ":20, 90:, 580: 1900"
-      data_slice: ':,:,:'
-#      data_slice: ':40,:,:'
+#      data_slice: ':,:,:'
+      data_slice: ':40,:,:'
 #      data_slice: ':8, :704, :704'
 #      data_slice: ':8, :704, :704'
 
@@ -273,30 +285,33 @@ inference:
 #  autopad_dataset: True #TODO: this would be nice, but not clear how to do it...
 
 model:
-  embeddingutils.models.unet.GeneralizedStackedPyramidUNet3D:
-#  vaeAffs.models.compute_IoU.ProbabilisticBoundaryFromEmb:
-#    offsets:
-#      - [[1,0,0], [0,1], "1:-1"]
-#      - [[0,1,0], [0], "2:-2"]
-##      - [[0,0,1], [0]]
-#      - [[0,3,0], [0], "2:-2"]
-#      - [[0,0,3], [0], "2:-2"]
-##      - [[-1,0,0], [0,1]]
-##      - [[0,-1,0], [0]]
-##      - [[0,0,-1], [0]]
-#      - [[0,8,0], [1], "2:-2"]
-#      - [[0,16,0], [1], "2:-2"]
-##      - [[0,-8,0], [1]]
-##      - [[0,0,-8], [1]]
-#    pre_crop_pred: "2:-2,:,:"
-##    pre_crop_pred: ":,:,:"
-##    pre_crop_pred: "4:-4,40:-40,40:-40"
-#    slicing_config:
-#      window_size: [2,160,160]
-##      window_size: [3,80,80]
-#
-#
-#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/patchLoss_dim32_775_cheap1/checkpoint.pytorch"
+#  embeddingutils.models.unet.GeneralizedStackedPyramidUNet3D:
+  vaeAffs.models.compute_IoU.ProbabilisticBoundaryFromEmb:
+    affinity_mode: "classic"
+    offsets:
+      - [[1,0,0], [0,1], "1:-1"]
+      - [[0,1,0], [0], "2:-2"]
+#      - [[0,0,1], [0]]
+      - [[0,3,0], [0], "2:-2"]
+      - [[0,0,3], [0], "2:-2"]
+#      - [[-1,0,0], [0,1]]
+#      - [[0,-1,0], [0]]
+#      - [[0,0,-1], [0]]
+      - [[0,8,0], [1]]
+      - [[0,16,0], [1]]
+      - [[1,16,0], [1]]
+      - [[1,16,16], [1]]
+#      - [[0,-8,0], [1]]
+#      - [[0,0,-8], [1]]
+    pre_crop_pred: "2:-2,:,:"
+#    pre_crop_pred: ":,:,:"
+#    pre_crop_pred: "4:-4,40:-40,40:-40"
+    slicing_config:
+      window_size: [2,160,160]
+#      window_size: [3,80,80]
+
+
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/patchLoss_dim32_775_cheap/checkpoint.pytorch"
 #    load_stacked_models_from:
 #      0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stacked3x_dim64_7_15_15_mdl0_c/checkpoint.pytorch"
 #      1: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stacked3x_dim128_5_15_15_mdl1/checkpoint.pytorch"
