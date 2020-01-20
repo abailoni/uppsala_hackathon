@@ -166,7 +166,7 @@ loaders:
         dtype: float32
         padding_mode: "constant"
         padding: *dataset_padding
-        label_components: False
+        label_volume: False
         preserved_label:
           label: [2147483647, 2147483646]
           reset_to: [-1, -2]
@@ -211,7 +211,7 @@ loaders:
         dtype: float32
         padding_mode: "constant"
         padding: *dataset_padding
-        label_components: False
+        label_volume: False
         preserved_label:
           label: [2147483647, 2147483646]
           reset_to: [-1, -2]
@@ -524,8 +524,8 @@ trainer:
 #        clip_value: 1e-3
       SaveModelCallback:
         save_every: 500
-      PlotReconstructedCallback:
-        plot_every: 100
+#      PlotReconstructedCallback:
+#        plot_every: 100
 
     scheduling:
       AutoLR:
