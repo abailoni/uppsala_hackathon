@@ -287,7 +287,7 @@ inference:
 model:
 #  embeddingutils.models.unet.GeneralizedStackedPyramidUNet3D:
   vaeAffs.models.compute_IoU.ProbabilisticBoundaryFromEmb:
-    affinity_mode: "classic"
+    affinity_mode: "probabilistic"
     offsets:
       - [[1,0,0], [0,1], "1:-1"]
       - [[0,1,0], [0], "2:-2"]

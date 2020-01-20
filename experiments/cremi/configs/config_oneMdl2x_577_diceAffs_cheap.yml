@@ -15,12 +15,23 @@ loaders:
           ignore_label: 0
 
     defect_augmentation_config:
-        keep_track_of_defected_slices: True
+        keep_track_of:
+          - "artifacts"
+          - "missing_slice"
         max_contiguous_defected_slices: 2
-        p_missing_slice: 0.002
+        # TODO: update to accept names of dataset
+        ignore_slice_list:
+          - 15 # B
+          - 16 # B
+          - 44 # B
+          - 45 # B
+          - 14 # C
+          - 74 # C
+          - 86 # C
+        p_missing_slice: 0.006 #0.01
         p_low_contrast: 0.000
         p_deformed_slice: 0.000
-        p_artifact_source: 0.01
+        p_artifact_source: 0.006 # 0.01
         deformation_mode: 'compress'
         deformation_strength: 16
         artifact_source:
@@ -53,14 +64,16 @@ loaders:
       random_slides:
         shape_after_slide: [704, 704]   #change to x, y of window size
 #        max_misalign: [30, 30]   #change to x, y of window size
-        shift_vs_slide_proba: 0.5
-        apply_proba: 0.01  # TODO: CHANGE
+        shift_vs_slide_proba: 0.
+        apply_proba: 0.9 # 0.2
+        # Here we make sure that shifting (only one slice) does not change the GT:
         apply_to: [0] #TODO: generalize if I have more inputs...
 
       random_flip: True
 
       duplicate_GT_defected_slices:
-        defect_label: -2
+        defected_label: -2
+        keep_defected_mask: True
 
 #      crop_after_target:
 #        crop_left: [0, 30, 30]
@@ -172,20 +185,19 @@ loaders:
     slicing_config:
       # Sliding window size
       window_size:
-        A: &shape [11, 764, 764] # 25
+        A: &shape [15, 764, 764] # 25
         B: *shape
         C: *shape
       # Sliding window stride
       stride:
-        A: &stride [7, 200, 200]
+        A: &stride [11, 200, 200]
         B: *stride
         C: *stride
       # Data slice to iterate over.
       data_slice:
         A: ':, :, :'
-        B: ':, :, :'
-#        B: '10:30, :, :'
-        C: ':, :, :'
+        B: '40:, :, :'
+        C: ':75, :, :'
 
     # Specify paths to volumes
     volume_config:
@@ -227,21 +239,27 @@ loaders:
 
   val:
     names:
+      - B
       - C
 
     slicing_config:
       window_size:
+        B: *shape
         C: *shape
       stride:
+        B: *stride
         C: *stride
       data_slice:
+        B: ':40, :, :'
         C: '75:, :, :'
 
     volume_config:
       raw:
         path:
+          B: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleB_train.h5'
           C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
+          B: 'raw_old'
           C: 'raw'
         dtype: float32
         sigma: 0.025
@@ -249,8 +267,10 @@ loaders:
         padding: *dataset_padding
       segmentation:
         path:
+          B: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleB_train.h5'
           C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
+          B: 'segmentations/groundtruth_plus_boundary_defectMod_OLD'
           C: 'segmentations/groundtruth_plus_boundary_defectMod'
         dtype: int32
         padding_mode: "constant"
@@ -286,7 +306,7 @@ loaders:
 
     volume_config:
       # Sliding window size
-      window_size: [8, 704, 704]  # 288
+      window_size: [14, 704, 704]  # 288
       #        A:
       #        B: *shape
       #        C: *shape
@@ -350,7 +370,7 @@ model:
 #      window_size: [4,160,160]
 
 
-    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/diceAffLoss_cheap/checkpoint.pytorch"
+#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/diceAffLoss_cheap/checkpoint.pytorch"
 #    load_stacked_models_from:
 #      0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stacked3x_dim64_7_15_15_mdl0_c/checkpoint.pytorch"
 #      1: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stacked3x_dim128_5_15_15_mdl1/checkpoint.pytorch"
@@ -358,7 +378,7 @@ model:
     # If only model 1 is trained, then model 0 is run in inference mode. Atm there is no backprop between models:
     models_to_train: [0]
     detach_stacked_models: True
-    add_foreground_prediction_module: True
+    add_foreground_prediction_module: False
     nb_inputs_per_model: 2
 
 #    stacked_upscl_fact:

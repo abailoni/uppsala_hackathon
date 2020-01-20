@@ -132,9 +132,8 @@ loaders:
       # Data slice to iterate over.
       data_slice:
         A: ':, :, :'
-        B: ':, :, :'
-#        B: ':30, :, :'
-        C: ':, :, :'
+        B: '40:, :, :'
+        C: ':75, :, :'
 
     # Specify paths to volumes
     volume_config:
@@ -176,21 +175,27 @@ loaders:
 
   val:
     names:
+      - B
       - C
 
     slicing_config:
       window_size:
+        B: *shape
         C: *shape
       stride:
+        B: *stride
         C: *stride
       data_slice:
+        B: ':40, :, :'
         C: '75:, :, :'
 
     volume_config:
       raw:
         path:
+          B: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleB_train.h5'
           C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
+          B: 'raw_old'
           C: 'raw'
         dtype: float32
         sigma: 0.025
@@ -198,8 +203,10 @@ loaders:
         padding: *dataset_padding
       segmentation:
         path:
+          B: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleB_train.h5'
           C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
         path_in_file:
+          B: 'segmentations/groundtruth_plus_boundary_OLD'
           C: 'segmentations/groundtruth_plus_boundary'
         dtype: float32
         padding_mode: "constant"
@@ -357,7 +364,7 @@ model:
           0: ":, 8:-8, 8:-8"
           1: ":, 4:-4, 4:-4"
           2: ":, 2:-2, 2:-2"
-        nb_patch_nets: 4
+        nb_patch_nets: 5
         patchNet_kwargs:
           global:
             latent_variable_size: 32
@@ -391,7 +398,7 @@ model:
             nb_target: 0
             #            skip_standard_patch_loss: True
             patch_size: [5,7,7]
-            patch_dws_fact: [1, 8, 8] # With respect to the given target!
+            patch_dws_fact: [1, 4, 4] # With respect to the given target!
             pred_dws_fact: [1, 1, 1]
             central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
             patch_stride: # in the original resolution (of the target)
@@ -408,6 +415,27 @@ model:
           #              min_random_offset: [0, 1, 1] # In patch-pixels
           #              min_stride: [1, 7, 7] # If offset is 0 along a given dim, this stride is applied
           2:
+            depth_level: 0
+            nb_target: 0
+            #            skip_standard_patch_loss: True
+            patch_size: [5,7,7]
+            patch_dws_fact: [1, 8, 8] # With respect to the given target!
+            pred_dws_fact: [1, 1, 1]
+            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+            patch_stride: # in the original resolution (of the target)
+              - [2, 7, 7]
+            limit_nb_patches: # 'factor', 'number'
+              - [120, 'number']
+            max_random_crop: [1, 7, 7] # in the donwscaled res!! #TODO: update z-crop when more context
+            ASPP_kwargs:
+              inner_planes: 32
+#              dilations: [[1,8,8], [1,16,16], [1,24,24], [2,8,8], [2,16,16]]
+              dilations: []
+          #            IoU_kwargs:
+          #              nb_random_IoU: 10
+          #              min_random_offset: [0, 1, 1] # In patch-pixels
+          #              min_stride: [1, 7, 7] # If offset is 0 along a given dim, this stride is applied
+          3:
             depth_level: 1
             nb_target: 1
             #            skip_standard_patch_loss: True
@@ -427,7 +455,7 @@ model:
           #              min_random_offset: [0, 2, 2] # In patch-pixels
           #              subcrop_shape: [0, 50, 50]
           #              min_stride: [2, 9, 9] # If offset is 0 along a given dim, this stride is applied
-          3:
+          4:
             depth_level: 2
             nb_target: 1
             #            skip_standard_patch_loss: True
