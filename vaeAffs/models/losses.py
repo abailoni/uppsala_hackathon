@@ -340,7 +340,8 @@ class MultiLevelAffinityLoss(nn.Module):
             with warnings.catch_warnings(record=True) as w:
                 loss = loss + data_parallel(self.loss, (pred, gt_affs), self.devices).mean()
 
-        torch.cuda.empty_cache()
+        # TODO: use Callback from Roman to run it every N iterations
+        gc.collect()
         return loss
 
 
@@ -395,6 +396,9 @@ class PatchBasedLoss(nn.Module):
     def forward(self, all_predictions, target):
         mdl_kwargs = self.model_kwargs
         ptch_kwargs = mdl_kwargs["patchNet_kwargs"]
+
+        # print([(pred.shape[-3], pred.shape[-2], pred.shape[-1]) for pred in all_predictions])
+        # print([(targ.shape[-3], targ.shape[-2], targ.shape[-1]) for targ in target])
 
         # Plot some patches with the raw:
         if self.model.models[-1].keep_raw:
@@ -730,6 +734,7 @@ class PatchBasedLoss(nn.Module):
                     log_scalar("nb_patches_l{}".format(nb_patch_net), expanded_patches.shape[0])
 
         # print("Loss done, memory {}", torch.cuda.memory_allocated(0)/1000000)
+        # TODO: use Callback from Roman to run it every N iterations
         gc.collect()
         return loss
 

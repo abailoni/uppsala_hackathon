@@ -879,16 +879,17 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         # Normalize to values between 1. (edge always active) and -1. (edge always cut):
         affinities = torch.zeros_like(boundary_stats[0])
 
-        # METHOD 1:
-        affinities[valid_mask] = (boundary_stats[0][valid_mask] - boundary_stats[1][valid_mask]) / \
-                                 (boundary_stats[0][valid_mask] + boundary_stats[1][valid_mask])
-        # Normalize between 1 and 0 as usual affinities:
-        affinities = (affinities/2.) + 0.5
+        # # METHOD 1:
+        # affinities[valid_mask] = (boundary_stats[0][valid_mask] - boundary_stats[1][valid_mask]) / \
+        #                          (boundary_stats[0][valid_mask] + boundary_stats[1][valid_mask])
+        # # Normalize between 1 and 0 as usual affinities:
+        # affinities = (affinities/2.) + 0.5
 
-        # # affinities[valid_mask] = boundary_stats[0][valid_mask] - 2*boundary_stats[1][valid_mask]
-        # affinities[valid_mask] = boundary_stats[0][valid_mask]
-        # # Crop negative values to zero:
-        # affinities = affinities*(affinities>0.).float()
+        # METHOD 2:
+        # affinities[valid_mask] = boundary_stats[0][valid_mask] - 2*boundary_stats[1][valid_mask]
+        affinities[valid_mask] = boundary_stats[1][valid_mask]
+        # Crop negative values to zero:
+        affinities = affinities*(affinities>0.).float()
         # # Rescale between 0 and 1:
         # for off in range(affinities.shape[0]):
         #     affinities[off] = affinities[off]/affinities[off].max()
@@ -897,6 +898,8 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
             return affinities.unsqueeze(0)
         else:
             raise NotImplementedError()
+
+
     def forward_affinities(self, *inputs):
         with torch.no_grad():
             all_predictions = super(ProbabilisticBoundaryFromEmb, self).forward(*inputs)
