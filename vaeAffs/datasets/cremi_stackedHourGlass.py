@@ -181,17 +181,19 @@ class CremiDataset(ZipReject):
                 **random_slides_config))
 
         # Replicate and downscale batch:
+        nb_inputs = 1
         input_indices, target_indices = [0], [1]
         if self.master_config.get("downscale_and_crop") is not None:
             ds_config = self.master_config.get("downscale_and_crop")
-            transforms.add(ReplicateBatchGeneralized([conf.pop('apply_to') for conf in ds_config]))
+            apply_to  = [conf.pop('apply_to') for conf in ds_config]
+            nb_inputs = (np.array(apply_to) == 0).sum()
+            transforms.add(ReplicateBatchGeneralized(apply_to))
             for indx, conf in enumerate(ds_config):
                 transforms.add(DownsampleAndCrop3D(apply_to=[indx], order=None, **conf))
 
         # # affinity transforms for affinity targets
         # # we apply the affinity target calculation only to the segmentation (1)
         if self.master_config.get("affinity_config") is not None:
-            raise NotImplementedError("Double check various masks!")
             affs_config = deepcopy(self.master_config.get("affinity_config"))
             global_kwargs = affs_config.pop("global", {})
 
@@ -201,7 +203,7 @@ class CremiDataset(ZipReject):
             for input_index in affs_config:
                 affs_kwargs = deepcopy(global_kwargs)
                 affs_kwargs.update(affs_config[input_index])
-                transforms.add(aff_transform(apply_to=[input_index+num_inputs], **affs_kwargs))
+                transforms.add(aff_transform(apply_to=[input_index+nb_inputs], **affs_kwargs))
 
         # crop invalid affinity labels and elastic augment reflection padding assymetrically
         crop_config = self.master_config.get('crop_after_target', {})

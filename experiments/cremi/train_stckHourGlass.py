@@ -73,12 +73,13 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
             nb_inputs = self.get("model/{}/nb_inputs_per_model".format(self.model_class))
             nb_targets = nb_tensors - nb_inputs
             if "affinity_config" in master_conf:
-                raise NotImplementedError("Handle various mask")
-                if master_conf.get("affinity_config", {}).get("use_dynamic_offsets", False):
+                affs_config = deepcopy(master_conf.get("affinity_config", {}))
+                if affs_config.get("use_dynamic_offsets", False):
                     raise NotImplementedError
                     nb_targets = 1
                 else:
-                    nb_targets = len(ds_config) if repl_targets else 1
+                    affs_config.pop("global", None)
+                    nb_targets = len(affs_config)
             self.set("trainer/num_targets", nb_targets)
         else:
             self.set("trainer/num_targets", 1)
