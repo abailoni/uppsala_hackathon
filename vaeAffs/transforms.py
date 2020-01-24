@@ -65,13 +65,28 @@ class ReplicateBatch(Transform):
         return new_batch
 
 
+class ReplicateBatchGeneralized(Transform):
+    def __init__(self,
+                 indices_to_replicate,
+                 **super_kwargs):
+        super(ReplicateBatchGeneralized, self).__init__(**super_kwargs)
+        self.indices_to_replicate = indices_to_replicate
+
+    def batch_function(self, batch):
+        new_batch = []
+        for indx in self.indices_to_replicate:
+            assert indx < len(batch)
+            new_batch.append(np.copy(batch[indx]))
+        return new_batch
+
+
 
 class DownsampleAndCrop3D(Transform):
     def __init__(self,
                  ds_factor=(1, 2, 2),
                  crop_factor=None,
                  crop_slice=None,
-                 order=3,
+                 order=None,
                  **super_kwargs):
         """
         :param ds_factor: If factor is 2, then downscaled to half-resolution
@@ -95,7 +110,15 @@ class DownsampleAndCrop3D(Transform):
         # Downscale the volume:
         downscaled = volume
         if (np.array(self.ds_factor) != 1).any():
-            downscaled = zoom(volume, tuple(1./fct for fct in self.ds_factor), order=self.order)
+            order = self.order
+            if self.order is None:
+                if volume.dtype in [np.dtype('float32'), np.dtype('float64')]:
+                    order = 2
+                elif volume.dtype in [np.dtype('int8'), np.dtype('int16'), np.dtype('int32'), np.dtype('int64')]:
+                    order = 0
+                else:
+                    raise ValueError
+            downscaled = zoom(volume, tuple(1./fct for fct in self.ds_factor), order=order)
 
         # Crop:
         cropped = downscaled

@@ -50,7 +50,7 @@ class ASPP3D(nn.Module):
         self.bn_2 = nn.GroupNorm(num_channels=self.output_planes, num_groups=num_norm_groups if self.output_planes % num_norm_groups == 0 else self.output_planes)
         if final_act == "ReLU":
             self.relu_2 = nn.ReLU()
-        elif final_act == "sigmoid":
+        elif final_act == "sigmoid" or final_act == "Sigmoid":
             self.relu_2 = nn.Sigmoid()
         else:
             raise ValueError

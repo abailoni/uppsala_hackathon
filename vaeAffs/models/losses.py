@@ -347,7 +347,10 @@ class MultiLevelAffinityLoss(nn.Module):
 
 class PatchBasedLoss(nn.Module):
     def __init__(self, model, apply_checkerboard=False, loss_type="Dice",
+                 ignore_label=0,
                  boundary_label=None,
+                 glia_label=None,
+                 defected_label=None,
                  IoU_loss_kwargs=None,
                  model_kwargs=None, devices=(0,1)):
         super(PatchBasedLoss, self).__init__()
@@ -361,7 +364,10 @@ class PatchBasedLoss(nn.Module):
             raise ValueError
 
         self.apply_checkerboard = apply_checkerboard
+        self.ignore_label = ignore_label
         self.boundary_label = boundary_label
+        self.glia_label = glia_label
+        self.defected_label = defected_label
         self.add_IoU_loss = False
         if IoU_loss_kwargs is not None:
             self.add_IoU_loss = True
@@ -397,13 +403,16 @@ class PatchBasedLoss(nn.Module):
         mdl_kwargs = self.model_kwargs
         ptch_kwargs = mdl_kwargs["patchNet_kwargs"]
 
+
+        nb_inputs = mdl_kwargs.get("nb_inputs_per_model")
+
         # print([(pred.shape[-3], pred.shape[-2], pred.shape[-1]) for pred in all_predictions])
         # print([(targ.shape[-3], targ.shape[-2], targ.shape[-1]) for targ in target])
 
         # Plot some patches with the raw:
         if self.model.models[-1].keep_raw:
-            raw_inputs = all_predictions[-len(target):]
-            all_predictions = all_predictions[:-len(target)]
+            raw_inputs = all_predictions[-nb_inputs:]
+            all_predictions = all_predictions[:-nb_inputs]
 
         nb_preds = len(all_predictions)
         assert len(ptch_kwargs) == nb_preds
@@ -412,7 +421,7 @@ class PatchBasedLoss(nn.Module):
 
         # IoU loss:
         if self.add_IoU_loss:
-            assert self.boundary_label is None
+            assert self.boundary_label is None, "Not implemented"
             loss = loss + self.IoU_loss(all_predictions, target)
 
         boundary_loss_computed = False
@@ -492,15 +501,15 @@ class PatchBasedLoss(nn.Module):
             # # ----------------------------
             # # Plot some random patches with associated raw patch:
             # # ----------------------------
-            if self.model.models[-1].keep_raw:
+            if self.model.models[-1].keep_raw and nb_patch_net<3:
                 raw = raw_inputs[kwargs["nb_target"]]
                 raw_to_plot, gt_labels_to_plot, gt_masks_to_plot, pred_emb_to_plot = [], [], [], []
                 for n in range(5):
                     # Select a random pixel and define sliding-window crop slices:
                     selected_coord = [np.random.randint(shp) for shp in pred.shape[2:]]
-                    full_patch_slice = (slice(None), slice(None)) + tuple(
+                    full_patch_slice = (slice(None), slice(0,1)) + tuple(
                         slice(selected_coord[i], selected_coord[i] + real_patch_shape[i]) for i in range(len(selected_coord)))
-                    emb_slice = (slice(None), slice(None)) + tuple(slice(selected_coord[i] + int(real_patch_shape[i] / 2),
+                    emb_slice = (slice(None), slice(0,1)) + tuple(slice(selected_coord[i] + int(real_patch_shape[i] / 2),
                                                                           selected_coord[i] + int(
                                                                               real_patch_shape[i] / 2) + 1) for i in
                                                                     range(len(selected_coord)))
@@ -551,9 +560,6 @@ class PatchBasedLoss(nn.Module):
                 log_image("pred_patch_l{}".format(nb_patch_net), pred_patch_to_plot)
 
 
-
-
-
             # # ----------------------------
             # # Patch-Loss:
             # # ----------------------------
@@ -587,35 +593,41 @@ class PatchBasedLoss(nn.Module):
                 crop_slice_targets = tuple(slice(sl.start, None) for sl in crop_slice_pred)
                 gt_patches, _, _ = extract_patches_torch_new(gt_segm, real_patch_shape, stride=stride,
                                                              crop_slice=crop_slice_targets, limit_patches_to=nb_patches)
+                gt_patches = gt_patches[:, [0]]
 
                 # Make sure to crop some additional border and get the centers correctly:
                 # TODO: this can be now easily done by cropping the gt_patches...
                 crop_slice_center_labels = (slice(None), slice(None)) + tuple(slice(slc.start+int(sh/2), slc.stop) for slc, sh in zip(crop_slice_targets[2:], real_patch_shape))
-                center_labels, _, _ = extract_patches_torch_new(gt_segm, (1,1,1), stride=stride,
+                target_at_patch_center, _, _ = extract_patches_torch_new(gt_segm, (1,1,1), stride=stride,
                                                                 crop_slice=crop_slice_center_labels,
                                                                 limit_patches_to=nb_patches)
+                # Get GT and other masks separately:
+                label_at_patch_center = target_at_patch_center[:,[0]]
+                mask_at_patch_center = target_at_patch_center[:,[1]]
 
                 # ----------------------------
                 # Ignore patches on the boundary or involving ignore-label:
                 # ----------------------------
                 # Ignore pixels involving ignore-labels:
-                # TODO: generalize ignore_label
-                ignore_masks = (gt_patches == 0)
-                valid_patches = (center_labels != 0)
+                ignore_masks = (gt_patches == self.ignore_label)
+                valid_patches = (label_at_patch_center != self.ignore_label)
 
-                if self.boundary_label is None:
-                    # Exclude a patch from training if the central region contains more than one gt label
-                    # (i.e. it is really close to a boundary):
-                    central_crop = (slice(None), slice(None)) + convert_central_shape_to_crop_slice(gt_patches.shape[-3:], central_shape)
-                    mean_central_crop_labels = gt_patches[central_crop].mean(dim=-1, keepdim=True) \
-                        .mean(dim=-2, keepdim=True) \
-                        .mean(dim=-3, keepdim=True)
+                assert self.boundary_label is not None, "Old boundary method is deprecated"
+                # # Exclude a patch from training if the central region contains more than one gt label
+                # # (i.e. it is really close to a boundary):
+                # central_crop = (slice(None), slice(None)) + convert_central_shape_to_crop_slice(gt_patches.shape[-3:], central_shape)
+                # mean_central_crop_labels = gt_patches[central_crop].mean(dim=-1, keepdim=True) \
+                #     .mean(dim=-2, keepdim=True) \
+                #     .mean(dim=-3, keepdim=True)
+                #
+                # valid_patches = valid_patches & (mean_central_crop_labels == center_labels)
+                # is_on_boundary_mask = None
+                patch_is_on_boundary = (mask_at_patch_center == self.boundary_label).repeat(1, 1, *real_patch_shape)
 
-                    valid_patches = valid_patches & (mean_central_crop_labels == center_labels)
-                    is_on_boundary_mask = None
-                else:
-                    # 1 if patch is on boundary, 0 otherwise
-                    is_on_boundary_mask = (center_labels.int() == self.boundary_label).repeat(1, 1, *real_patch_shape)
+                # Ignore patches that represent a glia:
+                if self.glia_label is not None:
+                    # print("Glia: ", (mask_at_patch_center != self.glia_label).min())
+                    valid_patches = valid_patches & (mask_at_patch_center != self.glia_label)
 
                 # Delete redundant patches from batch:
                 valid_batch_indices = np.argwhere(valid_patches[:, 0, 0, 0, 0].cpu().detach().numpy())[:, 0]
@@ -628,23 +640,24 @@ class PatchBasedLoss(nn.Module):
                         assert limit <= 1. and limit >= 0.
                         valid_batch_indices = np.random.choice(valid_batch_indices, int(limit*valid_batch_indices.shape[0]), replace=False)
                 if valid_batch_indices.shape[0] == 0:
-                    print("ZERO valid patches at level {}!!!! Delete torch cache!".format(nb_patch_net))
+                    print("ZERO valid patches at level {}!".format(nb_patch_net))
+                    # Avoid problems if all patches are invalid and torch complains that autograd cannot be performed:
                     loss += pred_patches.sum() * 0.
                     continue
 
                 # ----------------------------
                 # Compute the actual (inverted) MeMasks targets: (0 is me, 1 are the others)
                 # best targets for Dice loss (usually more me than others)
-                # moreover, during the maxPool, better shrink me mask than expanding (avoid merge predictions)
                 # ----------------------------
-                center_labels_repeated = center_labels.repeat(1, 1, *real_patch_shape)
+                center_labels_repeated = label_at_patch_center.repeat(1, 1, *real_patch_shape)
                 me_masks = gt_patches != center_labels_repeated
 
-                if is_on_boundary_mask is not None:
+                if patch_is_on_boundary is not None:
                     # If on boundary, we make (inverted) me_masks completely 1 (split from everything)
-                    me_masks = me_masks | is_on_boundary_mask
+                    me_masks = me_masks | patch_is_on_boundary
 
                 # Downscale MeMasks using MaxPooling (preserve narrow processes):
+                # moreover, during the maxPool, better shrink me mask than expanding (avoid merge predictions)
                 if all(fctr == 1 for fctr in patch_dws_fact):
                     maxpool = Identity()
                 else:
@@ -652,7 +665,7 @@ class PatchBasedLoss(nn.Module):
                                            stride=patch_dws_fact,
                                            padding=0)
 
-                # Downsclaing patch:
+                # Downscaling patch:
                 down_sc_slice = (slice(None), slice(None)) + tuple(slice(int(dws_fact/2), None, dws_fact) for dws_fact in patch_dws_fact)
 
                 # Final targets:

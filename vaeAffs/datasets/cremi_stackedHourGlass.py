@@ -14,8 +14,7 @@ from neurofire.transform.affinities import Segmentation2AffinitiesDynamicOffsets
 from neurofire.transform.artifact_source import RejectNonZeroThreshold
 from neurofire.transform.volume import RandomSlide
 
-from ..transforms import ComputeVAETarget, RemoveThirdDimension, RemoveInvalidAffs, HackyHacky, DownsampleAndCrop3D, \
-    ReplicateBatch
+from ..transforms import ComputeVAETarget, RemoveThirdDimension, RemoveInvalidAffs, HackyHacky, DownsampleAndCrop3D, ReplicateBatchGeneralized, ReplicateBatch
 import numpy as np
 
 from neurofire.criteria.loss_transforms import InvertTarget
@@ -47,57 +46,50 @@ class RejectSingleLabelVolumes(object):
                     (np.count_nonzero(fetched) / fetched.size) < self.threshold_zero_label)
 
 class DuplicateGtDefectedSlices(Transform):
-    def __init__(self, defected_label=-1, keep_defected_mask=False, **super_kwargs):
+    def __init__(self, defected_label=2, ignore_label=0, **super_kwargs):
         self.defected_label = defected_label
-        self.keep_defected_mask = keep_defected_mask
+        self.ignore_label = ignore_label
         super(DuplicateGtDefectedSlices, self).__init__(**super_kwargs)
 
     def batch_function(self, batch):
-        assert len(batch) == 3
-        raw, defected_mask, GT = batch
+        assert len(batch) == 2
+        # Targets have two channels: gt and additional masks
+        targets = batch[1]
+        defect_mask = targets[1] == self.defected_label
 
-        new_GT = GT.copy()
+        # On the first slice we should never have defects:
+        if defect_mask[0].max():
+            print("!!!!!!!!!!!!!!!!!!!!!!!!! WARNING: defects on first slice !!!!!!!!!!!!!!!!!!!!!!!!!!")
+            # In this special case, we set GT of the first slice to ignore label:
+            targets[:, 0] = self.ignore_label
 
-        # Check for defected slices in the dataset: (entirely labelled with defected_label)
-        for z_idx in range(new_GT.shape[0]):
-            if (new_GT[z_idx].astype('int64') == self.defected_label).sum() != 0:
-                if z_idx == 0:
-                    print("!!!!!!!!!!!!!!!!!!!!!!!!! WARNING 1 !!!!!!!!!!!!!!!!!!!!!!!!!!)")
-                    continue
-                # assert z_idx != 0, "The first slice should never be defected"
-                # Copy ground truth from previous slice:
-                new_GT[z_idx] = new_GT[z_idx-1]
+        # For each defect, get GT from the previous slice
+        for z_indx in range(1, defect_mask.shape[0]):
+            # Copy GT:
+            targets[0, z_indx][defect_mask[z_indx]] = targets[0, z_indx-1][defect_mask[z_indx]]
+            # Copy masks:
+            targets[1, z_indx][defect_mask[z_indx]] = targets[1, z_indx-1][defect_mask[z_indx]]
 
-        # Modify new_GT for defect-augmented slices:
-        counter = 0
-        for z_idx, is_defected in enumerate(defected_mask[:,0,0]):
-            if is_defected:
-                if z_idx == 0:
-                    print("!!!!!!!!!!!!!!!!!!!!!!!!! WARNING 2 !!!!!!!!!!!!!!!!!!!!!!!!!!)")
-                    continue
-
-                counter += 1
-                # assert z_idx != 0, "The first slice should never be defected"
-                # Copy ground truth from previous slice:
-                new_GT[z_idx] = new_GT[z_idx-1]
-
-        # if defected_mask.max() or counter != 0:
-        #     print("Defected: {}; number: {}".format(defected_mask.max(), counter))
-
-
-        if self.keep_defected_mask:
-            return (raw, defected_mask.astype('int64'), new_GT.astype('int64'))
-        else:
-            return (raw, new_GT.astype('int64'))
+        return (batch[0], targets)
 
 class AdjustBatch(Transform):
+    def __init__(self, defected_label=2, **super_kwargs):
+        self.defected_label = defected_label
+        super(AdjustBatch, self).__init__(**super_kwargs)
+
 
     def batch_function(self, batch):
-        assert len(batch) == 2
-        raw_inputs, GT = batch
+        assert len(batch) == 3
+        raw_inputs, gt, various_masks = batch
         assert len(raw_inputs) == 2
-        raw, defected_mask = raw_inputs
-        return (raw, defected_mask, GT)
+        raw, augmented_defected_mask = raw_inputs
+
+        # Combine defects (in the original data and from augmentation):
+        # TODO: check if I actually have a defected mask!
+        various_masks[augmented_defected_mask.astype('bool')] = self.defected_label
+
+        # Concatenate everything in one tensor:
+        return (raw, np.stack([gt,various_masks]))
 
 
 class CremiDataset(ZipReject):
@@ -108,6 +100,7 @@ class CremiDataset(ZipReject):
         assert isinstance(defect_augmentation_config, dict)
         assert 'raw' in volume_config
         assert 'segmentation' in volume_config
+        assert 'various_masks' in volume_config
 
         volume_config = deepcopy(volume_config)
 
@@ -135,8 +128,14 @@ class CremiDataset(ZipReject):
         self.segmentation_volume = SegmentationVolume(name=name,
                                                       **segmentation_volume_kwargs)
 
+        # Load additional masks:
+        various_masks_kwargs = dict(volume_config.get('various_masks'))
+        various_masks_kwargs.update(slicing_config)
+        self.mask_volume = SegmentationVolume(name=name,
+                                                      **various_masks_kwargs)
+
         rejection_threshold = volume_config.get('rejection_threshold', 0.5)
-        super().__init__(self.raw_volume, self.segmentation_volume,
+        super().__init__(self.raw_volume, self.segmentation_volume, self.mask_volume,
                          sync=True, rejection_dataset_indices=1,
                          rejection_criterion=RejectSingleLabelVolumes(1.0, rejection_threshold,
                                                                       defected_label=master_config.get('duplicate_GT_defected_slices', {}).get('defect_label', -1)))
@@ -149,12 +148,14 @@ class CremiDataset(ZipReject):
         transforms = Compose()
 
         if self.master_config.get('random_flip', False):
-            transforms.add(AdjustBatch())
+            transforms.add(AdjustBatch(defected_label=self.master_config.get('defected_label', 3)))
             transforms.add(RandomFlip3D())
             transforms.add(RandomRotate())
 
-        if self.master_config.get('duplicate_GT_defected_slices', False):
-            transforms.add(DuplicateGtDefectedSlices(**self.master_config['duplicate_GT_defected_slices']))
+        transforms.add(DuplicateGtDefectedSlices(
+            defected_label=self.master_config.get('defected_label', 3),
+            ignore_label=self.master_config.get('ignore_label', 0))
+        )
 
 
         # Elastic transforms can be skipped by
@@ -173,32 +174,24 @@ class CremiDataset(ZipReject):
             random_slides_config = deepcopy(self.master_config.get('random_slides'))
             ouput_shape = random_slides_config.pop('shape_after_slide', None)
             max_misalign = random_slides_config.pop('max_misalign', None)
-            transforms.add(RandomSlide(output_image_size=ouput_shape, max_misalign=max_misalign,
-                                       index_mask_defected_slices=1 if self.master_config["duplicate_GT_defected_slices"].get("keep_defected_mask", False) else None,
-                                       **random_slides_config))
+            transforms.add(RandomSlide(
+                output_image_size=ouput_shape, max_misalign=max_misalign,
+                defected_label=self.master_config.get('defected_label', 2),
+                targets_have_defected_mask=True,
+                **random_slides_config))
 
         # Replicate and downscale batch:
         input_indices, target_indices = [0], [1]
-        num_inputs = 1
         if self.master_config.get("downscale_and_crop") is not None:
             ds_config = self.master_config.get("downscale_and_crop")
-            replicate_targets = ds_config.pop("replicate_targets", False)
-            assert len(ds_config) >= 1
-            num_inputs = len(ds_config)
-            input_indices = list(range(num_inputs))
-            target_indices = list(range(num_inputs, 2*num_inputs)) if replicate_targets else [num_inputs]
-
-            transforms.add(ReplicateBatch(num_inputs, replicate_targets=replicate_targets))
-            for i, in_idx in enumerate(input_indices):
-                kwargs = ds_config[in_idx]
-                transforms.add(DownsampleAndCrop3D(apply_to=[in_idx], order=2, **kwargs))
-                if replicate_targets:
-                    transforms.add(
-                        DownsampleAndCrop3D(apply_to=[target_indices[i]], order=0, **kwargs))
+            transforms.add(ReplicateBatchGeneralized([conf.pop('apply_to') for conf in ds_config]))
+            for indx, conf in enumerate(ds_config):
+                transforms.add(DownsampleAndCrop3D(apply_to=[indx], order=None, **conf))
 
         # # affinity transforms for affinity targets
         # # we apply the affinity target calculation only to the segmentation (1)
         if self.master_config.get("affinity_config") is not None:
+            raise NotImplementedError("Double check various masks!")
             affs_config = deepcopy(self.master_config.get("affinity_config"))
             global_kwargs = affs_config.pop("global", {})
 
