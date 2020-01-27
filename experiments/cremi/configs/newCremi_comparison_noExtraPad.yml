@@ -62,7 +62,7 @@ loaders:
         sigma: 50.
         order: 0
       random_slides:
-        shape_after_slide: [704, 704]   #change to x, y of window size
+        shape_after_slide: [832, 832]   #change to x, y of window size
 #        max_misalign: [30, 30]   #change to x, y of window size
         shift_vs_slide_proba: 0.
         apply_proba: 0.6 # 0.2
@@ -249,7 +249,7 @@ loaders:
 #
 #    volume_config:
 #      # Sliding window size
-#      window_size: [14, 704, 704]  # 288
+#      window_size: [14, 832, 832]  # 288
 #      #        A:
 #      #        B: *shape
 #      #        C: *shape
@@ -263,8 +263,8 @@ loaders:
 #      #      data_slice: ":20, 90:, 580: 1900"
 ##      data_slice: ':,:,:'
 #      data_slice: ':40,:,:'
-##      data_slice: ':8, :704, :704'
-##      data_slice: ':8, :704, :704'
+##      data_slice: ':8, :832, :832'
+##      data_slice: ':8, :832, :832'
 #
 #      padding_mode: "reflect"
 #      padding: *dataset_padding

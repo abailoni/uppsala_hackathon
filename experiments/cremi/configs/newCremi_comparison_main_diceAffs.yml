@@ -106,26 +106,24 @@ loaders:
           offsets:
             # Short-ranges:
             - [-1, 0, 0]
-            - [0, -2, 0]
-            - [0, 0, -2]
+            - [0, -1, 0]
+            - [0, 0, -1]
             # Mid-ranges:
-            - [0, -4, 0]
-            - [0, 0, -4]
-            - [0, -4, -4]
-            - [0, 4, -4]
+            - [0, -5, 0]
+            - [0, 0, -5]
+            - [0, -5, -5]
+            - [0, 5, -5]
+            - [-1, -5, 0]
+            - [-1, 0, -5]
+            - [-1, -5, -5]
+            - [-1, 5, -5]
             # 3D-ranges:
             - [-2, 0, 0]
             - [-3, 0, 0]
             - [-4, 0, 0]
             # Long-ranges:
-            - [-1, -9, 0]
-            - [-1, 0, -9]
-            - [-1, -9, -9]
-            - [-1, 9, -9]
             - [0, -14, 0]
             - [0, 0, -14]
-            - [0, -14, -14]
-            - [0, 14, -14]
         1:
           offsets:
             - [-1, 0, 0]
@@ -136,15 +134,15 @@ loaders:
             - [-3, 0, 0]
             - [-4, 0, 0]
             # Long-ranges:
-            - [0, -5, 0]
-            - [0, 0, -5]
-            - [0, -5, -5]
-            - [0, 5, -5]
+            - [0, -7, 0]
+            - [0, 0, -7]
+            - [0, -7, -7]
+            - [0, 7, -7]
         2:
           offsets:
             - [-1, 0, 0]
-            - [0, -2, 0]
-            - [0, 0, -2]
+            - [0, -1, 0]
+            - [0, 0, -1]
             # 3D-ranges:
             - [-2, 0, 0]
             - [-3, 0, 0]
@@ -382,7 +380,7 @@ model:
 ##      window_size: [3,80,80]
 #
 #
-    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/newCremi_main_diceAffs/checkpoint.pytorch"
+#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/newCremi_main_diceAffs/checkpoint.pytorch"
 #    load_stacked_models_from:
 #      0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stacked3x_dim64_7_15_15_mdl0_c/checkpoint.pytorch"
 #      1: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stacked3x_dim128_5_15_15_mdl1/checkpoint.pytorch"
@@ -437,7 +435,7 @@ model:
             downscaling_factor: [1, 1, 1] # Inside patchNet, to reduce memory
             precrop_pred: "2:-2,:,:" # Pre-crop part of prediction to avoid training on borders
           0:
-            latent_variable_size: 18
+            latent_variable_size: 16
             depth_level: 0
             nb_target: 0
             #            skip_standard_patch_loss: True
