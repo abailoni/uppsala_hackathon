@@ -1,0 +1,162 @@
+experiment_name: debug_postproc
+affs_exp_name: whatever # Where to get affinities from
+
+offsets_file_name: "default_from_patch.json"
+# offset_path_in_infer_config: "model.config.offsets"
+# offsets_dir_path: "..."
+# postproc_presets_path: "..."
+
+
+
+volume_config:
+  GT:
+    path:
+      A: '$HCI_HOME/datasets/new_cremi/sampleA.h5'
+      B: '$HCI_HOME/datasets/new_cremi/sampleB.h5'
+      C: '$HCI_HOME/datasets/new_cremi/sampleC.h5'
+    path_in_file: 'volumes/labels/neuron_ids_fixed'
+    dtype: int32
+
+  affinities:
+    path_in_file: 'data'
+    dtype: float32
+
+
+postproc_config:
+  # ------------------------------
+  # Generic options
+  # ------------------------------
+  from_superpixels: True
+  use_multicut: False
+  compute_scores: False
+  save_segm: True
+  WS_growing: True
+  save_UCM: False
+  connected_components_on_final_segm: True
+  overwrite_prev_files: False
+#  extra_presets:
+#    - "WSDT"
+#    - "multicut"
+
+  # Specific for ISBI:
+  return_2D_segmentation: False
+  save_submission_tiff: False
+
+
+  # ------------------------------
+  # Iterated options (from each combination of the below, a segm is generated):
+  # ------------------------------
+  nb_threads: 5
+  nb_thread_pools: 1
+  nb_iterations: 1
+
+  iterated_options:
+    preset: ["MEAN"]
+    sample: B
+    edge_prob: 0.
+    noise_factor: 0.
+    local_attraction: False
+
+    crop_slice:
+      A: [":,:,:,:"]
+      B: ":,:,:,:"
+      C: ":,:,:,:"
+
+    sub_crop_slice: ":,:,:,:"
+
+
+
+  # ------------------------------
+  # Specific options (use presets to make mods easier)
+  # ------------------------------
+  segm_pipeline_type: 'gen_HC'
+  invert_affinities: False
+  blockwise: False
+  #return_fragments: False
+  use_final_agglomerater: False
+  stacking_2D: False
+  thresh_segm_size: 200
+
+  blockwise_kwargs:
+    crop_padding: True
+    nb_parallel_blocks: 20
+    num_workers: 1
+
+  MWS_kwargs:
+    stride:
+      - 1
+      - 1
+      - 1
+
+  start_from_given_segm: False
+
+  use_fragmenter: False
+  fragmenter: 'WSDT'
+
+  WSDT_kwargs:
+    threshold: 0.5
+    from_boundary_maps: true
+    min_segment_size: 20 # THIS SHOULD NOT BE PUT TO ZERO...!
+    preserve_membrane: True
+    sigma_seeds: 0.1
+    stacked_2d: True
+    intersect_with_boundary_pixels: True
+    boundary_pixels_kwargs:
+      boundary_threshold: 0.5
+      used_offsets: [0, 1, 2, 4, 5, 7, 8]
+      offset_weights: [1., 1., 1., 1., 1., 0.9, 0.9]
+
+
+  prob_map_kwargs:
+      offset_weights: [1.0, 1.0]
+      used_offsets: [1, 2]
+
+
+  multicut_kwargs:
+    weighting_scheme: 'all' # "all", "z", "xyz", None
+    solver_type: 'multicutIlpCplex' # fusionMoves, kernighanLin, multicutIlpCplex, ccFusionMoveBased
+  #  time_limit: 120
+    weight: 16.
+    verbose_visitNth: 100
+    offsets_probabilities: 1.0
+
+  use_lifted_edges: True
+  combine_SP_and_pixels: True
+
+  generalized_HC_kwargs:
+    agglomeration_kwargs:
+      offsets_probabilities: 1.0 # Probs. for long-range edges
+      return_UCM: False
+
+      debug: False
+      extra_aggl_kwargs:
+        size_regularizer: 0.
+        threshold: 0.5 # Merge all: 0.0; split all: 1.0
+      extra_runAggl_kwargs:
+        verbose: True
+        printNth: 1000000
+
+    final_agglomeration_kwargs:
+      zero_init: False
+      max_distance_lifted_edges: 1
+      update_rule_merge: 'mean'
+      update_rule_not_merge: 'mean'
+      offsets_weights: [1., 1., 1.,
+                        1., 1., 1., 1.,
+                        9., 9., 9., 9., 9., 9., 9., 9.,
+                        27., 27.]
+      extra_aggl_kwargs:
+        sizeRegularizer: 0.
+        sizeThreshMin: 0.
+        sizeThresMax: 120.
+        postponeThresholding: False
+        threshold: 0.5 # Merge all: 0.0; split all: 1.0
+      extra_runAggl_kwargs:
+        verbose: True
+        printNth: 500000
+
+
+
+
+
+

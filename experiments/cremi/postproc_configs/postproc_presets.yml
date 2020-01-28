@@ -1,0 +1,969 @@
+gen_HC:
+  postproc:
+    segm_pipeline_type: 'gen_HC'
+
+gen_HC_pix:
+  parent_model: ['gen_HC']
+  postproc:
+    start_from_given_segm: False
+    use_fragmenter: False
+    volume_config:
+      affinities:
+        slicing_config:
+          stride:
+            A: [12, 7, 600, 600]
+            B: [12, 7, 600, 600]
+            C: [12, 7, 600, 600]
+          window_size:
+            A: [None, None, None, None]
+            B: [None, None, None, None]
+            C: [None, None, None, None]
+
+noise_sups:
+  postproc:
+    WSDT_kwargs:
+      boundary_pixels_kwargs:
+        # Noise experiments:
+        boundary_threshold: 0.5
+        used_offsets: [0, 1, 2, 4, 5, 7, 8, 10, 11]
+        offset_weights: [1., 1., 1., 1., 1., 0.9, 0.9, 0.8, 0.8]
+
+full_cremi_superpixels:
+  postproc:
+    WSDT_kwargs:
+      boundary_pixels_kwargs:
+        # Noise experiments:
+        boundary_threshold: 0.5
+        used_offsets: [0, 1, 2, 4, 5, 7, 8, 10, 11]
+        offset_weights: [1., 1., 1., 1., 1., 0.9, 0.9, 0.8, 0.8]
+
+embeddings_agglo:
+  postproc:
+    WSDT_kwargs:
+      boundary_pixels_kwargs:
+        # Noise experiments:
+        boundary_threshold: 0.5
+        used_offsets: [0, 1, 2, 3, 4, 5, 8, 10]
+        offset_weights: [1., 1., 1., 1., 1., 1., 1., 1.]
+
+
+simple_WSDT:
+  postproc:
+    WSDT_kwargs:
+      intersect_with_boundary_pixels: False
+
+boundaryPixels_IoU:
+  postproc:
+    WSDT_kwargs:
+      boundary_pixels_kwargs:
+        # Noise experiments:
+        boundary_threshold: 0.5
+        used_offsets: [0, 1, 2, 3, 4]
+        offset_weights: [1., 1., 1., 1., 1.]
+
+
+debug_postproc:
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        debug: True
+#    data_slice:
+#      A: ':, 20:25, 200:1230, 200:1230'
+#      B: ':, 20:25, 200:1230, 200:1230'
+#      C: ':, 20:25, 200:1230, 200:1230'
+#      A: ':, 20:32, :, :'
+#      B: ':, 20:32, :, :'
+#      C: ':, 20:32, :, :'
+
+
+all_long_range_edges:
+  postproc:
+    generalized_HC_kwargs:
+      probability_long_range_edges: 1.
+
+few_long_rage_edges:
+  postproc:
+    generalized_HC_kwargs:
+      probability_long_range_edges: 0.01
+
+impose_local_attraction:
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          impose_local_attraction: True
+
+only_local_edges:
+  postproc:
+    generalized_HC_kwargs:
+      probability_long_range_edges: 0.
+#      agglomeration_kwargs:
+#        used_offsets: [0,1,2]
+
+GAEC:
+  parent_model: ['gen_HC']
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          update_rule: 'sum'
+          add_cannot_link_constraints: False
+#      extra_runAggl_kwargs:
+#        verbose: True
+#        printNth: 1000000
+
+
+GAEC_noLogCosts:
+  parent_model: ['gen_HC']
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          update_rule: 'sum'
+          add_cannot_link_constraints: False
+
+
+MEAN_constr:
+  parent_model: ['gen_HC']
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          update_rule: 'mean'
+          add_cannot_link_constraints: True
+
+MEAN:
+  parent_model: ['gen_HC']
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          update_rule: 'mean'
+          add_cannot_link_constraints: False
+
+MEAN_constr_logCosts:
+  parent_model: ['gen_HC']
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          update_rule: 'mean'
+          add_cannot_link_constraints: True
+
+MEAN_logCosts:
+  parent_model: ['gen_HC']
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          update_rule: 'mean'
+          add_cannot_link_constraints: False
+
+#remove_small:
+#  parent_model: ['gen_HC']
+#  postproc:
+#    generalized_HC_kwargs:
+#      agglomeration_kwargs:
+#        extra_aggl_kwargs:
+#          remove_small_segments: True
+#          small_segments_thresh: 4
+
+MutexWatershed:
+  parent_model: ['gen_HC']
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          update_rule: 'mutex_watershed'
+          add_cannot_link_constraints: False
+
+CompleteLinkage:
+  parent_model: ['gen_HC']
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          update_rule: 'min'
+          add_cannot_link_constraints: False
+#          use_log_costs: False
+#          remove_small_segments: True
+#          small_segments_thresh: 200
+
+CompleteLinkagePlusCLC:
+  parent_model: ['gen_HC']
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          update_rule: 'min'
+          add_cannot_link_constraints: True
+#          use_log_costs: False
+#          remove_small_segments: True
+#          small_segments_thresh: 200
+
+SingleLinkage:
+  parent_model: ['gen_HC']
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          update_rule: 'max'
+          add_cannot_link_constraints: False
+#          use_log_costs: False
+#          remove_small_segments: True
+#          small_segments_thresh: 200
+
+SingleLinkagePlusCLC:
+  parent_model: ['gen_HC']
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          update_rule: 'max'
+          add_cannot_link_constraints: True
+#          use_log_costs: False
+#          remove_small_segments: True
+#          small_segments_thresh: 200
+
+greedyFixation:
+  parent_model: ['gen_HC']
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          update_rule: 'sum'
+          add_cannot_link_constraints: True
+#          use_log_costs: True
+#      extra_runAggl_kwargs:
+#        verbose: True
+#        printNth: 1000000
+
+greedyFixation_noLogCosts:
+  parent_model: ['gen_HC']
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          update_rule: 'sum'
+          add_cannot_link_constraints: True
+#          use_log_costs: False
+
+#gen_HC_sum:
+#  parent_model: ['gen_HC']
+#  postproc:
+#    generalized_HC_kwargs:
+#      probability_long_range_edges: 0.1
+#      agglomeration_kwargs:
+#        extra_aggl_kwargs:
+#          update_rule: 'mean'
+#          add_cannot_link_constraints: False
+#      extra_runAggl_kwargs:
+#        verbose: True
+#        printNth: 1000000
+
+smart_noise_exp_merge_allLong_fromSP:
+  postproc:
+    experiment_name: 'local_merge_noise_exp1'
+
+
+
+
+smart_noise_exp_merge_only_local:
+  postproc:
+    experiment_name: 'NEW_merge_noise_exp_onlyShort_fromPixels'
+
+
+smart_noise_exp_merge:
+  postproc:
+    experiment_name: 'NEW_merge_noise_exp_008longEdges_fromPixels'
+
+smart_noise_exp_merge_allLong_fromPx:
+  postproc:
+    experiment_name: 'NEW_merge_noise_exp_allLongRange_fromPixels'
+
+smart_noise_exp_merge_allLong_fromSP:
+  postproc:
+    experiment_name: 'NEW_merge_noise_exp_allLongRange_fromSP'
+
+smart_noise_split_fewEdges:
+  postproc:
+    experiment_name: 'local_split_noise_exp_fewEdges'
+
+
+different_noise_fewEdges:
+  postproc:
+    experiment_name: 'different_merge_noise_exp_008longEdges_fromPixels'
+
+different_noise_shortEdges:
+  postproc:
+    experiment_name: 'different_merge_noise_exp_shortEdges_fromPixels'
+
+debug_exp:
+  postproc:
+    experiment_name: 'debug_exp'
+
+
+smart_noise_split_allEdges:
+  postproc:
+    experiment_name: 'local_split_noise_exp_allEdges'
+
+smart_noise_split_onlyShort_fromPix:
+  postproc:
+    experiment_name: 'local_split_noise_exp_shortEdges'
+
+smart_noise_split_allEdges_fromPix:
+  postproc:
+    experiment_name: 'split_noise_exp_allEdges_fromPix'
+
+
+fullCREMIexp:
+  postproc:
+    experiment_name: 'full_cremi'
+
+fullCREMIexp_MC:
+  postproc:
+    experiment_name: 'full_cremi_MC'
+
+fullCREMIexp_standardHC:
+  postproc:
+    experiment_name: 'full_cremi_standardHC_onlyShort'
+
+gen_HC_DTWS:
+  parent_model: ['gen_HC']
+  postproc:
+    start_from_given_segm: False
+    use_fragmenter: True
+    fragmenter: 'WSDT'
+
+gen_HC_WS:
+  parent_model: ['gen_HC']
+  postproc:
+    start_from_given_segm: False
+    use_fragmenter: True
+    fragmenter: 'WS'
+
+gen_HC_givenSP:
+  parent_model: ['gen_HC']
+  postproc:
+    start_from_given_segm: True
+    use_fragmenter: False
+
+
+
+
+MWS_blockwise:
+  parent_model: ['MWS', 'blockwise']
+  postproc:
+      start_from_given_segm: False
+      use_fragmenter: False
+      volume_config:
+        affinities:
+          slicing_config:
+            stride:
+              A: [12, 1, 600, 600]
+              B: [12, 1, 600, 600]
+              C: [12, 1, 600, 600]
+            window_size:
+              A: [None, 3, None, None]
+              B: [None, 3, None, None]
+              C: [None, 3, None, None]
+
+
+MWS:
+  postproc:
+    segm_pipeline_type: 'MWS'
+
+
+gen_HC_max:
+  postproc:
+    segm_pipeline_type: 'gen_HC'
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          update_rule: 'max'
+
+notInvertAffs:
+  postproc:
+    invert_affinities: False
+
+invertAffs:
+  postproc:
+    invert_affinities: True
+
+setWSDTLocalOffsets:
+  postproc:
+    prob_map_kwargs:
+      offset_weights: [1.0, 1.0]
+      used_offsets: [0, 1]
+
+
+zeroInit:
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        zero_init: True
+
+initSignedWeights:
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        initSignedWeights: True
+
+sizeReg:
+  postproc:
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          sizeRegularizer: 0.01
+
+stride10:
+  parent_model: 'MWS'
+  postproc:
+    MWS_kwargs:
+#      bias: 0. # 1.0 merge everything, 0.0 split everything (or all that is possible)
+      stride:
+        - 1
+        - 10
+        - 10
+stride8:
+  parent_model: 'MWS'
+  postproc:
+    MWS_kwargs:
+      stride:
+        - 1
+        - 8
+        - 8
+
+use_fragmenter:
+  postproc:
+    use_fragmenter: True
+
+multicut:
+  postproc:
+    segm_pipeline_type: 'multicut'
+
+multicut_exact:
+  parent_model: ['multicut']
+  postproc:
+    multicut_kwargs:
+      solver_type: 'multicutIlpCplex'
+#      beta: 0.9 # 1.0 split everything, 0.0 merge everything
+
+multicut_givenSP:
+  parent_model: ['multicut', 'given_SP']
+
+given_SP:
+  postproc:
+    start_from_given_segm: True
+    use_fragmenter: False
+
+blockwise:
+  postproc:
+    blockwise: True
+    blockwise_kwargs:
+      crop_padding: True
+#      nb_parallel_blocks: 20
+      num_workers: 1
+
+8_blocks:
+  parent_model: ['blockwise']
+  postproc:
+    blockwise_kwargs:
+      nb_parallel_blocks: 8
+
+1_blocks:
+  parent_model: ['blockwise']
+  postproc:
+    blockwise_kwargs:
+      nb_parallel_blocks: 1
+2_blocks:
+  parent_model: ['blockwise']
+  postproc:
+    blockwise_kwargs:
+      nb_parallel_blocks: 2
+
+
+
+12_blocks:
+  parent_model: ['blockwise']
+  postproc:
+    blockwise_kwargs:
+      nb_parallel_blocks: 12
+
+20_blocks:
+  parent_model: ['blockwise']
+  postproc:
+    blockwise_kwargs:
+      nb_parallel_blocks: 20
+
+24_blocks:
+  parent_model: ['blockwise']
+  postproc:
+    blockwise_kwargs:
+      nb_parallel_blocks: 24
+
+
+
+crop_train:
+  postproc:
+    data_slice:
+      A: ':, :, 100:-100, 100:-100'
+      B: ':, :, 100:1330, 665:1750'
+      C: ':, :, 150:-150, 150:-150'
+
+crop_padded_affs:
+  postproc:
+    data_slice:
+      A: ':, 6:20, 120:-120, 120:-120'
+      B: ':, 6:20, 120:-120, 120:-120'
+      C: ':, 6:20, 120:-120, 120:-120'
+
+
+DTWS:
+  postproc:
+    segm_pipeline_type: 'only_fragmenter'
+    use_fragmenter: True
+    fragmenter: 'WSDT'
+
+longRangeProbMap:
+  postproc:
+    prob_map_kwargs:
+      offset_weights: [1.0, 1.0, 0.9, 0.9, 0.88, 0.88]
+      used_offsets: [1, 2, 7, 8, 15, 16]
+
+
+localTestAffsTrendyTukan:
+  volume_config:
+    affinities:
+      path: '/home/abailoni/local_data/unstruct/prediction_sample$.h5'
+      path_in_h5_dataset: 'v100k-alignedTestDts'
+
+testAffs:
+  volume_config:
+    affinities:
+      path: '/net/hciserver03/storage/abailoni/learnedHC/plain_unstruct/pureDICE_wholeTrainingSet/Predictions_test/prediction_sample$.h5'
+      path_in_h5_dataset: 'v100k-alignedTestDts'
+
+
+
+signedHC095-WS:
+  parent_model: ['given_SP']
+  volume_config:
+    init_segmentation:
+      path: '/export/home/abailoni/learnedHC/plain_unstruct/pureDICE_wholeTrainingSet/postprocess/inferName_v100k_repAttrHC095_$/pred_segm.h5'
+      path_in_h5_dataset: 'finalSegm_WS'
+    GT:
+      path: '/export/home/abailoni/learnedHC/plain_unstruct/pureDICE_wholeTrainingSet/postprocess/inferName_v100k_repAttrHC095_$/pred_segm.h5'
+      path_in_h5_dataset: 'finalSegm_bestGT'
+
+
+v100k-HC050:
+  parent_model: ['given_SP']
+  volume_config:
+    init_segmentation:
+      path: '/export/home/abailoni/learnedHC/mergeSpCNN/pureDICE_v2/postprocess/inferName_v100k_HC050_$/pred_segm.h5'
+      path_in_h5_dataset: 'finalSegm'
+
+
+
+DTWSplusHC090:
+  parent_model: ['given_SP']
+  volume_config:
+    init_segmentation:
+      path: '/export/home/abailoni/learnedHC/plain_unstruct/pureDICE_wholeTrainingSet/postprocess/inferName_v100k_DTWSplusHC090_notCropped_$/pred_segm.h5'
+      path_in_h5_dataset: 'finalSegm'
+
+newHC098-HC090:
+  parent_model: ['given_SP']
+  volume_config:
+    init_segmentation:
+      path: '/export/home/abailoni/learnedHC/model_090_v2/pureDICE_wholeDtSet/postprocess/inferName_v70k-HC098new_HC090_notCropped_$/pred_segm.h5'
+      path_in_h5_dataset: 'finalSegm'
+newHC098-HC080:
+  parent_model: ['given_SP']
+  volume_config:
+    init_segmentation:
+      path: '/export/home/abailoni/learnedHC/model_090_v2/pureDICE_wholeDtSet/postprocess/inferName_v70k-HC098new_HC080_notCropped_$/pred_segm.h5'
+      path_in_h5_dataset: 'finalSegm'
+newHC098-HC070:
+  parent_model: ['given_SP']
+  volume_config:
+    init_segmentation:
+      path: '/export/home/abailoni/learnedHC/model_090_v2/pureDICE_wholeDtSet/postprocess/inferName_v70k-HC098new_HC070_notCropped_$/pred_segm.h5'
+      path_in_h5_dataset: 'finalSegm'
+
+newHC098-HC070unstruct:
+  parent_model: ['given_SP']
+  volume_config:
+    init_segmentation:
+      path: '/export/home/abailoni/learnedHC/plain_unstruct/pureDICE_wholeTrainingSet/postprocess/inferName_v100k_newHC098-HC070-notCropped_$/pred_segm.h5'
+      path_in_h5_dataset: 'finalSegm'
+
+newHC098-HC080unstruct:
+  parent_model: ['given_SP']
+  volume_config:
+    init_segmentation:
+      path: '/export/home/abailoni/learnedHC/plain_unstruct/pureDICE_wholeTrainingSet/postprocess/inferName_v100k_newHC098-HC080-notCropped_$/pred_segm.h5'
+      path_in_h5_dataset: 'finalSegm'
+
+newHC098-HC090unstruct:
+  parent_model: ['given_SP']
+  volume_config:
+    init_segmentation:
+      path: '/export/home/abailoni/learnedHC/plain_unstruct/pureDICE_wholeTrainingSet/postprocess/inferName_v100k_newHC098-HC090-notCropped_$/pred_segm.h5'
+      path_in_h5_dataset: 'finalSegm'
+
+
+HC098v100k:
+  parent_model: ['given_SP']
+  volume_config:
+    init_segmentation:
+      path: '/export/home/abailoni/learnedHC/plain_unstruct/pureDICE_wholeTrainingSet/postprocess/inferName_v100k_HC098_notCropped_$/pred_segm.h5'
+      path_in_h5_dataset: 'finalSegm_WS_inters_WS'
+
+HC097plusMWSplusDTWSv100kTestData:
+  parent_model: ['given_SP']
+  volume_config:
+    init_segmentation:
+      path: '/export/home/abailoni/learnedHC/plain_unstruct/pureDICE_wholeTrainingSet/postprocess/inferName_v100k-alignedTestDts_HC097plusDTWSplusMWS_$/pred_segm.h5'
+      path_in_h5_dataset: 'finalSegm_WS'
+
+alignedTestOversegmPlusHC:
+  parent_model: ['given_SP']
+  volume_config:
+    init_segmentation:
+      path: '/export/home/abailoni/learnedHC/plain_unstruct/pureDICE_wholeTrainingSet/postprocess/inferName_v100k-alignedTestDts_alignedTestOversegmPlusHC_$/pred_segm.h5'
+      path_in_h5_dataset: 'finalSegm'
+
+alignedTestOversegmPlusMC:
+  parent_model: ['given_SP']
+  volume_config:
+    init_segmentation:
+      path: '/export/home/abailoni/learnedHC/plain_unstruct/pureDICE_wholeTrainingSet/postprocess/inferName_v100k-alignedTestDts_alignedTestOversegmPlusMC_$/pred_segm.h5'
+      path_in_h5_dataset: 'finalSegm'
+
+alignedTestImprovedOversegmPlusMC:
+  parent_model: ['given_SP']
+  volume_config:
+    init_segmentation:
+      path: '/export/home/abailoni/learnedHC/model_050_A_v3/pureDICE_wholeDtSet/postprocess/inferName_v100k-alignedTestDts_MC092_combined_$/pred_segm.h5'
+      path_in_h5_dataset: 'finalSegm'
+
+
+alignedTestCombinedMC:
+  parent_model: ['given_SP']
+  volume_config:
+    init_segmentation:
+      path: '/export/home/abailoni/learnedHC/model_050_A_v3/pureDICE_wholeDtSet/postprocess/inferName_v100k-alignedTestOversegmPlusMC_MC_combined_$/pred_segm.h5'
+      path_in_h5_dataset: 'finalSegm'
+  infer:
+    volume_config:
+      init_segmentation:
+        dtype: int32
+        path: {A: '/export/home/abailoni/learnedHC/model_050_A_v3/pureDICE_wholeDtSet/postprocess/inferName_v100k-alignedTestDts_MC092_combined_A/pred_segm.h5',
+          B: '/export/home/abailoni/learnedHC/plain_unstruct/pureDICE_wholeTrainingSet/postprocess/inferName_v100k-alignedTestDts_alignedTestOversegmPlusMC_B/pred_segm.h5',
+          C: '/export/home/abailoni/learnedHC/plain_unstruct/pureDICE_wholeTrainingSet/postprocess/inferName_v100k-alignedTestDts_alignedTestOversegmPlusMC_C/pred_segm.h5'}
+        path_in_h5_dataset: {A: 'finalSegm', B: 'finalSegm', C: 'finalSegm'}
+
+
+
+smallInfer:
+  infer:
+    slicing_config:
+      window_size:
+        A: [25, 540, 540]
+        B: [25, 540, 540]
+        C: [25, 540, 540]
+      stride:
+        A: [15, 360, 360]
+        B: [15, 360, 360]
+        C: [15, 360, 360]
+
+debugInfer:
+  infer:
+    slicing_config:
+      data_slice:
+        A: ':30, :650, :650'
+        B: ':30, :650, :650'
+        C: ':30, :650, :650'
+
+
+
+differentInfer:
+  infer:
+    slicing_config:
+      window_size:
+        A: [25, 594, 594]
+        B: [25, 594, 594]
+        C: [25, 594, 594]
+      stride:
+        A: [15, 434, 434]
+        B: [15, 434, 434]
+        C: [15, 434, 434]
+
+
+
+
+
+thresh030:
+  postproc:
+    MWS_kwargs:
+      bias: 0.30
+    multicut_kwargs:
+      beta: 0.30
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.3
+thresh035:
+  postproc:
+    MWS_kwargs:
+      bias: 0.35
+    multicut_kwargs:
+      beta: 0.35
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.35
+thresh040:
+  postproc:
+    MWS_kwargs:
+      bias: 0.40
+    multicut_kwargs:
+      beta: 0.40
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.4
+thresh045:
+  postproc:
+    MWS_kwargs:
+      bias: 0.45
+    multicut_kwargs:
+      beta: 0.45
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.45
+thresh050:
+  postproc:
+    MWS_kwargs:
+      bias: 0.50
+    multicut_kwargs:
+      beta: 0.50
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.5
+thresh055:
+  postproc:
+    MWS_kwargs:
+      bias: 0.55
+    multicut_kwargs:
+      beta: 0.55
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.55
+thresh060:
+  postproc:
+    MWS_kwargs:
+      bias: 0.60
+    multicut_kwargs:
+      beta: 0.60
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.6
+thresh065:
+  postproc:
+    MWS_kwargs:
+      bias: 0.65
+    multicut_kwargs:
+      beta: 0.65
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.65
+thresh070:
+  postproc:
+    MWS_kwargs:
+      bias: 0.70
+    multicut_kwargs:
+      beta: 0.70
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.7
+thresh075:
+  postproc:
+    MWS_kwargs:
+      bias: 0.75
+    multicut_kwargs:
+      beta: 0.75
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.75
+thresh080:
+  postproc:
+    MWS_kwargs:
+      bias: 0.80
+    multicut_kwargs:
+      beta: 0.80
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.8
+thresh085:
+  postproc:
+    MWS_kwargs:
+      bias: 0.85
+    multicut_kwargs:
+      beta: 0.85
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.85
+thresh090:
+  postproc:
+    MWS_kwargs:
+      bias: 0.90
+    multicut_kwargs:
+      beta: 0.90
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.9
+
+thresh092:
+  postproc:
+    MWS_kwargs:
+      bias: 0.92
+    multicut_kwargs:
+      beta: 0.92
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.92
+
+thresh095:
+  postproc:
+    MWS_kwargs:
+      bias: 0.95
+    multicut_kwargs:
+      beta: 0.95
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.95
+
+thresh098:
+  postproc:
+    MWS_kwargs:
+      bias: 0.98
+    multicut_kwargs:
+      beta: 0.98
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.98
+
+thresh0985:
+  postproc:
+    MWS_kwargs:
+      bias: 0.985
+    multicut_kwargs:
+      beta: 0.985
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.985
+
+thresh099:
+  postproc:
+    MWS_kwargs:
+      bias: 0.99
+    multicut_kwargs:
+      beta: 0.99
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.99
+
+thresh000:
+  postproc:
+    MWS_kwargs:
+      bias: 0.00000000000001
+    multicut_kwargs:
+      beta: 0.00000000000001
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.00000000000001
+
+thresh097:
+  postproc:
+    MWS_kwargs:
+      bias: 0.97
+    multicut_kwargs:
+      beta: 0.97
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 0.97
+
+thresh1:
+  postproc:
+    MWS_kwargs:
+      bias: 1.
+    multicut_kwargs:
+      beta: 1.
+    generalized_HC_kwargs:
+      agglomeration_kwargs:
+        extra_aggl_kwargs:
+          threshold: 1.
+
+
+### Test defected slices:
+part1:
+  postproc:
+    data_slice:
+      A: ':,:10, :, :'
+      B: ':,:25, :, :'
+      C: ':,:24, :, :'
+
+part2:
+  postproc:
+    data_slice:
+      A: ':,11:43, :, :'
+      B: ':,27:54, :, :'
+      C: ':,25:84, :, :'
+
+part3:
+  postproc:
+    data_slice:
+      A: ':,44:61, :, :'
+      B: ':,56:, :, :'
+      C: ':,85:96, :, :'
+
+part4:
+  postproc:
+    data_slice:
+      A: ':,62:89, :, :'
+      B: 'None'
+      C: ':,97:, :, :'
+
+part5:
+  postproc:
+    data_slice:
+      A: ':,91:118, :, :'
+      B: 'None'
+      C: 'None'
+
+part6:
+  postproc:
+    data_slice:
+      A: ':,120:, :, :'
+      B: 'None'
+      C: 'None'

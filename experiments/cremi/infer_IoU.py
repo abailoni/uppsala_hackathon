@@ -138,6 +138,9 @@ class BaseCremiExperiment(BaseExperiment, AffinityInferenceMixin):
             f.create_dataset('data', data=output.astype(np.float16), compression='gzip')
             print("Saved to ", filename)
 
+        # Dump configuration to export folder:
+        self.dump_configuration(os.path.join(dir_path, "prediction_config.yml"))
+
 if __name__ == '__main__':
     print(sys.argv[1])
 

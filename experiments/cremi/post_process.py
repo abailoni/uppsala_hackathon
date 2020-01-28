@@ -1,0 +1,466 @@
+from vaeAffs.utils.path_utils import change_paths_config_file, get_trendytukan_drive_path, get_abailoni_hci_home_path
+
+from speedrun import BaseExperiment
+
+from copy import deepcopy
+
+import os
+import torch
+
+import sys
+
+import json
+import numpy as np
+import vigra
+import segmfriends.utils.various as segm_utils
+from segmfriends.utils.config_utils import adapt_configs_to_model
+import vaeAffs.postproc.utils as postproc_utils
+from segmfriends.algorithms import get_segmentation_pipeline
+import time
+import shutil
+
+from multiprocessing.pool import ThreadPool
+from itertools import repeat
+from segmfriends.utils.various import starmap_with_kwargs
+
+torch.backends.cudnn.benchmark = True
+
+
+class PostProcessingExperiment(BaseExperiment):
+    def __init__(self, experiment_directory=None, config=None):
+        super(PostProcessingExperiment, self).__init__(experiment_directory)
+        # Privates
+        self._meta_config['exclude_attrs_from_save'] = ['data_loader', '_device']
+        if config is not None:
+            self.read_config_file(config)
+
+        self.auto_setup()
+
+        # Where the segmentation will be saved: (each experiment is in a sub-folder)
+        proj_dir_path = self.get('proj_dir_path',
+                            os.path.join(get_trendytukan_drive_path(),"projects/pixel_embeddings"))
+        self.set("proj_dir_path", proj_dir_path)
+
+        # Load the file with all the presets of postprocessing:
+        postproc_presets_path = self.get('postproc_presets_path',
+                                       os.path.join(get_abailoni_hci_home_path(),
+                                                    "pyCharm_projects/uppsala_hackathon/experiments/cremi/"
+                                                    "postproc_configs/postproc_presets.yml"))
+        self.set("postproc_presets", segm_utils.yaml2dict(postproc_presets_path))
+
+        self.build_experiment()
+        self.build_offsets()
+
+    def build_experiment(self):
+        # Create dirs if not existing:
+        exp_name = self.get("experiment_name", ensure_exists=True)
+        exp_path = os.path.join(self.get("proj_dir_path"), exp_name)
+        self.set("exp_path", exp_path)
+        exp_path_exists = segm_utils.check_dir_and_create(exp_path)
+
+        # Check paths where to get affinities:
+        if self.get("volume_config/affinities/path") is None:
+            # Check if an experiment folder is given:
+            if self.get("affs_exp_name") is not None:
+                affs_dir_path = os.path.join(self.get("proj_dir_path"), self.get("affs_exp_name"))
+            else:
+                assert exp_path_exists, "None affs path has been passed and none were found in exp folder!"
+                affs_dir_path = exp_path
+            self.get("affinities_dir_path", affs_dir_path)
+
+    def build_offsets(self):
+        if self.get("offsets_file_name") is not None:
+            print("Loading offsets from file...")
+            offset_dir = self.get("offsets_dir_path",
+                                  os.path.join(get_abailoni_hci_home_path(),
+                                               "pyCharm_projects/uppsala_hackathon/experiments/cremi/offsets"))
+            offsets_path = os.path.join(offset_dir, self.get("offsets_file_name"))
+            assert os.path.exists(offsets_path)
+            with open(offsets_path, 'r') as f:
+                self.set("offsets", json.load(f))
+        else:
+            print("Loading offsets from inference config...")
+            offset_path_in_infer_config = self.get("offset_path_in_infer_config", ensure_exists=True)
+            affs_dir_path = self.get("affinities_dir_path", ensure_exists=True)
+            prediction_config = segm_utils.yaml2dict(os.path.join(affs_dir_path, "prediction_config.yml"))
+
+            # Recursively look into the prediction_config:
+            paths = offset_path_in_infer_config.split("/")
+            data = prediction_config
+            for path in paths:
+                assert path in data
+                data = data.get(path)
+            offsets = data
+            assert isinstance(offsets, list)
+            self.set("offsets", offsets)
+
+    def run(self):
+        # Load data for all the runs:
+        kwargs_iter = self.get_kwargs_for_each_run()
+
+        # Create Pool and run post-processing:
+        nb_thread_pools = self.get("postproc_config/nb_thread_pools")
+        pool = ThreadPool(processes=nb_thread_pools)
+        starmap_with_kwargs(pool, self.run_clustering, args_iter=repeat([]),
+                            kwargs_iter=kwargs_iter)
+        pool.close()
+        pool.join()
+
+    def run_clustering(self, affinities, GT, sample, crop_slice, sub_crop_slice, preset,
+                       edge_prob,
+                       local_attraction,
+                       noise_factor,
+                       mask_used_edges):
+        # ------------------------------
+        # Build segmentation pipeline:
+        # ------------------------------
+        affinities = affinities.copy()
+        print(sample, preset, crop_slice, sub_crop_slice)
+
+        offsets = self.get("offsets")
+
+        post_proc_config, presets_collected = self.apply_presets_to_postproc_config(init_presets=[preset],
+                                                                 local_attraction=local_attraction)
+
+        # Make some fine adjustments to config:
+        post_proc_config['generalized_HC_kwargs']['agglomeration_kwargs']['offsets_probabilities'] = edge_prob
+        post_proc_config['generalized_HC_kwargs']['agglomeration_kwargs']['mask_used_edges'] = mask_used_edges
+        post_proc_config['generalized_HC_kwargs']['agglomeration_kwargs']['return_UCM'] = post_proc_config.get("save_UCM", False)
+
+        if post_proc_config.get("use_multicut", False):
+            post_proc_config['multicut_kwargs']['offsets_probabilities'] = edge_prob
+
+        n_threads = post_proc_config.pop('nb_threads')
+        invert_affinities = post_proc_config.pop('invert_affinities', False)
+        segm_pipeline_type = post_proc_config.pop('segm_pipeline_type', 'gen_HC')
+
+        # Build the segmentation pipeline:
+        segmentation_pipeline = get_segmentation_pipeline(
+            segm_pipeline_type,
+            offsets,
+            nb_threads=n_threads,
+            invert_affinities=invert_affinities,
+            return_fragments=False,
+            **post_proc_config
+        )
+
+        # ------------------------------
+        # Run post-processing:
+        # ------------------------------
+        print("Starting prediction...")
+        tick = time.time()
+        if post_proc_config.get("from_superpixels", False):
+            outputs = segmentation_pipeline(affinities, GT != 0)
+        else:
+            outputs = segmentation_pipeline(affinities)
+        comp_time = time.time() - tick
+        print("Post-processing took {} s".format(comp_time))
+
+        # Analyze outputs:
+        if isinstance(outputs, tuple):
+            pred_segm, out_dict = outputs
+        else:
+            pred_segm = outputs
+            out_dict = {'MC_energy': np.array([0]), 'runtime': 0.}
+        MC_energy = out_dict['MC_energy']
+        if post_proc_config.get("save_UCM", False):
+            raise DeprecationWarning
+            UCM, mergeTimes = out_dict['UCM'], out_dict['mergeTimes']
+
+        # Make 2D segmentation:
+        if post_proc_config.get("return_2D_segmentation", False):
+            segm_2D = np.empty_like(pred_segm)
+            max_label = 0
+            for z in range(pred_segm.shape[0]):
+                segm_2D[z] = pred_segm[z] + max_label
+                max_label += pred_segm[z].max() + 1
+            pred_segm = vigra.analysis.labelVolume(segm_2D.astype('uint32'))
+
+        pred_segm = vigra.analysis.relabelConsecutive(pred_segm.astype('uint64'))[0]
+
+        # MWS in affogato could make problems, without connected components...
+        if post_proc_config.get("connected_components_on_final_segm", False):
+            if pred_segm.max() > np.uint32(-1):
+                raise ValueError("uint32 limit reached!")
+            else:
+                pred_segm = vigra.analysis.labelVolumeWithBackground(pred_segm.astype('uint32'))
+
+        grow_WS = post_proc_config.get('thresh_segm_size', 0) != 0 and post_proc_config.get("WS_growing", False)
+        if grow_WS:
+            grow = SizeThreshAndGrowWithWS(post_proc_config['thresh_segm_size'],
+                                           offsets,
+                                           hmap_kwargs=post_proc_config['prob_map_kwargs'],
+                                           apply_WS_growing=True,
+                                           size_of_2d_slices=False)
+            pred_segm_WS = grow(affinities, pred_segm)
+
+        # ------------------------------
+        # SAVING RESULTS:
+        # ------------------------------
+        config_file_path, segm_file_path = \
+            self.get_valid_out_paths(sample, presets_collected, post_proc_config.get("overwrite_prev_files", False))
+
+        config_to_save = deepcopy(self._config)
+
+        if mask_used_edges is not None:
+            post_proc_config['generalized_HC_kwargs']['agglomeration_kwargs'].pop('mask_used_edges')
+        post_proc_config.pop("iterated_options")
+        config_to_save['postproc_config'] = post_proc_config
+
+        # Save configuration of the iterated kwargs:
+        config_to_save["postproc_config"]["presets_collected"] = presets_collected
+        config_to_save["postproc_config"]["sample"] = sample
+        config_to_save["postproc_config"]["crop"] = crop_slice
+        config_to_save["postproc_config"]["subcrop"] = sub_crop_slice
+        config_to_save["postproc_config"]["local_attraction"] = local_attraction
+        config_to_save["postproc_config"]["edge_prob"] = edge_prob
+        config_to_save["postproc_config"]['noise_factor'] = noise_factor
+
+        # Compute scores:
+        if post_proc_config.get("compute_scores", False):
+            evals = cremi_score(GT, pred_segm, border_threshold=None, return_all_scores=True)
+            if grow_WS:
+                evals_WS = cremi_score(GT, pred_segm_WS, border_threshold=None, return_all_scores=True)
+                print("Scores achieved ({} - {} - {}): ".format(agglo_type, non_link, noise_factor), evals_WS)
+            else:
+                evals_WS = None
+                print("Scores achieved ({} - {} - {}): ".format(agglo_type, non_link, noise_factor), evals)
+            config_to_save.update(
+                {'energy': MC_energy.item(), 'score': evals, 'score_WS': evals_WS, 'runtime': out_dict['runtime']})
+
+        # Dump config:
+        with open(config_file_path, 'w') as f:
+            json.dump(config_to_save, f, indent=4, sort_keys=True)
+
+        # Save segmentation:
+        if post_proc_config.get("save_segm", True):
+            print(segm_file_path)
+            if grow_WS:
+                vigra.writeHDF5(pred_segm_WS.astype('uint32'), segm_file_path, 'segm_WS', compression='gzip')
+            vigra.writeHDF5(pred_segm.astype('uint32'), segm_file_path, 'segm', compression='gzip')
+
+            if post_proc_config.get("save_submission_tiff", False):
+                # Compute submission tiff file (boundary: 0, inner: 1)
+                from skimage.segmentation import find_boundaries
+                from skimage import io
+                binary_boundaries = np.empty_like(pred_segm_WS, dtype="bool")
+                for z in range(pred_segm_WS.shape[0]):
+                    binary_boundaries[z] = find_boundaries(pred_segm_WS[z], connectivity=1, mode='thick', background=0)
+                binary_boundaries = np.logical_not(binary_boundaries)
+                io.imsave(segm_file_path.replace(".h5", ".tif"), binary_boundaries.astype('float32'))
+
+        if post_proc_config.get("save_UCM", False):
+            raise DeprecationWarning()
+
+    def get_valid_out_paths(self, sample, presets_collected,
+                            sub_dirs=('scores', 'out_segms'),
+                            file_extensions=('.json', '.h5'),
+                            overwrite_previous=False):
+        experiment_dir = self.get("exp_path")
+
+        # Compose output file name:
+        filename = sample
+        for preset in presets_collected:
+            filename += "__{}".format(preset)
+
+        out_file_paths = []
+        for file_ext, dir_type in zip(file_extensions, sub_dirs):
+            # Create directories:
+            dir_path = os.path.join(experiment_dir, dir_type)
+            segm_utils.check_dir_and_create(dir_path)
+
+            ID = str(np.random.randint(1000000000))
+            # Backup old file, it already exists:
+            candidate_file = os.path.join(dir_path, filename + file_ext)
+            if os.path.exists(candidate_file) and not overwrite_previous:
+                candidate_file = candidate_file.replace(file_ext, "__{}{}".format(ID, file_ext))
+                # Renaming previous file is not thread safe...
+                # shutil.move(candidate_file, candidate_file.replace(file_ext, "__{}{}".format(ID, file_ext)))
+            out_file_paths.append(candidate_file)
+
+        return out_file_paths
+
+    def get_kwargs_for_each_run(self):
+        # TODO: add option to load GT and affs directly in run_agglomeration? (More memory efficient)
+        nb_iterations = self.get("postproc_config/nb_iterations", 1)
+
+        kwargs_collected = []
+
+        postproc_config = self.get("postproc_config", ensure_exists=True)
+        iterated_options = self.get("postproc_config/iterated_options", {})
+
+        # Assert to have a sample:
+        if "sample" not in iterated_options:
+            assert "sample" in postproc_config, "At least one sample-dataset should be given"
+            iterated_options["sample"] = postproc_config["sample"]
+
+        # Initialize default iterated options:
+        iterated_options.setdefault("noise_factor", [postproc_config.get("noise_factor", 0.)])
+        iterated_options.setdefault("edge_prob", [postproc_config.get("edge_prob", 0.)])
+        iterated_options.setdefault("preset", [postproc_config.get("preset", None)])
+        iterated_options.setdefault("local_attraction", [postproc_config.get("local_attraction", False)])
+        iterated_options.setdefault("crop_slice", [postproc_config.get("crop_slice", ":,:,:,:")])
+        iterated_options.setdefault("sub_crop_slice", postproc_config.get([":,:,:,:"]))
+
+        # Make sure to have lists:
+        for iter_key in iterated_options:
+            iterated_options[iter_key] = iterated_options[iter_key] if isinstance(iterated_options[iter_key], list) \
+                else [iterated_options[iter_key]]
+
+        GT_vol_config = self.get('volume_config/GT')
+        affs_vol_config = self.get('volume_config/affinities')
+
+        for _ in range(nb_iterations):
+            collected_data = {"affs": {},
+                              "GT": {},
+                              "affs_mask": {}}
+
+            for sample in iterated_options['sample']:
+                print("Loading...")
+                # Create new dict entry if needed:
+                for dt_type in collected_data:
+                    collected_data[dt_type][sample] = {} if sample not in collected_data[dt_type] else \
+                        collected_data[dt_type][sample]
+                # ----------------------------------------------------------------------
+                # Load data (and possibly add noise or select long range edges):
+                # ----------------------------------------------------------------------
+                for crop in iterated_options['crop_slice']:
+                    # Create new dict entry if needed:
+                    for dt_type in collected_data:
+                        collected_data[dt_type][sample][crop] = {} if crop not in collected_data[dt_type][sample] else \
+                            collected_data[dt_type][sample][crop]
+                    for sub_crop in iterated_options['sub_crop_slice']:
+                        # Create new dict entry if needed:
+                        for dt_type in collected_data:
+                            collected_data[dt_type][sample][crop][sub_crop] = {} \
+                                if sub_crop not in collected_data[dt_type][sample][crop] else \
+                                collected_data[dt_type][sample][crop][sub_crop]
+
+                        noise_seed = np.random.randint(-100000, 100000)
+
+                        crop_slc = segm_utils.parse_data_slice(crop)
+                        GT = segm_utils.readHDF5_from_volume_config(sample,
+                                            **GT_vol_config,
+                                            crop_slice=crop_slc[1:],
+                                            run_connected_components=False
+                                            )
+                        # Optionally, affinity paths are deduced dynamically:
+                        if self.get("affinities_dir_path") is not None:
+                            affs_vol_config['path'] = \
+                                os.path.join(self.get("affinities_dir_path"), "predictions_sample_{}.h5".format(sample))
+                        affinities = segm_utils.readHDF5_from_volume_config(sample,
+                                            **affs_vol_config,
+                                            crop_slice=crop_slc,
+                                            run_connected_components=False
+                                            )
+
+                        assert GT.shape == affinities.shape[1:], "Loaded GT and affinities do not match"
+                        sub_crop_slc = segm_utils.parse_data_slice(sub_crop)
+                        affinities = affinities[sub_crop_slc]
+                        GT = GT[sub_crop_slc[1:]]
+                        GT = vigra.analysis.labelVolumeWithBackground(GT.astype('uint32'))
+
+                        collected_data["GT"][sample][crop][sub_crop] = GT
+                        collected_data["affs"][sample][crop][sub_crop] = {}
+                        collected_data["affs_mask"][sample][crop][sub_crop] = {}
+                        for long_range_prob in iterated_options['edge_prob']:
+                            for noise in iterated_options['noise_factor']:
+                                if noise != 0.:
+                                    raise DeprecationWarning("Double check that opensimplex works")
+                                    noise_mod = postproc_config.get("noise_mod", 'split-biased')
+                                    collected_data["affs"][sample][crop][sub_crop][noise] = \
+                                        postproc_utils.add_opensimplex_noise_to_affs(
+                                        affinities, noise,
+                                        mod=noise_mod,
+                                        target_affs='all',
+                                        seed=noise_seed
+                                        )
+                                else:
+                                    collected_data["affs"][sample][crop][sub_crop][noise] = affinities
+
+                                # Fix already long-range edges that will be in the graph:
+                                if long_range_prob < 1.0 and long_range_prob > 0.0:
+                                    collected_data["affs_mask"][sample][crop][sub_crop][long_range_prob] = np.random.random(
+                                        affinities.shape) < long_range_prob
+
+                # ----------------------------------------------------------------------
+                # Create iterators:
+                # ----------------------------------------------------------------------
+                print("Creating pool instances...")
+                for crop in iterated_options['crop']:
+                    for sub_crop in iterated_options['subcrop']:
+                        assert collected_data["affs"][sample][crop][sub_crop] is not None
+                        for local_attr in iterated_options['local_attraction']:
+                            for preset in iterated_options['preset']:
+                                if local_attr and preset in ['greedyFixation', 'GAEC']:
+                                    continue
+                                for edge_prob in iterated_options['edge_prob']:
+                                    for noise in iterated_options['noise_factor']:
+                                        # Build a new run dictionary with the iterated options:
+                                        kwargs_collected.append({
+                                            'affinities': collected_data['affs'][sample][crop][sub_crop][noise],
+                                            'GT': collected_data['GT'][sample][crop][sub_crop],
+                                            'sample': sample,
+                                            'noise_factor': noise,
+                                            'edge_prob': edge_prob,
+                                            'preset': preset,
+                                            'local_attraction': local_attr,
+                                            'crop_slice': crop,
+                                            'sub_crop_slice': sub_crop,
+                                            'mask_used_edges': collected_data['affs_mask'][sample][crop][sub_crop].get(
+                                                edge_prob, None)
+                                        })
+
+        return kwargs_collected
+
+    def apply_presets_to_postproc_config(self,
+                            init_presets=None,
+                            local_attraction=False):
+        # Get all presets:
+        post_proc_config = deepcopy(self.get("postproc_config"))
+        configs = {'models': self.get("postproc_presets"),
+                   'postproc': post_proc_config}
+        presets_collected = [] if init_presets is None else init_presets
+        presets_collected = presets_collected if not local_attraction else presets_collected + ["impose_local_attraction"]
+        if post_proc_config.get("from_superpixels", False):
+            if post_proc_config.get("use_multicut", False):
+                presets_collected = ["use_fragmenter", 'multicut_exact']
+            else:
+                presets_collected += ["gen_HC_DTWS"]  # DTWS
+
+        if post_proc_config.get("extra_presets", False):
+            presets_from_config = post_proc_config.get("extra_presets")
+            assert isinstance(presets_from_config, list)
+            presets_collected += presets_from_config
+
+        # Adapt the original config:
+        return adapt_configs_to_model(presets_collected, debug=True, **configs), presets_collected
+
+
+if __name__ == '__main__':
+    print(sys.argv[1])
+
+    source_path = os.path.dirname(os.path.realpath(__file__))
+    config_path = os.path.join(source_path, 'configs')
+    experiments_path = os.path.join(source_path, 'runs')
+
+    sys.argv[1] = os.path.join(experiments_path, sys.argv[1])
+    if '--inherit' in sys.argv:
+        i = sys.argv.index('--inherit') + 1
+        if sys.argv[i].endswith(('.yml', '.yaml')):
+            sys.argv[i] = change_paths_config_file(os.path.join(config_path, sys.argv[i]))
+        else:
+            sys.argv[i] = os.path.join(experiments_path, sys.argv[i])
+    if '--update' in sys.argv:
+        i = sys.argv.index('--update') + 1
+        sys.argv[i] = change_paths_config_file(os.path.join(config_path, sys.argv[i]))
+    i = 0
+    while True:
+        if f'--update{i}' in sys.argv:
+            ind = sys.argv.index(f'--update{i}') + 1
+            sys.argv[ind] = os.path.join(config_path, sys.argv[ind])
+            i += 1
+        else:
+            break
+    cls = PostProcessingExperiment
+    cls().run()
