@@ -182,7 +182,6 @@ class CremiDataset(ZipReject):
 
         # Replicate and downscale batch:
         nb_inputs = 1
-        input_indices, target_indices = [0], [1]
         if self.master_config.get("downscale_and_crop") is not None:
             ds_config = self.master_config.get("downscale_and_crop")
             apply_to  = [conf.pop('apply_to') for conf in ds_config]
@@ -300,22 +299,12 @@ class CremiDatasetInference(RawVolume):
         # TODO: somehow merge with the trainer loader...
 
         # Replicate and downscale batch:
-        input_indices, target_indices = [0], [1]
         if master_config.get("downscale_and_crop") is not None:
             ds_config = master_config.get("downscale_and_crop")
-            replicate_targets = ds_config.pop("replicate_targets", False)
-            assert len(ds_config) >= 1
-            num_inputs = len(ds_config)
-            input_indices = list(range(num_inputs))
-            target_indices = list(range(num_inputs, 2*num_inputs)) if replicate_targets else [num_inputs]
-
-            transforms.add(ReplicateBatch(num_inputs, replicate_targets=replicate_targets))
-            for i, in_idx in enumerate(input_indices):
-                kwargs = ds_config[in_idx]
-                transforms.add(DownsampleAndCrop3D(apply_to=[in_idx], order=2, **kwargs))
-                if replicate_targets:
-                    transforms.add(
-                        DownsampleAndCrop3D(apply_to=[target_indices[i]], order=0, **kwargs))
+            apply_to  = [conf.pop('apply_to') for conf in ds_config]
+            transforms.add(ReplicateBatchGeneralized(apply_to))
+            for indx, conf in enumerate(ds_config):
+                transforms.add(DownsampleAndCrop3D(apply_to=[indx], order=None, **conf))
 
         # # # affinity transforms for affinity targets
         # # # we apply the affinity target calculation only to the segmentation (1)

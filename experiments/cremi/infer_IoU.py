@@ -59,12 +59,18 @@ class BaseCremiExperiment(BaseExperiment, AffinityInferenceMixin):
 
 
     def build_model(self, model_config=None):
+        self.model_class = list(self.get('model').keys())[0]
+
         model_config = self.get('model') if model_config is None else model_config
         # return super(BaseCremiExperiment, self).build_model(model_config) #parse_model(model_config)
 
 
-        model_path = model_config[next(iter(model_config.keys()))].pop('loadfrom', None)
-        stacked_models_path = model_config[next(iter(model_config.keys()))].pop('load_stacked_models_from', None)
+        model_path = model_config[self.model_class].pop('loadfrom', None)
+        stacked_models_path = model_config[self.model_class].pop('load_stacked_models_from', None)
+
+        # Shurtcuts from shell:
+        model_config[self.model_class].update(self.get("model_shortcuts", {}))
+
         model = create_instance(model_config, self.MODEL_LOCATIONS)
 
         if model_path is not None:

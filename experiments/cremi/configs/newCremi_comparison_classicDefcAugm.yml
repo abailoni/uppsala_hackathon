@@ -323,7 +323,7 @@ model:
 ##      window_size: [3,80,80]
 #
 #
-#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/patchLoss_dim32_775_copyDefectedGT/best_checkpoint.pytorch"
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/newCremi_classicDefcAugm/checkpoint.pytorch"
 #    load_stacked_models_from:
 #      0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stacked3x_dim64_7_15_15_mdl0_c/checkpoint.pytorch"
 #      1: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stacked3x_dim128_5_15_15_mdl1/checkpoint.pytorch"

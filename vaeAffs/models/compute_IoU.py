@@ -688,6 +688,7 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
                  slicing_config=None,
                  IoU_on_GPU=True,
                  affinity_mode="classic",
+                 patch_threshold=0.5,
                  *super_args, **super_kwargs):
         super(ProbabilisticBoundaryFromEmb, self).__init__(*super_args, **super_kwargs)
 
@@ -705,6 +706,7 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         # TODO: Assert
         assert affinity_mode in ["classic", "probabilistic"]
         self.affinity_mode = affinity_mode
+        self.patch_threshold = patch_threshold
         self.IoU_on_GPU = IoU_on_GPU
         if patch_size_per_offset is None:
             patch_size_per_offset = [None for _ in range(len(offsets))]
@@ -754,17 +756,25 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         del inputs
         # torch.cuda.empty_cache()
 
-        # TODO: generalize
-        all_predictions = all_predictions[:2]
-        patch_nets = [0, 1]
-        assert all_predictions[0].shape == all_predictions[1].shape
+        total_nb_patchnets = 0
+        for _, off_specs in enumerate(self.offsets):
+            new_max = np.array(off_specs[1]).max()
+            total_nb_patchnets = new_max if new_max > total_nb_patchnets else total_nb_patchnets
+        all_predictions = all_predictions[:total_nb_patchnets]
+        patch_nets = range(total_nb_patchnets+1)
+        # TODO: generalize to multiscale inputs?
+        first_shape = all_predictions[0].shape
+        for pred in all_predictions[1:]:
+            assert first_shape == pred.shape
 
+        """
         # Pre-crop prediction:
         # !!!!!!!!!!!!!!!!!!!!!
         # Important: pre-cropping the prediction that was not trained during training is really important
         # (for instance the first and last two slices), because otherwise their patches could mess up the
         # statistics of the probabilistic affinities.
         # !!!!!!!!!!!!!!!!!!!!!
+        """
         if self.pre_crop_pred is not None:
             all_predictions = [pred[self.pre_crop_pred] for pred in all_predictions]
 
@@ -830,8 +840,13 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
                 # Make sure to have me-masks:
                 if patch_dws_fact[1] <= 6:
                     patches = 1. - patches
-                # Threshold masks: TODO: generalize threshold
-                patches = patches >= 0.5
+                # Threshold masks:
+                patches = patches >= self.patch_threshold
+
+
+                # Make center always true:
+                center_coord = (slice(None), slice(None), slice(None)) + tuple(int(shp/2) for shp in patches.shape[-3:])
+                patches[center_coord] = torch.from_numpy(np.array([True], dtype='uint8')).cuda()
 
                 # Compute affinities:
                 for nb_off, off_specs in enumerate(self.offsets):
@@ -885,14 +900,24 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         # # Normalize between 1 and 0 as usual affinities:
         # affinities = (affinities/2.) + 0.5
 
-        # METHOD 2:
-        # affinities[valid_mask] = boundary_stats[0][valid_mask] - 2*boundary_stats[1][valid_mask]
-        affinities[valid_mask] = boundary_stats[1][valid_mask]
-        # Crop negative values to zero:
-        affinities = affinities*(affinities>0.).float()
-        # # Rescale between 0 and 1:
-        # for off in range(affinities.shape[0]):
-        #     affinities[off] = affinities[off]/affinities[off].max()
+        # METHOD 1b:
+        affinities[valid_mask] = (boundary_stats[0][valid_mask] - boundary_stats[1][valid_mask])
+        for offs in range(affinities.shape[0]):
+            # Bring to zero the minimum:
+            affinities[offs] -= affinities[offs].min()
+            # Bring to 1 the maximum:
+            affinities[offs] = affinities[offs] / affinities[offs].max()
+
+
+
+        # # METHOD 2:
+        # # affinities[valid_mask] = boundary_stats[0][valid_mask] - 2*boundary_stats[1][valid_mask]
+        # affinities[valid_mask] = boundary_stats[1][valid_mask]
+        # # Crop negative values to zero:
+        # affinities = affinities*(affinities>0.).float()
+        # # # Rescale between 0 and 1:
+        # # for off in range(affinities.shape[0]):
+        # #     affinities[off] = affinities[off]/affinities[off].max()
 
         if self.IoU_on_GPU:
             return affinities.unsqueeze(0)
@@ -928,10 +953,16 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         del inputs
         # torch.cuda.empty_cache()
 
-        # TODO: generalize
-        all_predictions = all_predictions[:2]
-        patch_nets = [0, 1]
-        assert all_predictions[0].shape == all_predictions[1].shape
+        total_nb_patchnets = 0
+        for _, off_specs in enumerate(self.offsets):
+            new_max = np.array(off_specs[1]).max()
+            total_nb_patchnets = new_max if new_max > total_nb_patchnets else total_nb_patchnets
+        all_predictions = all_predictions[:total_nb_patchnets]
+        patch_nets = range(total_nb_patchnets+1)
+        # TODO: generalize to multiscale inputs?
+        first_shape = all_predictions[0].shape
+        for pred in all_predictions[1:]:
+            assert first_shape == pred.shape
 
         # Pre-crop prediction:
         # !!!!!!!!!!!!!!!!!!!!!
