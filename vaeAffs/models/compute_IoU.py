@@ -760,7 +760,7 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         for _, off_specs in enumerate(self.offsets):
             new_max = np.array(off_specs[1]).max()
             total_nb_patchnets = new_max if new_max > total_nb_patchnets else total_nb_patchnets
-        all_predictions = all_predictions[:total_nb_patchnets]
+        all_predictions = all_predictions[:total_nb_patchnets+1]
         patch_nets = range(total_nb_patchnets+1)
         # TODO: generalize to multiscale inputs?
         first_shape = all_predictions[0].shape
@@ -957,7 +957,7 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         for _, off_specs in enumerate(self.offsets):
             new_max = np.array(off_specs[1]).max()
             total_nb_patchnets = new_max if new_max > total_nb_patchnets else total_nb_patchnets
-        all_predictions = all_predictions[:total_nb_patchnets]
+        all_predictions = all_predictions[:total_nb_patchnets+1]
         patch_nets = range(total_nb_patchnets+1)
         # TODO: generalize to multiscale inputs?
         first_shape = all_predictions[0].shape
@@ -997,9 +997,12 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         # Create array with output probability-affinities:
         if self.IoU_on_GPU:
             out_affinities = torch.zeros(out_affinities_shape).cuda(device)
+            mask_affinities = torch.zeros(out_affinities_shape).cuda(device)
         else:
             out_affinities = np.empty(out_affinities_shape)
+            mask_affinities = np.empty(out_affinities_shape)
             raise NotImplementedError()
+
 
         # Predict all patches:
         # print("Sliding windows: ", len(sliding_windows))
@@ -1032,10 +1035,17 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
                     if nb_patch_net in off_specs[1]:
                         assert all(off%dws == 0 for off, dws in zip(off_specs[0], patch_dws_fact))
                         aff_coord = [int(shp/2)+int(off/dws)  for off, dws, shp in zip(off_specs[0], patch_dws_fact, patches.shape[-3:])]
+
                         # Get the requested affinity:
                         current_affinities = patches[:,:,:,aff_coord[0],aff_coord[1],aff_coord[2]]
 
-                        out_affinities[nb_off][current_slice] = current_affinities
+                        out_affinities[nb_off][current_slice] = out_affinities[nb_off][current_slice] + current_affinities
+                        mask_affinities[nb_off][current_slice] = mask_affinities[nb_off][current_slice] + 1
+
+        # Normalize:
+        valid_affs = mask_affinities > 0.
+        out_affinities[valid_affs] = out_affinities[valid_affs] / mask_affinities[valid_affs]
+
 
         if self.IoU_on_GPU:
             return out_affinities.unsqueeze(0)

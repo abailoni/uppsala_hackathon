@@ -1,5 +1,5 @@
 experiment_name: debug_postproc
-affs_exp_name: whatever # Where to get affinities from
+#affs_exp_name: main_classic # Where to get affinities from
 
 offsets_file_name: "default_from_patch.json"
 # offset_path_in_infer_config: "model.config.offsets"
@@ -14,11 +14,18 @@ volume_config:
       A: '$HCI_HOME/datasets/new_cremi/sampleA.h5'
       B: '$HCI_HOME/datasets/new_cremi/sampleB.h5'
       C: '$HCI_HOME/datasets/new_cremi/sampleC.h5'
-    path_in_file: 'volumes/labels/neuron_ids_fixed'
+    inner_path: 'volumes/labels/neuron_ids_fixed'
     dtype: int32
+    ds_factor: [1, 2, 2]
+    ds_order: 1
+#    crop_slice:
+#      A: ":,:,:"
+#      B: ":,:-1,:"
+#      C: ":,:,:"
+
 
   affinities:
-    path_in_file: 'data'
+    inner_path: 'data'
     dtype: float32
 
 
@@ -26,17 +33,18 @@ postproc_config:
   # ------------------------------
   # Generic options
   # ------------------------------
-  from_superpixels: True
-  use_multicut: False
-  compute_scores: False
+  from_superpixels: False # Deprecate...?
+  use_multicut: False # Deprecate...?
+  compute_scores: True
   save_segm: True
   WS_growing: True
-  save_UCM: False
-  connected_components_on_final_segm: True
-  overwrite_prev_files: False
+  connected_components_on_final_segm: False
+  overwrite_prev_files: True
 #  extra_presets:
-#    - "WSDT"
-#    - "multicut"
+#    - "simple_WSDT"
+#    - "gen_HC_DTWS"
+
+  save_UCM: False
 
   # Specific for ISBI:
   return_2D_segmentation: False
@@ -46,13 +54,13 @@ postproc_config:
   # ------------------------------
   # Iterated options (from each combination of the below, a segm is generated):
   # ------------------------------
-  nb_threads: 5
+  nb_threads: 3
   nb_thread_pools: 1
   nb_iterations: 1
 
   iterated_options:
     preset: ["MEAN"]
-    sample: B
+    sample: ["C"]
     edge_prob: 0.
     noise_factor: 0.
     local_attraction: False
@@ -60,7 +68,7 @@ postproc_config:
     crop_slice:
       A: [":,:,:,:"]
       B: ":,:,:,:"
-      C: ":,:,:,:"
+      C: ":,:15,:,:"
 
     sub_crop_slice: ":,:,:,:"
 
@@ -83,10 +91,11 @@ postproc_config:
     num_workers: 1
 
   MWS_kwargs:
+    randomize_bounds: True
     stride:
       - 1
-      - 1
-      - 1
+      - 6
+      - 6
 
   start_from_given_segm: False
 

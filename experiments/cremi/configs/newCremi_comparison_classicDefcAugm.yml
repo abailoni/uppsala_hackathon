@@ -223,107 +223,97 @@ loaders:
         label_volume: False
 
 
-#  infer:
-#    inference_mode: True
-#    loader_config:
-#      # Number of processes to use for loading data. Set to (say) 10 if you wish to
-#      # use 10 CPU cores, or to 0 if you wish to use the same process for training and
-#      # data-loading (generally not recommended).
-#      batch_size: 1
-#      num_workers: 4
-#      drop_last: False
-#      #      pin_memory: False
-#      shuffle: False
-#    name: C
-#
-#    master_config:
-#      downscale_and_crop:
-#        replicate_targets: True
-#        0:
-#          ds_factor: [1, 2, 2]
-#          crop_factor: [1, 2, 2]
-#        1:
-#          ds_factor: [1, 4, 4]
-##          crop_factor: [1, 1, 1]
-##          crop_slice: ":,36:-36,36:-36"
-#
-#    volume_config:
-#      # Sliding window size
-#      window_size: [14, 704, 704]  # 288
-#      #        A:
-#      #        B: *shape
-#      #        C: *shape
-#      # Sliding window stride
-#      stride: [40, 40, 40] # Not needed anymore, automatically deduced
-#      #        A:
-#      #        B: *stride
-#      #        C: *stride
-#      # Data slice to iterate over.
-#      #      data_slice: '70:100,200:800,200:800'
-#      #      data_slice: ":20, 90:, 580: 1900"
-##      data_slice: ':,:,:'
-#      data_slice: ':40,:,:'
-##      data_slice: ':8, :704, :704'
-##      data_slice: ':8, :704, :704'
-#
-#      padding_mode: "reflect"
-#      padding: *dataset_padding
-#      # PATHS:
-#      path:
-#        A: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleA_train.h5'
-#        B: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleB_train.h5'
-#        C: '$HCI_HOME/datasets/cremi/SOA_affinities/sampleC_train.h5'
-#        B+: '$HCI_HOME/datasets/cremi/testvol/test_samples/sampleB+_cropped_plus_mask.h5'
-#        A+: '$HCI_HOME/datasets/cremi/testvol/test_samples/sampleA+_cropped_plus_mask.h5'
-#        C+: '$HCI_HOME/datasets/cremi/testvol/test_samples/sampleC+_cropped_plus_mask.h5'
-#      path_in_file:
-#        A: 'raw'
-#        B: 'raw_old'
-#        C: 'raw'
-#        A+: "volumes/raw"
-#        B+: "volumes/raw"
-#        C+: "volumes/raw"
-#      dtype: float32
-#  #      sigma: 0.025
+  infer:
+    inference_mode: True
+    loader_config:
+      # Number of processes to use for loading data. Set to (say) 10 if you wish to
+      # use 10 CPU cores, or to 0 if you wish to use the same process for training and
+      # data-loading (generally not recommended).
+      batch_size: 1
+      num_workers: 4
+      drop_last: False
+      #      pin_memory: False
+      shuffle: False
+    name: C
 
-#inference:
-#  crop_prediction: # How much I crop the predicted tensor: (local_crop in the output resolution)
-#    - [2,2]
-#    - [24,24]
-#    - [24,24]
-##    - [3,3]
-##    - [40,40]
-##    - [40,40]
-#  return_patch_mask: False # Make sure to exclude the invalid affinities
-#  input_dws_fact: [1, 4, 4]
-#  output_dws_fact: [1, 2, 2]
-##  autopad_dataset: True #TODO: this would be nice, but not clear how to do it...
+    master_config:
+      downscale_and_crop:
+        # Inputs:
+        - {ds_factor: [1, 2, 2],
+          crop_factor: [1, 2, 2],
+          apply_to: 0}
+        - {ds_factor: [1, 4, 4],
+          crop_factor: [1, 1, 1],
+          apply_to: 0}
+
+    volume_config:
+      # Sliding window size
+      window_size: [14, 704, 704]  # 288
+      stride: [40, 40, 40] # Not needed anymore, automatically deduced
+      data_slice: ':,:,:'
+#      data_slice: ':40,:,:'
+      padding_mode: "reflect"
+      padding: *dataset_padding
+      path:
+        A: '$HCI_HOME/datasets/new_cremi/sampleA.h5'
+        B: '$HCI_HOME/datasets/new_cremi/sampleB.h5'
+        C: '$HCI_HOME/datasets/new_cremi/sampleC.h5'
+        0: '$HCI_HOME/datasets/new_cremi/sample0.h5'
+        1: '$HCI_HOME/datasets/new_cremi/sample1.h5'
+        2: '$HCI_HOME/datasets/new_cremi/sample2.h5'
+      path_in_file: 'volumes/raw'
+      dtype: float32
+
+inference:
+  crop_prediction: # How much I crop the predicted tensor: (local_crop in the output resolution)
+    - [2,2]
+    - [24,24]
+    - [24,24]
+#    - [0,0]
+#    - [0,0]
+#    - [0,0]
+  return_patch_mask: False # Make sure to exclude the invalid affinities
+  input_dws_fact: [1, 4, 4]
+  output_dws_fact: [1, 2, 2]
+#  autopad_dataset: True #TODO: this would be nice, but not clear how to do it...
+
+model_shortcuts:
+  affinity_mode: "probabilistic" # classic, probabilistic
+  patch_threshold: 0.5
+
 
 model:
-  embeddingutils.models.unet.GeneralizedStackedPyramidUNet3D:
-#  vaeAffs.models.compute_IoU.ProbabilisticBoundaryFromEmb:
-#    offsets:
-#      - [[1,0,0], [0,1], "1:-1"]
-#      - [[0,1,0], [0], "2:-2"]
-##      - [[0,0,1], [0]]
-#      - [[0,3,0], [0], "2:-2"]
-#      - [[0,0,3], [0], "2:-2"]
-##      - [[-1,0,0], [0,1]]
-##      - [[0,-1,0], [0]]
-##      - [[0,0,-1], [0]]
-#      - [[0,8,0], [1], "2:-2"]
-#      - [[0,16,0], [1], "2:-2"]
-##      - [[0,-8,0], [1]]
-##      - [[0,0,-8], [1]]
-#    pre_crop_pred: "2:-2,:,:"
-##    pre_crop_pred: ":,:,:"
-##    pre_crop_pred: "4:-4,40:-40,40:-40"
-#    slicing_config:
-#      window_size: [2,160,160]
-##      window_size: [3,80,80]
-#
-#
-    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/newCremi_classicDefcAugm/checkpoint.pytorch"
+#  embeddingutils.models.unet.GeneralizedStackedPyramidUNet3D:
+  vaeAffs.models.compute_IoU.ProbabilisticBoundaryFromEmb:
+    offsets:
+      # Short-range:
+      - [[-1,0,0], [0,1,2], "1:-1"]
+      - [[0,-1,0], [0], "2:-2"]
+      - [[0,0,-1], [0], "2:-2"]
+      # Mid-range:
+      - [[0,-4,0], [1], "2:-2"]
+      - [[0,0,-4], [1], "2:-2"]
+      - [[0,-4,-4], [1], "2:-2"]
+      - [[0, 4,-4], [1], "2:-2"]
+      - [[-1,-4,0], [1], "1:-1"]
+      - [[-1,0,-4], [1], "1:-1"]
+      - [[-1,-4,-4], [1], "1:-1"]
+      - [[-1, 4,-4], [1], "1:-1"]
+      # 3D-ranges:
+      - [[-2,0,0], [0,1,2], "1:-1"]
+      - [[1,0,0], [0,1,2], "1:-1"]
+      # Long-ranges:
+      - [[0,-8,-8], [1,2], "2:-2"]
+      - [[0, 8,-8], [1,2], "2:-2"]
+      - [[0,-16,0], [2], "2:-2"]
+      - [[0, 0,-16], [2], "2:-2"]
+    pre_crop_pred: "2:-2,:,:"
+    slicing_config:
+      window_size: [2,160,160]
+
+
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/newCremi_classicDefcAugm_b/checkpoint.pytorch"
+
 #    load_stacked_models_from:
 #      0: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stacked3x_dim64_7_15_15_mdl0_c/checkpoint.pytorch"
 #      1: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/stacked3x_dim128_5_15_15_mdl1/checkpoint.pytorch"

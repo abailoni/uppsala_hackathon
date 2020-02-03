@@ -1,4 +1,5 @@
 gen_HC:
+  parent_model: ['simple_WSDT']
   postproc:
     segm_pipeline_type: 'gen_HC'
 

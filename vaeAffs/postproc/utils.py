@@ -1,5 +1,5 @@
 import numpy as np
-from nifty.graph.rag import generate_opensimplex_noise
+from nifty.external import generate_opensimplex_noise
 
 
 def add_opensimplex_noise_to_affs(affinities, scale_factor,

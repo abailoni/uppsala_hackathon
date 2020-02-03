@@ -307,8 +307,8 @@ loaders:
       # Sliding window size
       window_size: [14, 704, 704]  # 288
       stride: [40, 40, 40] # Not needed anymore, automatically deduced
-#      data_slice: ':,:,:'
-      data_slice: ':30,:,:'
+      data_slice: ':,:,:'
+#      data_slice: ':30,:,:'
       padding_mode: "reflect"
       padding: *dataset_padding
       path:
