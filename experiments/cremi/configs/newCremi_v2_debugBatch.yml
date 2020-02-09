@@ -1,0 +1,16 @@
+loaders:
+  train:
+    slicing_config:
+      window_size:
+        A: &shape [5, 382, 382]
+        B: *shape
+        C: *shape
+
+  val:
+    slicing_config:
+      window_size:
+        B: *shape
+        C: *shape
+
+
+

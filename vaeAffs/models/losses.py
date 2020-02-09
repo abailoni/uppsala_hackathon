@@ -252,6 +252,7 @@ class MultiLevelAffinityLoss(nn.Module):
     """
     def __init__(self, model, loss_type="Dice", model_kwargs=None, devices=(0,1),
                  predictions_specs=None,
+                 train_glia_mask=False,
                  target_has_label_segm=False,
                  precrop_pred=None):
         super(MultiLevelAffinityLoss, self).__init__()
@@ -280,14 +281,39 @@ class MultiLevelAffinityLoss(nn.Module):
         self.predictions_specs = predictions_specs
         self.precrop_pred = precrop_pred
         self.target_has_label_segm = target_has_label_segm
+        self.train_glia_mask = train_glia_mask
 
     def forward(self, predictions, all_targets):
         predictions = [predictions] if not isinstance(predictions, (list, tuple)) else predictions
         all_targets = [all_targets] if not isinstance(all_targets, (list, tuple)) else all_targets
 
-        assert len(predictions) == len(self.predictions_specs)
-
         loss = 0
+
+        # # ----------------------------
+        # # Predict glia mask:
+        # # ----------------------------
+        if self.train_glia_mask:
+            glia_pred = predictions.pop(-1)
+            # TODO: generalize to multiple targets
+            glia_target = all_targets[0][:,[-1]]
+            all_targets[0] = all_targets[0][:, :-1]
+            assert self.target_has_label_segm
+            gt_segm = all_targets[0][:,[0]]
+
+            glia_target = auto_crop_tensor_to_shape(glia_target, glia_pred.shape)
+            gt_segm = auto_crop_tensor_to_shape(gt_segm, glia_pred.shape)
+            # TODO: generalize ignore label:
+            valid_mask = (gt_segm != 0).float()
+            glia_pred = glia_pred * valid_mask
+            glia_target = glia_target * valid_mask
+            with warnings.catch_warnings(record=True) as w:
+                loss_glia = data_parallel(self.loss, (glia_pred, glia_target), self.devices).mean()
+            loss = loss + loss_glia
+            log_image("glia_target", glia_target)
+            log_image("glia_pred", glia_pred)
+            log_scalar("loss_glia", loss_glia)
+
+        assert len(predictions) == len(self.predictions_specs)
 
         for nb_pred, pred in enumerate(predictions):
             # TODO: add precrop_pred?
@@ -348,6 +374,7 @@ class MultiLevelAffinityLoss(nn.Module):
 class PatchBasedLoss(nn.Module):
     def __init__(self, model, apply_checkerboard=False, loss_type="Dice",
                  ignore_label=0,
+                 train_glia_mask=False,
                  boundary_label=None,
                  glia_label=None,
                  defected_label=None,
@@ -368,6 +395,7 @@ class PatchBasedLoss(nn.Module):
         self.boundary_label = boundary_label
         self.glia_label = glia_label
         self.defected_label = defected_label
+        self.train_glia_mask = train_glia_mask
         self.add_IoU_loss = False
         if IoU_loss_kwargs is not None:
             self.add_IoU_loss = True
@@ -414,10 +442,37 @@ class PatchBasedLoss(nn.Module):
             raw_inputs = all_predictions[-nb_inputs:]
             all_predictions = all_predictions[:-nb_inputs]
 
+        loss = 0
+
+        # # ----------------------------
+        # # Predict glia mask:
+        # # ----------------------------
+        if self.train_glia_mask:
+            assert self.glia_label is not None
+
+            glia_pred = all_predictions.pop(-1)
+
+            # TODO: generalize to multiple targets and downscaling factors
+            glia_target = (target[0][:, [1]] == self.glia_label).float()
+            valid_mask = (target[0][:, [0]] != self.ignore_label).float()
+
+            glia_target = auto_crop_tensor_to_shape(glia_target, glia_pred.shape)
+            valid_mask = auto_crop_tensor_to_shape(valid_mask, glia_pred.shape)
+            glia_pred = glia_pred * valid_mask
+            glia_target = glia_target * valid_mask
+            with warnings.catch_warnings(record=True) as w:
+                loss_glia = data_parallel(self.loss, (glia_pred, glia_target), self.devices).mean()
+            loss = loss + loss_glia
+            log_image("glia_target", glia_target)
+            log_image("glia_pred", glia_pred)
+            log_scalar("loss_glia", loss_glia)
+        else:
+            glia_pred = all_predictions.pop(-1)
+
+
         nb_preds = len(all_predictions)
         assert len(ptch_kwargs) == nb_preds
 
-        loss = 0
 
         # IoU loss:
         if self.add_IoU_loss:
@@ -460,33 +515,6 @@ class PatchBasedLoss(nn.Module):
 
             full_target_shape = gt_segm.shape[-3:]
             assert all([i <= j for i, j in zip(real_patch_shape, full_target_shape)]), "Real-sized patch is too large!"
-
-            # # ----------------------------
-            # # Loss on boundaries:
-            # # ----------------------------
-            if hasattr(self.model, 'foreground_module') and kwargs.get('compute_foreground_loss', False):
-                assert not boundary_loss_computed, "Boundary loss computed multiple times!"
-                assert self.boundary_label is None
-                boundary_loss_computed = True
-
-                if any(fct!=1 for fct in pred_dws_fact):
-                    ds_crop = (slice(None), slice(None)) + tuple(slice(int(fct/2), None, fct) for fct in pred_dws_fact)
-                    ds_target = target[ds_crop]
-                else:
-                    ds_target = target
-                cropped_gt_segm = auto_crop_tensor_to_shape(ds_target, pred.shape)
-                # FIXME: atm the boundary size is computed in the downscaled targets
-                size_boundary_mask  = kwargs.get('size_boundary_mask', [1,3,3])
-                boundary_mask, ignore_label_mask = get_boundary_mask(cropped_gt_segm, tuple(size_boundary_mask))
-                foregound_pred = data_parallel(self.model.foreground_module, (pred,), self.devices)
-                foregound_pred = foregound_pred * (1. - ignore_label_mask)
-                boundary_mask = boundary_mask * (1. - ignore_label_mask)
-                with warnings.catch_warnings(record=True) as w:
-                    loss_foreground = data_parallel(self.loss, (foregound_pred, boundary_mask), self.devices).mean()
-                loss = loss + loss_foreground
-                log_image("foreground_target", boundary_mask)
-                log_image("foreground_pred", foregound_pred)
-                log_scalar("loss_foreground", loss_foreground)
 
             # ----------------------------
             # Deduce crop size of the prediction and select target patches accordingly:

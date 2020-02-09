@@ -1,0 +1,31 @@
+#loaders:
+#  general:
+#    master_config:
+#      downscale_and_crop:
+#        # Inputs:
+#        - {ds_factor: [1, 1, 1],
+#          crop_factor: [1, 2, 2],
+#          apply_to: 0}
+#        - {ds_factor: [1, 2, 2],
+#          crop_factor: [1, 1, 1],
+#          apply_to: 0}
+#        # Targets:
+#        - {ds_factor: [1, 1, 1],
+#          crop_factor: [1, 2, 2],
+#          apply_to: 1}
+
+model:
+  model_kwargs:
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/v2_noSideLoss/checkpoint.pytorch"
+    models_kwargs:
+      0:
+        nb_patch_nets: 3
+        patchNet_kwargs:
+          3: "KeyDeleter"
+          4: "KeyDeleter"
+
+
+firelight:
+  pcaEmbeddings_lvl1: "KeyDeleter"
+  pcaEmbeddings_lvl2: "KeyDeleter"
+

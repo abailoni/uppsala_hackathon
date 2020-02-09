@@ -1,0 +1,13 @@
+model:
+  model_kwargs:
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/v2_main_b/checkpoint.pytorch"
+
+
+trainer:
+  criterion:
+    kwargs:
+      train_glia_mask: False
+      glia_label: "KeyDeleter"
+
+firelight:
+  glia_mask: "KeyDeleter"

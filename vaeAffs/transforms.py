@@ -113,7 +113,7 @@ class DownsampleAndCrop3D(Transform):
             order = self.order
             if self.order is None:
                 if volume.dtype in [np.dtype('float32'), np.dtype('float64')]:
-                    order = 2
+                    order = 3
                 elif volume.dtype in [np.dtype('int8'), np.dtype('int16'), np.dtype('int32'), np.dtype('int64')]:
                     order = 0
                 else:

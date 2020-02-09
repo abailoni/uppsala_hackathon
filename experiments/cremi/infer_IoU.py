@@ -55,23 +55,26 @@ class BaseCremiExperiment(BaseExperiment, AffinityInferenceMixin):
         self.set_devices()
 
         # self.build_infer_loader()
-        self.model_class = list(self.get('model').keys())[0]
-
+        if "model_class" in self.get('model'):
+            self.model_class = self.get('model/model_class')
+        else:
+            self.model_class = list(self.get('model').keys())[0]
 
     def build_model(self, model_config=None):
-        self.model_class = list(self.get('model').keys())[0]
-
         model_config = self.get('model') if model_config is None else model_config
-        # return super(BaseCremiExperiment, self).build_model(model_config) #parse_model(model_config)
 
-
-        model_path = model_config[self.model_class].pop('loadfrom', None)
-        stacked_models_path = model_config[self.model_class].pop('load_stacked_models_from', None)
-
-        # Shurtcuts from shell:
-        model_config[self.model_class].update(self.get("model_shortcuts", {}))
-
-        model = create_instance(model_config, self.MODEL_LOCATIONS)
+        if "model_kwargs" in model_config:
+            assert "model_class" in model_config
+            model_class = model_config["model_class"]
+            model_kwargs = model_config["model_kwargs"]
+            model_path = model_kwargs.pop('loadfrom', None)
+            stacked_models_path = model_kwargs.pop('load_stacked_models_from', None)
+            model_config = {model_class: model_kwargs}
+            model = create_instance(model_config, self.MODEL_LOCATIONS)
+        else:
+            model_path = model_config[next(iter(model_config.keys()))].pop('loadfrom', None)
+            stacked_models_path = model_config[next(iter(model_config.keys()))].pop('load_stacked_models_from', None)
+            model = create_instance(model_config, self.MODEL_LOCATIONS)
 
         if model_path is not None:
             print(f"loading model from {model_path}")
@@ -103,7 +106,10 @@ class BaseCremiExperiment(BaseExperiment, AffinityInferenceMixin):
         loss_name = self.get("trainer/criterion/loss_name", "vaeAffs.models.losses.PatchBasedLoss")
         loss_config = {loss_name: loss_kwargs}
         loss_config[loss_name]['model'] = self.model
-        model_kwargs = self.get('model/{}'.format(self.model_class))
+        if "model_kwargs" in self.get('model'):
+            model_kwargs = self.get('model/model_kwargs')
+        else:
+            model_kwargs = self.get('model/{}'.format(self.model_class))
         loss_config[loss_name]['model_kwargs'] = model_kwargs
         loss_config[loss_name]['devices'] = tuple(self.get("gpu_list"))
 
@@ -168,7 +174,7 @@ if __name__ == '__main__':
     while True:
         if f'--update{i}' in sys.argv:
             ind = sys.argv.index(f'--update{i}') + 1
-            sys.argv[ind] = os.path.join(config_path, sys.argv[ind])
+            sys.argv[ind] = change_paths_config_file(os.path.join(config_path, sys.argv[ind]))
             i += 1
         else:
             break

@@ -1,0 +1,212 @@
+loaders:
+  general:
+    master_config:
+      affinity_config:
+        global:
+          retain_mask: True # This keep a mask of the valid affinities (not involving the ignore-label)
+          retain_segmentation: True # This keeps the label image in the inputs
+          ignore_label: 0
+          glia_label: 1
+          boundary_label: 2
+        0:
+          retain_glia_mask: True
+          offsets:
+            # Short-ranges:
+            - [-1, 0, 0]
+            - [0, -1, 0]
+            - [0, 0, -1]
+            # Mid-ranges:
+            - [0, -5, 0]
+            - [0, 0, -5]
+            - [0, -5, -5]
+            - [0, 5, -5]
+            - [-1, -5, 0]
+            - [-1, 0, -5]
+            - [-1, -5, -5]
+            - [-1, 5, -5]
+            # 3D-ranges:
+            - [-2, 0, 0]
+            - [-3, 0, 0]
+            - [-4, 0, 0]
+            # Long-ranges:
+            - [0, -14, 0]
+            - [0, 0, -14]
+        1:
+          offsets:
+            - [-1, 0, 0]
+            - [0, -2, 0]
+            - [0, 0, -2]
+            # 3D-ranges:
+            - [-2, 0, 0]
+            - [-3, 0, 0]
+            - [-4, 0, 0]
+            # Long-ranges:
+            - [0, -7, 0]
+            - [0, 0, -7]
+            - [0, -7, -7]
+            - [0, 7, -7]
+        2:
+          offsets:
+            - [-1, 0, 0]
+            - [0, -1, 0]
+            - [0, 0, -1]
+            # 3D-ranges:
+            - [-2, 0, 0]
+            - [-3, 0, 0]
+            - [-4, 0, 0]
+            # Long-ranges:
+            - [0, -3, 0]
+            - [0, 0, -3]
+            - [0, -3, -3]
+            - [0, 3, -3]
+
+
+
+model:
+  model_kwargs:
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/v2_diceAffs/checkpoint.pytorch"
+    type_of_model: 'MultiScaleInputsUNet3D'
+    models_kwargs:
+      global:
+        keep_raw: False
+      0:
+        nb_patch_nets: 3
+        patchNet_kwargs:
+          global:
+            latent_variable_size: "KeyDeleter"
+          0:
+            latent_variable_size: 16
+            depth_level: 0
+            ASPP_kwargs:
+              final_act: "Sigmoid"
+              apply_final_norm: False
+          1:
+            depth_level: 1
+            latent_variable_size: 10
+            ASPP_kwargs:
+              final_act: "Sigmoid"
+              apply_final_norm: False
+          2:
+            depth_level: 2
+            latent_variable_size: 10
+            ASPP_kwargs:
+              final_act: "Sigmoid"
+              apply_final_norm: False
+          3: "KeyDeleter"
+          4: "KeyDeleter"
+
+
+trainer:
+  criterion:
+    loss_name: "vaeAffs.models.losses.MultiLevelAffinityLoss"
+    kwargs:
+      loss_type: "Dice" # "MSE"
+      target_has_label_segm: True
+      train_glia_mask: True
+
+      apply_checkerboard: "KeyDeleter"
+      glia_label: "KeyDeleter"
+      boundary_label: "KeyDeleter"
+      defected_label: "KeyDeleter"
+
+      predictions_specs:
+        0:
+          target: 0
+          affs_channels: ":"
+        1:
+          target: 1
+          affs_channels: ":"
+        2:
+          target: 2
+          affs_channels: ":"
+
+firelight:
+  pcaEmbeddings_lvl0: "KeyDeleter"
+  pcaEmbeddings_lvl1: "KeyDeleter"
+  pcaEmbeddings_lvl2: "KeyDeleter"
+
+  affinities:
+    ImageGridVisualizer:
+
+      input_mapping:
+        global: [B: 0, D: "3:9"] # the mapping specified in 'global' is applied to all keys
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 1  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'B', 'C', 'V']
+      column_specs: ['W', 'D']
+
+      visualizers:
+
+        - SegmentationVisualizer:
+            input: ['target', index: 0, C: 0, W: "8:-8", H: "8:-8"]
+            background_label: 0
+        - IdentityVisualizer:
+            input: ['inputs', index: 0, W: "8:-8", H: "8:-8"]
+            cmap: gray
+        - IdentityVisualizer:
+            input: ['prediction', index: 0, C: ":"]
+            cmap: gray
+            value_range: [0,1]
+
+#  affinities_lvl1:
+#    ImageGridVisualizer:
+#
+#      input_mapping:
+#        global: [B: 0, D: "3:9"] # the mapping specified in 'global' is applied to all keys
+#
+#      pad_width: 1  # width of the border between images in pixels
+#      pad_value: .2  # intensity of the border pixels
+#      upsampling_factor: 1  # the whole grid is upsampled by this factor
+#
+#      row_specs: ['H', 'S', 'B', 'C', 'V']
+#      column_specs: ['W', 'D']
+#
+#      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+#      visualizers:
+#
+#        ##        # visualize raw input
+#        ##        - IdentityVisualizer:
+#        ##            input: ['prediction', index: 0, B: 0, D: "1:6", C: 0]
+#        ##            cmap: gray
+#        - SegmentationVisualizer:
+#            input: ['target', index: 1, C: 0, W: "8:-8", H: "8:-8"]
+#            background_label: 0
+#        - IdentityVisualizer:
+#            input: ['inputs', index: 1, W: "8:-8", H: "8:-8"]
+#            cmap: gray
+#        #        - IdentityVisualizer:
+#        #            input: ['target', index: 1, C: "1:13", W: "8:-8", H: "8:-8"]
+#        #            cmap: gray_r
+#        #            value_range: [0,1]
+#        - IdentityVisualizer:
+#            input: ['prediction', index: 1, C: ":"]
+#            cmap: gray
+#            value_range: [0,1]
+#
+#  affinities_lvl2:
+#    ImageGridVisualizer:
+#
+#      input_mapping:
+#        global: [B: 0, D: "3:9"] # the mapping specified in 'global' is applied to all keys
+#
+#      pad_width: 1  # width of the border between images in pixels
+#      pad_value: .2  # intensity of the border pixels
+#      upsampling_factor: 1  # the whole grid is upsampled by this factor
+#
+#      row_specs: ['H', 'S', 'B', 'C', 'V']
+#      column_specs: ['W', 'D']
+#
+#      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+#      visualizers:
+#
+#        ##        # visualize raw input
+#        ##        - IdentityVisualizer:
+#        ##            input: ['prediction', index: 0, B: 0, D: "1:6", C: 0]
+#        ##            cmap: gray
+#        - IdentityVisualizer:
+#            input: ['prediction', index: 2, C: ":"]
+#            cmap: gray
+#            value_range: [0,1]

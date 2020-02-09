@@ -1,0 +1,111 @@
+
+loaders:
+  general:
+    defect_augmentation_config:
+      artifact_source:
+        slicing_config:
+          window_size: [1, 764, 764]
+          stride: [1, 600, 600]
+        volume_config:
+          artifacts:
+            path_in_h5_dataset: 'defect_sections/raw'
+          alpha_mask:
+            path_in_h5_dataset: 'defect_sections/mask'
+
+
+    # Configuration for the master dataset.
+    master_config:
+      random_slides:
+        shape_after_slide: [704, 704]
+
+      downscale_and_crop:
+        # Inputs:
+        - {ds_factor: [1, 1, 1],
+          crop_factor: [1, 4, 4],
+          apply_to: 0}
+        - {ds_factor: [1, 2, 2],
+          crop_factor: [1, 2, 2],
+          apply_to: 0}
+        - {ds_factor: [1, 4, 4],
+          crop_factor: [1, 1, 1],
+          apply_to: 0}
+        # Targets:
+        - {ds_factor: [1, 1, 1],
+          crop_factor: [1, 4, 4],
+          apply_to: 1}
+        - {ds_factor: [1, 2, 2],
+          crop_factor: [1, 2, 2],
+          apply_to: 1}
+        - {ds_factor: [1, 4, 4],
+          crop_factor: [1, 1, 1],
+          apply_to: 1}
+        - {ds_factor: [1, 8, 8],
+          crop_factor: [1, 1, 1],
+          apply_to: 1}
+
+  train:
+
+    slicing_config:
+      window_size:
+        A: &shape [14, 764, 764]
+        B: *shape
+        C: *shape
+
+  val:
+    slicing_config:
+      window_size:
+        B: *shape
+        C: *shape
+
+
+
+#  infer:
+#    master_config:
+#      downscale_and_crop:
+#        # Inputs:
+#        - {ds_factor: [1, 1, 1],
+#          crop_factor: [1, 2, 2],
+#          apply_to: 0}
+#        - {ds_factor: [1, 2, 2],
+#          crop_factor: [1, 2, 2],
+#          apply_to: 0}
+#
+#    volume_config:
+#      window_size: [14, 416, 416]  # 288
+
+model:
+  model_kwargs:
+#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/v2_noExtraPad/checkpoint.pytorch"
+
+
+firelight:
+  pcaEmbeddings_lvl0:
+    ImageGridVisualizer:
+
+      input_mapping:
+        global: [B: ":", D: "2:7"] # the mapping specified in 'global' is applied to all keys
+#        global: [B: ":", D: ":"] # the mapping specified in 'global' is applied to all keys
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 2  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'B', 'V']
+      column_specs: ['W', 'C', 'D', ]
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        #        # visualize raw input
+        - SegmentationVisualizer:
+            input: ['target', index: 0, C: 0, W: "24:-24", H: "24:-24"]
+            background_label: 0
+        - IdentityVisualizer:
+            input: ['inputs', index: 0, W: "24:-24", H: "24:-24"]
+            cmap: gray
+        - PcaVisualizer:
+            input: ['prediction', index: 0]
+        - PcaVisualizer:
+            input: ['prediction', index: 1]
+        - PcaVisualizer:
+            input: ['prediction', index: 2]

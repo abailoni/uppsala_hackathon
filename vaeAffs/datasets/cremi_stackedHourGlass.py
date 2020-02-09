@@ -177,7 +177,6 @@ class CremiDataset(ZipReject):
             transforms.add(RandomSlide(
                 output_image_size=ouput_shape, max_misalign=max_misalign,
                 defected_label=self.master_config.get('defected_label', 2),
-                targets_have_defected_mask=True,
                 **random_slides_config))
 
         # Replicate and downscale batch:

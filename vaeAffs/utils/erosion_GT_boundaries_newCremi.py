@@ -45,6 +45,7 @@ copy_from_previous = {
 # for sample in ["A", "B", "C"]:
 for sample in ["C", "0", "1", "2"]:
     print("Sample", sample)
+    raise DeprecationWarning("Fix bug of glia and boundary label")
 
     data_path = os.path.join(get_trendytukan_drive_path(), "datasets/new_cremi/sample{}.h5".format(sample))
 

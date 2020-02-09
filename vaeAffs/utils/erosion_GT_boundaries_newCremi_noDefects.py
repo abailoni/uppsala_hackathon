@@ -24,26 +24,32 @@ import h5py
 
 defected_slices = {
     "A": [],
-    "B": ["23:25", "52:54"],
+    "B": [], # ["23:25", "52:54"],
     "C": ["22:23", "82:83",
-          "94:95, 785:, :500",
-          "94:95, 1360:, 500:741", ],
-    "0": ["76:77, :,  1070:", "122:123"],
-    "1": ["122:123"],
+          # "94:95, 785:, :500",
+          # "94:95, 1360:, 500:741",
+          ],
+    "0": [
+        "76:77, :,  1070:",
+          "122:123"
+          ],
+    "1": [
+        "122:123"
+    ],
     "2": []
 }
 
-copy_from_previous = {
-    "A": [],
-    "B": [],
-    "C": [22, 82],
-    "0": [122],
-    "1": [122],
-    "2": [],
-}
+# copy_from_previous = {
+#     "A": [],
+#     "B": [],
+#     "C": [22, 82],
+#     "0": [122],
+#     "1": [122],
+#     "2": [],
+# }
 
-for sample in ["A", "B", "C"]:
-# for sample in ["C", "0", "1", "2"]:
+# for sample in ["A", "B", "C"]:
+for sample in ["A", "B", "C", "0", "1", "2"]:
     print("Sample", sample)
 
     data_path = os.path.join(get_abailoni_hci_home_path(), "datasets/new_cremi/sample{}.h5".format(sample))
@@ -81,14 +87,17 @@ for sample in ["A", "B", "C"]:
         eroded_segment_mask[z] = vigra.filters.multiBinaryErosion(segment_mask[z], radius=2.)
     boundary_mask = np.logical_not(eroded_segment_mask)
 
+    GLIA_LABEL = 1
     BOUNDARY_LABEL = 2
     DEFECTED_LABEL = 3
     out_mask = glia.copy()
     out_mask[boundary_mask] = BOUNDARY_LABEL
+    # Make sure not to have added some boundary inside glia:
+    out_mask[glia == GLIA_LABEL] = GLIA_LABEL
 
-    # # Mask defected slices:
-    # for slc in defected_slices[sample]:
-    #     out_mask[parse_data_slice(slc)] = DEFECTED_LABEL
+    # Mask defected slices:
+    for slc in defected_slices[sample]:
+        out_mask[parse_data_slice(slc)] = DEFECTED_LABEL
 
 
     # # Copy GT from previous (to avoid weird connected components problems):
