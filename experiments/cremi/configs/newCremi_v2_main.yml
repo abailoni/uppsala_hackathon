@@ -290,7 +290,7 @@ model:
     # If only model 1 is trained, then model 0 is run in inference mode. Atm there is no backprop between models:
     models_to_train: [0]
     detach_stacked_models: True
-    nb_inputs_per_model: 2
+    nb_inputs_per_model: 2 # TODO: remove and use only 'number_multiscale_inputs'
 
 #    stacked_upscl_fact:
 #      - [1,2,2]
@@ -319,6 +319,7 @@ model:
         add_embedding_heads: True
         keep_raw: True
         add_foreground_prediction_module: True
+        number_multiscale_inputs: 2
       0:
         in_channels: 1
         scale_factor:

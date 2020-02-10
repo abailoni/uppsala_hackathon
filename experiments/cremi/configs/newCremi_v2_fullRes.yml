@@ -44,12 +44,18 @@ loaders:
           apply_to: 1}
 
   train:
-
     slicing_config:
       window_size:
         A: &shape [14, 764, 764]
         B: *shape
         C: *shape
+    volume_config:
+      raw:
+        path_in_file: 'volumes/raw'
+      segmentation:
+        path_in_file: 'volumes/labels/neuron_ids_fixed'
+      various_masks:
+        path_in_file: 'volumes/labels/various_masks_noDefects'
 
   val:
     slicing_config:
@@ -57,55 +63,194 @@ loaders:
         B: *shape
         C: *shape
 
-
-
-#  infer:
-#    master_config:
-#      downscale_and_crop:
-#        # Inputs:
-#        - {ds_factor: [1, 1, 1],
-#          crop_factor: [1, 2, 2],
-#          apply_to: 0}
-#        - {ds_factor: [1, 2, 2],
-#          crop_factor: [1, 2, 2],
-#          apply_to: 0}
-#
-#    volume_config:
-#      window_size: [14, 416, 416]  # 288
+    volume_config:
+      raw:
+        path_in_file: 'volumes/raw'
+      segmentation:
+        path_in_file: 'volumes/labels/neuron_ids_fixed'
+      various_masks:
+        path_in_file: 'volumes/labels/various_masks_noDefects'
 
 model:
   model_kwargs:
-#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/v2_noExtraPad/checkpoint.pytorch"
+    loadfrom: "KeyDeleter"
+    nb_inputs_per_model: 3
+    models_kwargs:
+      global:
+        number_multiscale_inputs: 3
+        depth: 4
+        res_blocks_3D: [[True], [True], [True], [True], [True]]
+        res_blocks_decoder_3D: [[True], [True], [True], [True], [True]]
+        encoder_fmaps: [16, 32, 64, 128]
+        decoder_fmaps: [32, 32, 64, 128, 256]
+      0:
+        scale_factor:
+          - [1, 2, 2]
+          - [1, 2, 2]
+          - [1, 2, 2]
+          - [1, 2, 2]
+        decoder_crops:
+          0: ":, 8:-8, 8:-8"
+          1: ":, 8:-8, 8:-8"
+          2: ":, 4:-4, 4:-4"
+          3: ":, 2:-2, 2:-2"
+        nb_patch_nets: 6
+        patchNet_kwargs:
+          0:
+            depth_level: 0
+            nb_target: 0
+            patch_size: [5,7,7]
+            patch_dws_fact: [1, 1, 1]
+            pred_dws_fact: [1, 1, 1]
+            central_shape: [1, 1, 1]
+            patch_stride:
+              - [2, 7, 7]
+            limit_nb_patches: # 'factor', 'number'
+              - [120, 'number']
+            max_random_crop: [1, 7, 7] # in the donwscaled res
+            ASPP_kwargs:
+              use_ASPP: False
+              inner_planes: 32
+              dilations: []
+          1:
+            depth_level: 0
+            nb_target: 0
+            #            skip_standard_patch_loss: True
+            patch_size: [5,7,7]
+            patch_dws_fact: [1, 8, 8] # With respect to the given target!
+            pred_dws_fact: [1, 1, 1]
+            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+            patch_stride: # in the original resolution (of the target)
+              - [2, 7, 7]
+            limit_nb_patches: # 'factor', 'number'
+              - [120, 'number']
+            max_random_crop: [1, 7, 7] # in the donwscaled res
+            ASPP_kwargs:
+              use_ASPP: False
+              inner_planes: 32
+              dilations: []
+          2:
+            depth_level: 0
+            nb_target: 0
+            #            skip_standard_patch_loss: True
+            patch_size: [5,7,7]
+            patch_dws_fact: [1, 16, 16] # With respect to the given target!
+            pred_dws_fact: [1, 1, 1]
+            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+            patch_stride: # in the original resolution (of the target)
+              - [2, 7, 7]
+            limit_nb_patches: # 'factor', 'number'
+              - [120, 'number']
+            max_random_crop: [1, 7, 7] # in the donwscaled res
+            ASPP_kwargs:
+              use_ASPP: False
+              inner_planes: 32
+              dilations: []
+          3:
+            depth_level: 1
+            nb_target: 1
+            patch_size: [5,7,7]
+            patch_dws_fact: [1, 1, 1] # With respect to the given target!
+            pred_dws_fact: [1, 1, 1]
+            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+            patch_stride: # in the original resolution (of the target)
+              - [2, 7, 7]
+            limit_nb_patches: # 'factor', 'number'
+              - [120, 'number']
+            max_random_crop: [1, 7, 7] # in the donwscaled res
+            ASPP_kwargs:
+              use_ASPP: False
+              inner_planes: 32
+              dilations: []
+#          4:
+#            depth_level: 1
+#            nb_target: 1
+#            patch_size: [5,7,7]
+#            patch_dws_fact: [1, 4, 4] # With respect to the given target!
+#            pred_dws_fact: [1, 1, 1]
+#            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+#            patch_stride: # in the original resolution (of the target)
+#              - [2, 7, 7]
+#            limit_nb_patches: # 'factor', 'number'
+#              - [120, 'number']
+#            max_random_crop: [1, 7, 7] # in the donwscaled res
+#            ASPP_kwargs:
+#              use_ASPP: False
+#              inner_planes: 32
+#              dilations: []
+#          5:
+#            depth_level: 1
+#            nb_target: 1
+#            patch_size: [5,7,7]
+#            patch_dws_fact: [1, 8, 8] # With respect to the given target!
+#            pred_dws_fact: [1, 1, 1]
+#            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+#            patch_stride: # in the original resolution (of the target)
+#              - [2, 7, 7]
+#            limit_nb_patches: # 'factor', 'number'
+#              - [120, 'number']
+#            max_random_crop: [1, 7, 7] # in the donwscaled res
+#            ASPP_kwargs:
+#              use_ASPP: False
+#              inner_planes: 32
+#              dilations: []
+          4:
+            depth_level: 2
+            nb_target: 2
+            patch_size: [5,7,7]
+            patch_dws_fact: [1, 2, 2] # With respect to the given target!
+            pred_dws_fact: [1, 1, 1]
+            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+            patch_stride: [2, 7, 7] # in the original resolution (of the target)
+            limit_nb_patches: [120, 'number'] # 'factor', 'number'
+            max_random_crop: [1, 4, 4] # in the donwscaled res!!
+            ASPP_kwargs:
+              use_ASPP: False
+              inner_planes: 32
+              dilations: []
+          5:
+            depth_level: 3
+            nb_target: 3
+            patch_dws_fact: [1, 2, 2] # With respect to the given target!
+            pred_dws_fact: [1, 1, 1] # With respect to the given target!
+            patch_size: [5,7,7]
+            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+            patch_stride: [2, 7, 7] # in the original resolution (of the target)
+            limit_nb_patches: [90, 'number'] # 'factor', 'number'
+            max_random_crop: [1, 2, 2] # in the donwscaled res!!
+            ASPP_kwargs:
+              use_ASPP: False
+              inner_planes: 64
+              dilations: []
 
-
-firelight:
-  pcaEmbeddings_lvl0:
-    ImageGridVisualizer:
-
-      input_mapping:
-        global: [B: ":", D: "2:7"] # the mapping specified in 'global' is applied to all keys
-#        global: [B: ":", D: ":"] # the mapping specified in 'global' is applied to all keys
-
-      pad_width: 1  # width of the border between images in pixels
-      pad_value: .2  # intensity of the border pixels
-      upsampling_factor: 2  # the whole grid is upsampled by this factor
-
-      row_specs: ['H', 'S', 'B', 'V']
-      column_specs: ['W', 'C', 'D', ]
-
-      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
-      visualizers:
-
-        #        # visualize raw input
-        - SegmentationVisualizer:
-            input: ['target', index: 0, C: 0, W: "24:-24", H: "24:-24"]
-            background_label: 0
-        - IdentityVisualizer:
-            input: ['inputs', index: 0, W: "24:-24", H: "24:-24"]
-            cmap: gray
-        - PcaVisualizer:
-            input: ['prediction', index: 0]
-        - PcaVisualizer:
-            input: ['prediction', index: 1]
-        - PcaVisualizer:
-            input: ['prediction', index: 2]
+firelight: "KeyDeleter"
+#  pcaEmbeddings_lvl0:
+#    ImageGridVisualizer:
+#
+#      input_mapping:
+#        global: [B: ":", D: "2:7"] # the mapping specified in 'global' is applied to all keys
+##        global: [B: ":", D: ":"] # the mapping specified in 'global' is applied to all keys
+#
+#      pad_width: 1  # width of the border between images in pixels
+#      pad_value: .2  # intensity of the border pixels
+#      upsampling_factor: 2  # the whole grid is upsampled by this factor
+#
+#      row_specs: ['H', 'S', 'B', 'V']
+#      column_specs: ['W', 'C', 'D', ]
+#
+#      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+#      visualizers:
+#
+#        #        # visualize raw input
+#        - SegmentationVisualizer:
+#            input: ['target', index: 0, C: 0, W: "24:-24", H: "24:-24"]
+#            background_label: 0
+#        - IdentityVisualizer:
+#            input: ['inputs', index: 0, W: "24:-24", H: "24:-24"]
+#            cmap: gray
+#        - PcaVisualizer:
+#            input: ['prediction', index: 0]
+#        - PcaVisualizer:
+#            input: ['prediction', index: 1]
+#        - PcaVisualizer:
+#            input: ['prediction', index: 2]
