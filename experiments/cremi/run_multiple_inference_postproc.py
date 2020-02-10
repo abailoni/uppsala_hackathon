@@ -5,32 +5,36 @@ from copy import deepcopy
 # Script options:
 # -----------------------
 
-# type = "infer"
-# CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,5"
-#
-# list_of_args = [
-#     (["--"], ["deb_infer"]),
-#     (["--config.model_shortcuts.affinity_mode"],
-#      [
-#         # "classic///cls",
-#         "probabilistic///probs07"]),
-#     (["--inherit"], [
-#         # "newCremi_comparison_main_diceAffs.yml///main_dice",
-#         "newCremi_comparison_main.yml///main",
-#         "newCremi_comparison_classicDefcAugm.yml///clsDefct",
-#         "newCremi_comparison_main_noGlia.yml///noGlia",
-#         "newCremi_comparison_main_2patches.yml///2patches",
-#         "newCremi_comparison_wo_sideLoss.yml///noSideLoss",
-#         "newCremi_comparison_BIG.yml///biUNet",
-#         "newCremi_comparison_fullMain.yml///mainFullTrain",
-#         "newCremi_comparison_noExtraPad.yml///noExtaPad",
-#       ]),
-#     (["--config.name_experiment"], [ ("{}_{}", "2:0", "1:0") ]),
-#     (["--config.model_shortcuts.patch_threshold"], ["0.7"]),
-#     (["--config.loaders.infer.loader_config.batch_size"], ["4"]),
-#     (["--config.loaders.infer.loader_config.num_workers"], ["20"]),
-#     (["--config.loaders.infer.name"], ["B", "C", "0", "1", "2"]),
-# ]
+type = "infer"
+CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
+
+list_of_args = [
+    (["--"], ["deb_infer"]),
+    # (["--config.model_shortcuts.affinity_mode"],
+    #  [
+    #     # "classic///cls",
+        # "probabilistic///probs07"]),
+    (["--inherit"], [
+        # "newCremi_comparison_main_diceAffs.yml///main_dice",
+        "newCremi_v2_main.yml",
+        # "newCremi_comparison_classicDefcAugm.yml///clsDefct",
+        # "newCremi_comparison_main_noGlia.yml///noGlia",
+        # "newCremi_comparison_main_2patches.yml///2patches",
+        # "newCremi_comparison_wo_sideLoss.yml///noSideLoss",
+        # "newCremi_comparison_BIG.yml///biUNet",
+        # "newCremi_comparison_fullMain.yml///mainFullTrain",
+        # "newCremi_comparison_noExtraPad.yml///noExtaPad",
+      ]),
+    (["--update0"], [
+        "newCremi_v2_main.yml///main",
+        "newCremi_v2_diceAffs.yml///diceAffs",
+    ]),
+    (["--config.name_experiment"], [ ("{}_trainedAffs", "2:0") ]),
+    # (["--config.model_shortcuts.patch_threshold"], ["0.7"]),
+    (["--config.loaders.infer.loader_config.batch_size"], ["8"]),
+    (["--config.loaders.infer.loader_config.num_workers"], ["20"]),
+    (["--config.loaders.infer.name"], ["B", "C",]),
+]
 
 
 
@@ -54,22 +58,20 @@ list_of_args = [
          "--config.postproc_config.invert_affinities"
      ],
      [
-         "main_classic",
-         "clsDefct_cls",
-         "main_dice",
-         "2patches_cls"
+         "main_trainedAffs",
+         "diceAffs_trainedAffs",
+         # "main_dice",
+         # "2patches_cls"
      ],
      [
+         "trainedAffs_from_patch.json",
          "default_from_patch.json",
-         "default_from_patch.json",
-         "dice_affs.json",
-         "two_patches_only.json"
+         # "dice_affs.json",
+         # "two_patches_only.json"
      ],
      [
-         "False",
-         "False",
          "True",
-         "False",
+         "True",
      ],
      ),
 

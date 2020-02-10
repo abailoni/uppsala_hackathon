@@ -275,8 +275,8 @@ inference:
 #    - [0,0]
 #    - [0,0]
   return_patch_mask: False # Make sure to exclude the invalid affinities
-  input_dws_fact: [1, 2, 2]
-  output_dws_fact: [1, 2, 2]
+  input_dws_fact: [1, 1, 1]
+  output_dws_fact: [1, 1, 1]
 #  autopad_dataset: True #TODO: this would be nice, but not clear how to do it...
 
 
