@@ -1,7 +1,7 @@
 import vaeAffs
 
 
-from vaeAffs.utils.path_utils import change_paths_config_file
+from vaeAffs.utils.path_utils import change_paths_config_file, get_abailoni_hci_home_path
 
 from speedrun import BaseExperiment, TensorboardMixin, InfernoMixin, FirelightLogger
 from speedrun.log_anywhere import register_logger, log_image, log_scalar
@@ -167,6 +167,17 @@ if __name__ == '__main__':
     # from vaeAffs.utils.path_utils import get_trendytukan_drive_path
     # experiments_path = os.path.join(get_trendytukan_drive_path(), 'projects/runs_embeddings')
     experiments_path = os.path.join(source_path, 'runs')
+
+    # Update HCI_HOME paths:
+    for i, key in enumerate(sys.argv):
+        if "HCI__HOME" in sys.argv[i]:
+            sys.argv[i] = sys.argv[i].replace("HCI__HOME/", get_abailoni_hci_home_path())
+
+    # Update RUNS paths:
+    for i, key in enumerate(sys.argv):
+        if "RUNS__HOME" in sys.argv[i]:
+            sys.argv[i] = sys.argv[i].replace("RUNS__HOME", experiments_path)
+
 
     sys.argv[1] = os.path.join(experiments_path, sys.argv[1])
     if '--inherit' in sys.argv:

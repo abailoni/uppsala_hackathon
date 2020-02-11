@@ -5,83 +5,48 @@ from copy import deepcopy
 # Script options:
 # -----------------------
 
-type = "infer"
-CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
-# CUDA = "CUDA_VISIBLE_DEVICES=0"
+
+
+type = "postproc"
+CUDA = "CUDA_VISIBLE_DEVICES=0"
 
 list_of_args = [
     (["--"], ["deb_infer"]),
-    # (["--config.model_shortcuts.affinity_mode"],
-    #  [
-    #     # "classic///cls",
-        # "probabilistic///probs07"]),
     (["--inherit"], [
-        "newCremi_v2_main.yml",
+        "debug.yml",
       ]),
-    (["--update0"], [
-        "newCremi_v2_trainAffsFromPatches.yml///main",
-        # "newCremi_v2_ignoreGlia.yml///ignoreGlia",
-        # "newCremi_v2_diceAffs.yml///diceAffs",
-    ]),
-    # (["--update1"], [
-    #     "newCremi_v2_trainAffsFromPatches.yml",
-    # ]),
-    (["--config.name_experiment"], [ ("{}_trainedAffs", "2:0") ]),
-    (["--config.model.model_kwargs.path_backbone", "--config.model.model_kwargs.loadfrom"], [
-        # "RUNS__HOME/v2_ignoreGlia/checkpoint.pytorch",
-        "RUNS__HOME/v2_main_b/checkpoint.pytorch"
-    ], [
-        # "RUNS__HOME/v2_ignoreGlia_trainAffs/checkpoint.pytorch",
-        "RUNS__HOME/v2_main_trainAffs_b/checkpoint.pytorch",
-    ]),
-    (["--config.loaders.infer.loader_config.batch_size"], ["8"]),
-    # (["--config.loaders.infer.loader_config.batch_size"], ["1"]),
-    (["--config.loaders.infer.loader_config.num_workers"], ["20"]),
-    (["--config.loaders.infer.name"], ["C"]),
+    # (["--config.experiment_name", "--config.offsets_file_name"],
+    #  ["mainFullTrain_cls", "bigUNet_cls", "main_classic", "clsDefct_cls", "noSideLoss_cls", "noGlia_cls", "main_dice", "2patches_cls"],
+    #  ["default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "dice_affs.json", "two_patches_only.json"],
+    #  ),
+    ([
+         "--config.experiment_name",
+         "--config.offsets_file_name",
+         "--config.postproc_config.invert_affinities"
+     ],
+     [
+         "ignoreGlia_trainedAffs",
+         "diceAffs_trainedAffs",
+         "main_trainedAffs",
+         # "main_dice",
+         # "2patches_cls"
+     ],
+     [
+         "trainedAffs_from_patch.json",
+         "dice_affs.json",
+         "trainedAffs_from_patch.json",
+         # "two_patches_only.json"
+     ],
+     [
+         "True",
+         "True",
+         "True",
+     ],
+     ),
+
+    # (["--config.postproc_config.iterated_options.preset"], ["MEAN"]),
+    (["--config.postproc_config.iterated_options.sample"], ["B", "C"]),
 ]
-
-
-
-
-
-# type = "postproc"
-# CUDA = "CUDA_VISIBLE_DEVICES=0"
-#
-# list_of_args = [
-#     (["--"], ["deb_infer"]),
-#     (["--inherit"], [
-#         "debug.yml",
-#       ]),
-#     # (["--config.experiment_name", "--config.offsets_file_name"],
-#     #  ["mainFullTrain_cls", "bigUNet_cls", "main_classic", "clsDefct_cls", "noSideLoss_cls", "noGlia_cls", "main_dice", "2patches_cls"],
-#     #  ["default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "dice_affs.json", "two_patches_only.json"],
-#     #  ),
-#     ([
-#          "--config.experiment_name",
-#          "--config.offsets_file_name",
-#          "--config.postproc_config.invert_affinities"
-#      ],
-#      [
-#          "main_trainedAffs",
-#          "diceAffs_trainedAffs",
-#          # "main_dice",
-#          # "2patches_cls"
-#      ],
-#      [
-#          "trainedAffs_from_patch.json",
-#          "default_from_patch.json",
-#          # "dice_affs.json",
-#          # "two_patches_only.json"
-#      ],
-#      [
-#          "True",
-#          "True",
-#      ],
-#      ),
-#
-#     # (["--config.postproc_config.iterated_options.preset"], ["MEAN"]),
-#     # (["--config.postproc_config.iterated_options.sample"], ["B", "C"]),
-# ]
 
 
 # -----------------------

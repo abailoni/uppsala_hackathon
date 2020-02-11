@@ -84,7 +84,7 @@ for sample in ["A", "B", "C", "0", "1", "2"]:
     # This functions erode binary out_mask (segments 1, boundary 0)
     eroded_segment_mask = segment_mask.copy()
     for z in range(eroded_segment_mask.shape[0]):
-        eroded_segment_mask[z] = vigra.filters.multiBinaryErosion(segment_mask[z], radius=2.)
+        eroded_segment_mask[z] = vigra.filters.multiBinaryErosion(segment_mask[z], radius=1.)
     boundary_mask = np.logical_not(eroded_segment_mask)
 
     GLIA_LABEL = 1

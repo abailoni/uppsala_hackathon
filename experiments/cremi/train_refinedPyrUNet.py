@@ -1,6 +1,7 @@
 import vaeAffs
 
 from vaeAffs.utils.path_utils import change_paths_config_file
+from vaeAffs.utils.path_utils import get_abailoni_hci_home_path
 
 from speedrun import BaseExperiment, TensorboardMixin, InfernoMixin, FirelightLogger
 from speedrun.log_anywhere import register_logger, log_image, log_scalar
@@ -119,6 +120,13 @@ if __name__ == '__main__':
     experiments_path = os.path.join(source_path, 'runs')
 
     sys.argv[1] = os.path.join(experiments_path, sys.argv[1])
+
+    # Update HCI_HOME paths:
+    for i, key in enumerate(sys.argv):
+        if "$HCI_HOME" in sys.argv[i]:
+            sys.argv[i] = sys.argv[i].replace("$HCI_HOME/", get_abailoni_hci_home_path())
+
+
     if '--inherit' in sys.argv:
         i = sys.argv.index('--inherit') + 1
         if sys.argv[i].endswith(('.yml', '.yaml')):

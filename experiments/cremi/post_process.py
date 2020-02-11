@@ -221,11 +221,11 @@ class PostProcessingExperiment(BaseExperiment):
 
 
 
-        from segmfriends.transform.combine_segms_CY import find_segmentation_mistakes
-
-
-        result = find_segmentation_mistakes(segm_to_analyze, gt_to_analyze, ARAND_thresh=0.4, ignore_label=0,
-                                            mode="undersegmentation")
+        # from segmfriends.transform.combine_segms_CY import find_segmentation_mistakes
+        #
+        #
+        # result = find_segmentation_mistakes(segm_to_analyze, gt_to_analyze, ARAND_thresh=0.4, ignore_label=0,
+        #                                     mode="undersegmentation")
 
 
         # ------------------------------

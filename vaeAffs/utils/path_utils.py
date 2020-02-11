@@ -23,7 +23,7 @@ def get_abailoni_hci_home_path():
         elif hostname == 'sfb1129gpu01':
             return '/net/hcihome/storage/abailoni/local_copy_home/'
         else:
-            return '/net/hcihome/storage/abailoni/'
+            return '/net/hcihome/storage/abailoni/local_home/'
     elif hostname == 'trendytukan' and username == 'abailoni_local':
         # return '/home/abailoni_local/hci_home/'
         return '/home/abailoni_local/ialgpu1_local_home/'
@@ -31,6 +31,7 @@ def get_abailoni_hci_home_path():
         return '/home/abailoni_local/local_copy_home/'
     elif hostname == 'sfb1129gpu02' and username == 'abailoni_tmp':
         # return '/home/abailoni_local/hci_home/'
+        # print("CIAOOOOO")
         return '/home_sdb/abailoni_tmp/local_copy_home/'
 
 def get_trendytukan_drive_path():

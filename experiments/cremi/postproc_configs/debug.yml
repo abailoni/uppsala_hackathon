@@ -14,9 +14,9 @@ volume_config:
       A: '$HCI_HOME/datasets/new_cremi/sampleA.h5'
       B: '$HCI_HOME/datasets/new_cremi/sampleB.h5'
       C: '$HCI_HOME/datasets/new_cremi/sampleC.h5'
-    inner_path: 'volumes/labels/neuron_ids_fixed'
+    inner_path: 'volumes/labels/neuron_ids_fixed_2x'
     dtype: int32
-    ds_factor: [1, 2, 2]
+#    ds_factor: [1, 2, 2]
     ds_order: 1
 #    crop_slice:
 #      A: ":,:,:"
@@ -33,15 +33,15 @@ postproc_config:
   # ------------------------------
   # Generic options
   # ------------------------------
-  from_superpixels: False # Deprecate...?
+  from_superpixels: True
   use_multicut: False # Deprecate...?
   compute_scores: True
   save_segm: True
   WS_growing: True
   connected_components_on_final_segm: False
   overwrite_prev_files: True
-#  extra_presets:
-#    - "simple_WSDT"
+  extra_presets:
+    - "simple_WSDT"
 #    - "gen_HC_DTWS"
 
   save_UCM: False
@@ -60,7 +60,7 @@ postproc_config:
 
   iterated_options:
     preset: ["MEAN"]
-    sample: ["C"]
+    sample: ["B"]
     edge_prob: 0.
     noise_factor: 0.
     local_attraction: False
@@ -68,7 +68,7 @@ postproc_config:
     crop_slice:
       A: [":,:,:,:"]
       B: ":,:,:,:"
-      C: ":,:15,:,:"
+      C: ":,:,:,:"
 
     sub_crop_slice: ":,:,:,:"
 
@@ -137,7 +137,7 @@ postproc_config:
       offsets_probabilities: 1.0 # Probs. for long-range edges
       return_UCM: False
 
-      debug: False
+      debug: True
       extra_aggl_kwargs:
         size_regularizer: 0.
         threshold: 0.5 # Merge all: 0.0; split all: 1.0
