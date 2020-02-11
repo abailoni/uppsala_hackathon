@@ -9,79 +9,86 @@ type = "infer"
 CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
 # CUDA = "CUDA_VISIBLE_DEVICES=0"
 
-list_of_args = [
-    (["--"], ["deb_infer"]),
-    # (["--config.model_shortcuts.affinity_mode"],
-    #  [
-    #     # "classic///cls",
-        # "probabilistic///probs07"]),
-    (["--inherit"], [
-        "newCremi_v2_main.yml",
-      ]),
-    (["--update0"], [
-        "newCremi_v2_trainAffsFromPatches.yml///main",
-        # "newCremi_v2_ignoreGlia.yml///ignoreGlia",
-        # "newCremi_v2_diceAffs.yml///diceAffs",
-    ]),
-    # (["--update1"], [
-    #     "newCremi_v2_trainAffsFromPatches.yml",
-    # ]),
-    (["--config.name_experiment"], [ ("{}_trainedAffs", "2:0") ]),
-    (["--config.model.model_kwargs.path_backbone", "--config.model.model_kwargs.loadfrom"], [
-        # "RUNS__HOME/v2_ignoreGlia/checkpoint.pytorch",
-        "RUNS__HOME/v2_main_b/checkpoint.pytorch"
-    ], [
-        # "RUNS__HOME/v2_ignoreGlia_trainAffs/checkpoint.pytorch",
-        "RUNS__HOME/v2_main_trainAffs_b/checkpoint.pytorch",
-    ]),
-    (["--config.loaders.infer.loader_config.batch_size"], ["8"]),
-    # (["--config.loaders.infer.loader_config.batch_size"], ["1"]),
-    (["--config.loaders.infer.loader_config.num_workers"], ["20"]),
-    (["--config.loaders.infer.name"], ["C"]),
-]
-
-
-
-
-
-# type = "postproc"
-# CUDA = "CUDA_VISIBLE_DEVICES=0"
-#
 # list_of_args = [
 #     (["--"], ["deb_infer"]),
 #     (["--inherit"], [
-#         "debug.yml",
+#         "newCremi_v2_main.yml",
 #       ]),
-#     # (["--config.experiment_name", "--config.offsets_file_name"],
-#     #  ["mainFullTrain_cls", "bigUNet_cls", "main_classic", "clsDefct_cls", "noSideLoss_cls", "noGlia_cls", "main_dice", "2patches_cls"],
-#     #  ["default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "dice_affs.json", "two_patches_only.json"],
-#     #  ),
-#     ([
-#          "--config.experiment_name",
-#          "--config.offsets_file_name",
-#          "--config.postproc_config.invert_affinities"
-#      ],
-#      [
-#          "main_trainedAffs",
-#          "diceAffs_trainedAffs",
-#          # "main_dice",
-#          # "2patches_cls"
-#      ],
-#      [
-#          "trainedAffs_from_patch.json",
-#          "default_from_patch.json",
-#          # "dice_affs.json",
-#          # "two_patches_only.json"
-#      ],
-#      [
-#          "True",
-#          "True",
-#      ],
-#      ),
-#
-#     # (["--config.postproc_config.iterated_options.preset"], ["MEAN"]),
-#     # (["--config.postproc_config.iterated_options.sample"], ["B", "C"]),
+#     (["--update0", "--config.model.model_kwargs.path_backbone"], [
+#         "newCremi_v2_trainAffsFromPatches.yml///main",
+#         "newCremi_v2_ignoreGlia.yml///ignoreGlia",
+#         # "newCremi_v2_diceAffs.yml///diceAffs",
+#     ], [
+#         "RUNS__HOME/v2_main_b/checkpoint.pytorch",
+#         "RUNS__HOME/v2_ignoreGlia/checkpoint.pytorch",
+#         # "placeholder",
+#     ]),
+#     (["--config.model.model_kwargs.loadfrom", "--update1"], [
+#         ("RUNS__HOME/v2_{}_trainAffs/checkpoint.pytorch///", "2:0"),
+#         ("RUNS__HOME/v2_{}_trainAffs_thinBound/checkpoint.pytorch///_thinBound", "2:0"),
+#         # "RUNS__HOME/v2_main_trainAffs_b/checkpoint.pytorch",
+#         # "RUNS__HOME/v2_main_trainAffs_b/checkpoint.pytorch",
+#     ], [
+#         "newCremi_v2_trainAffsFromPatches.yml",
+#         "newCremi_v2_trainAffsFromPatches_thinBound.yml",
+#     ]),
+#     (["--config.name_experiment"], [ ("v2_{}_trainedAffs{}", "2:0", "3:0") ]),
+#     (["--config.loaders.infer.loader_config.batch_size"], ["8"]),
+#     # (["--config.loaders.infer.loader_config.batch_size"], ["1"]),
+#     (["--config.loaders.infer.loader_config.num_workers"], ["20"]),
+#     (["--config.loaders.infer.name"], [
+#         "B",
+#         "C",
+#         "A",
+#         "0",
+#         "1",
+#         "2",
+#     ]),
 # ]
+
+
+list_of_args = [
+    (["--"], ["deb_infer"]),
+    (["--inherit"], [
+        "newCremi_v2_main.yml",
+      ]),
+    (["--update0",
+      "--config.model.model_kwargs.path_backbone"
+      ], [
+        # "newCremi_v2_trainAffsFromPatches.yml///main",
+        # "newCremi_v2_ignoreGlia.yml///ignoreGlia",
+        "newCremi_v2_diceAffs.yml///diceAffs",
+    ],
+     [
+    #     # "RUNS__HOME/v2_main_b/checkpoint.pytorch",
+    #     # "RUNS__HOME/v2_ignoreGlia/checkpoint.pytorch",
+        "RUNS__HOME/v2_diceAffs_b/checkpoint.pytorch",
+    ]
+     ),
+    (["--config.model.model_kwargs.loadfrom", "--update1"], [
+        # ("RUNS__HOME/v2_{}_trainAffs/checkpoint.pytorch///", "2:0"),
+        # ("RUNS__HOME/v2_{}_trainAffs_thinBound/checkpoint.pytorch///_thinBound", "2:0"),
+        # "RUNS__HOME/v2_diceAffs_b/checkpoint.pytorch///",
+        "RUNS__HOME/v2_diceAffs_thinBound/checkpoint.pytorch///_thinBound",
+    ], [
+        # "newCremi_v2_trainAffsFromPatches.yml",
+        # "newCremi_v2_trainAffsFromPatches_thinBound.yml",
+        # "empty_config.yml",
+        "newCremi_v2_finetuneDiceLoss.yml",
+    ]),
+    (["--config.name_experiment"], [ ("v2_{}_trainedAffs{}", "2:0", "3:0") ]),
+    (["--config.loaders.infer.loader_config.batch_size"], ["8"]),
+    # (["--config.loaders.infer.loader_config.batch_size"], ["1"]),
+    (["--config.loaders.infer.loader_config.num_workers"], ["20"]),
+    (["--config.loaders.infer.name"], [
+        "B",
+        "C",
+        "A",
+        "0",
+        "1",
+        "2",
+    ]),
+]
 
 
 # -----------------------
@@ -139,7 +146,10 @@ def recursively_get_cmd(current_cmd, accumulated_cmds):
                         collected_format_args.append(collected_str)
 
                     # Compose new command entry:
-                    new_cmd_entry.append(arg[nb_option][0].format(*collected_format_args))
+                    actual_string = arg[nb_option][0]
+                    # if "///" in actual_string:
+                    #     actual_string = actual_string.split("///")[0]
+                    new_cmd_entry.append(actual_string.format(*collected_format_args))
             # Recursively go deeper:
             accumulated_cmds = recursively_get_cmd(current_cmd+[new_cmd_entry], accumulated_cmds)
     else:

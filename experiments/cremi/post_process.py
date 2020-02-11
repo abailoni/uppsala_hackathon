@@ -174,7 +174,8 @@ class PostProcessingExperiment(BaseExperiment):
         # ------------------------------
         print("Starting prediction...")
         tick = time.time()
-        if post_proc_config.get("from_superpixels", False):
+        if post_proc_config.get("from_superpixels", False) and post_proc_config.get("restrict_to_GT_bbox", True):
+            print("Restricting to GT bbox")
             outputs = segmentation_pipeline(affinities, GT != 0)
         else:
             outputs = segmentation_pipeline(affinities)
@@ -403,6 +404,20 @@ class PostProcessingExperiment(BaseExperiment):
                                             crop_slice=gt_crop_slc,
                                             run_connected_components=False
                                             )
+
+                        if self.get("volume_config/ignore_glia", False):
+                            print("Ignoring glia during evaluation")
+                            inner_path_glia = self.get("volume_config/glia_specs/inner_path", ensure_exists=True)
+                            glia_label = self.get("volume_config/glia_specs/glia_label", ensure_exists=True)
+                            ignore_label = self.get("volume_config/glia_specs/ignore_label", ensure_exists=True)
+                            GT_vol_config['inner_path'] = inner_path_glia
+                            various_masks = segm_utils.readHDF5_from_volume_config(sample,
+                                                                   **GT_vol_config,
+                                                                   crop_slice=gt_crop_slc,
+                                                                   run_connected_components=False
+                                                                   )
+                            GT[various_masks == glia_label] = ignore_label
+
                         # Optionally, affinity paths are deduced dynamically:
                         if self.get("affinities_dir_path") is not None:
                             affs_vol_config['path'] = \

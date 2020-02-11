@@ -9,6 +9,12 @@ offsets_file_name: "default_from_patch.json"
 
 
 volume_config:
+  ignore_glia: False
+  glia_specs:
+    inner_path: 'volumes/labels/various_masks_noDefects_2x'
+    glia_label: 1
+    ignore_label: 0
+
   GT:
     path:
       A: '$HCI_HOME/datasets/new_cremi/sampleA.h5'
@@ -33,13 +39,14 @@ postproc_config:
   # ------------------------------
   # Generic options
   # ------------------------------
+  restrict_to_GT_bbox: False
   from_superpixels: True
   use_multicut: False # Deprecate...?
   compute_scores: True
   save_segm: True
   WS_growing: True
   connected_components_on_final_segm: False
-  overwrite_prev_files: True
+  overwrite_prev_files: False
   extra_presets:
     - "simple_WSDT"
 #    - "gen_HC_DTWS"

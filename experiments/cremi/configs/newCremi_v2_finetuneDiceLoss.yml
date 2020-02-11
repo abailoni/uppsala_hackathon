@@ -25,7 +25,7 @@ loaders:
           retain_segmentation: True # This keeps the label image in the inputs
           ignore_label: 0
           glia_label: 1
-          boundary_label: 2
+          boundary_label: "KeyDeleter"
         0:
           retain_glia_mask: False
           offsets:
@@ -44,16 +44,19 @@ loaders:
             - [-1, 5, -5]
             # 3D-ranges:
             - [-2, 0, 0]
-            - [1, 0, 0]
-            - [2, 0, 0]
+            - [-3, 0, 0]
+            - [-4, 0, 0]
             # Long-ranges:
             - [0, -14, 0]
             - [0, 0, -14]
+        1: "KeyDeleter"
+        2: "KeyDeleter"
 
 #MAIN:
 #
 #CUDA_VISIBLE_DEVICES=0 ipython experiments/cremi/train_stckHourGlass.py -- v2_main_trainAffs_b --inherit newCremi_v2_main.yml --update0 newCremi_v2_trainAffsFromPatches.yml --config.model.model_kwargs.path_backbone RUNS__HOME/v2_main_b/checkpoint.pytorch --config.model.model_kwargs.loadfrom RUNS__HOME/v2_main_trainAffs/checkpoint.pytorch  --config.trainer.optimizer.Adam.lr 1e-4
 
+# CUDA_VISIBLE_DEVICES=0 ipython experiments/cremi/train_stckHourGlass.py -- v2_ignoreGlia_trainAffs_thinBound --inherit newCremi_v2_main.yml --update0 newCremi_v2_ignoreGlia.yml --update1 newCremi_v2_trainAffsFromPatches.yml --config.model.model_kwargs.path_backbone RUNS__HOME/v2_ignoreGlia/checkpoint.pytorch  --config.trainer.optimizer.Adam.lr 1e-4
 
 
 model:
@@ -63,10 +66,12 @@ model:
 #    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/v2_main_trainAffs/checkpoint.pytorch"
 #    path_backbone: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/v2_main_b/checkpoint.pytorch"
     nb_offsets: 16
-    prediction_indices: [0,1,2]
-#    nb_extra_final_layers: 2
+    prediction_indices: [0]
+    nb_extra_final_layers: 2
+    nb_channels_final_layers: 16
+    nb_channels_output_emb: 16
     final_layer_kwargs:
-      kernel_size: [1, 1, 1]
+      kernel_size: [1, 3, 3]
       dim: 3
       activation: "ReLU"
       num_groups_norm: 16
@@ -74,6 +79,20 @@ model:
       # dilation: [1, 4, 4]
     train_backbone: False
     reload_backbone: True
+
+    models_kwargs:
+      0:
+        patchNet_kwargs:
+          0:
+            ASPP_kwargs:
+              apply_final_act: False
+          1:
+            ASPP_kwargs:
+              apply_final_act: False
+          2:
+            ASPP_kwargs:
+              apply_final_act: False
+
 
 
 trainer:
@@ -93,6 +112,8 @@ trainer:
         0:
           target: 0
           affs_channels: ":"
+        1: "KeyDeleter"
+        2: "KeyDeleter"
 
 
 firelight:

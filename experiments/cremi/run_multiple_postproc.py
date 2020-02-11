@@ -25,27 +25,28 @@ list_of_args = [
          "--config.postproc_config.invert_affinities"
      ],
      [
-         "ignoreGlia_trainedAffs",
-         "diceAffs_trainedAffs",
-         "main_trainedAffs",
-         # "main_dice",
-         # "2patches_cls"
+         "v2_ignoreGlia_trainedAffs_thinBound",
+         # "ignoreGlia_trainedAffs",
+         # "diceAffs_trainedAffs",
+         # "main_trainedAffs",
      ],
      [
          "trainedAffs_from_patch.json",
-         "dice_affs.json",
-         "trainedAffs_from_patch.json",
-         # "two_patches_only.json"
+         # "dice_affs.json",
+         # "trainedAffs_from_patch.json",
      ],
      [
          "True",
-         "True",
-         "True",
+         # "True",
+         # "True",
      ],
      ),
 
     # (["--config.postproc_config.iterated_options.preset"], ["MEAN"]),
-    (["--config.postproc_config.iterated_options.sample"], ["B", "C"]),
+    (["--config.postproc_config.iterated_options.sample"], [
+        "B",
+        "C"
+    ]),
 ]
 
 

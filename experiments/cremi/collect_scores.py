@@ -13,10 +13,11 @@ from segmfriends.utils.various import yaml2dict
 
 project_dir = os.path.join(get_trendytukan_drive_path(),"projects/pixel_embeddings")
 
-EXP_NAMES = ["ignoreGlia_trainedAffs"]
+EXP_NAMES = ["ignoreGlia_trainedAffs", "v2_ignoreGlia_trainedAffs_thinBound", ]
 
 LATEX_OUTPUT = False
 
+sorting_column_idx = 0
 
 # -------------------------------------------------------
 
@@ -24,7 +25,6 @@ LATEX_OUTPUT = False
 
 
 
-sorting_column_idx = 1
 
 keys_to_collect = [
     ['score_WS', 'cremi-score'],
