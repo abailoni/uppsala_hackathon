@@ -1,131 +1,108 @@
 import os
 from copy import deepcopy
+from vaeAffs.utils.path_utils import get_trendytukan_drive_path, get_abailoni_hci_home_path
 
+
+from segmfriends.utils.config_utils import assign_color_to_table_value, return_recursive_key_in_dict
+import json
+import numpy as np
+from segmfriends.utils.various import yaml2dict
 # -----------------------
 # Script options:
 # -----------------------
 
-# type = "infer"
-# CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,5"
-#
-# list_of_args = [
-#     (["--"], ["deb_infer"]),
-#     (["--config.model_shortcuts.affinity_mode"],
-#      [
-#         # "classic///cls",
-#         "probabilistic///probs07"]),
-#     (["--inherit"], [
-#         # "newCremi_comparison_main_diceAffs.yml///main_dice",
-#         "newCremi_comparison_main.yml///main",
-#         "newCremi_comparison_classicDefcAugm.yml///clsDefct",
-#         "newCremi_comparison_main_noGlia.yml///noGlia",
-#         "newCremi_comparison_main_2patches.yml///2patches",
-#         "newCremi_comparison_wo_sideLoss.yml///noSideLoss",
-#         "newCremi_comparison_BIG.yml///biUNet",
-#         "newCremi_comparison_fullMain.yml///mainFullTrain",
-#         "newCremi_comparison_noExtraPad.yml///noExtaPad",
-#       ]),
-#     (["--config.name_experiment"], [ ("{}_{}", "2:0", "1:0") ]),
-#     (["--config.model_shortcuts.patch_threshold"], ["0.7"]),
-#     (["--config.loaders.infer.loader_config.batch_size"], ["4"]),
-#     (["--config.loaders.infer.loader_config.num_workers"], ["20"]),
-#     (["--config.loaders.infer.name"], ["B", "C", "0", "1", "2"]),
-# ]
+project_dir = os.path.join(get_trendytukan_drive_path(),"projects/pixel_embeddings")
+
+EXP_NAMES = ["ignoreGlia_trainedAffs"]
+
+LATEX_OUTPUT = False
+
+
+# -------------------------------------------------------
 
 
 
 
 
-type = "postproc"
-CUDA = "CUDA_VISIBLE_DEVICES=0"
+sorting_column_idx = 1
 
-list_of_args = [
-    (["--"], ["deb_infer"]),
-    (["--inherit"], [
-        "debug.yml",
-      ]),
-    # (["--config.experiment_name", "--config.offsets_file_name"],
-    #  ["mainFullTrain_cls", "bigUNet_cls", "main_classic", "clsDefct_cls", "noSideLoss_cls", "noGlia_cls", "main_dice", "2patches_cls"],
-    #  ["default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "dice_affs.json", "two_patches_only.json"],
-    #  ),
-    (["--config.experiment_name", "--config.offsets_file_name",
-      "--config.postproc_config.invert_affinities"],
-     ["main_dice",
-      "2patches_cls"],
-     ["dice_affs.json", "two_patches_only.json"],
-     ["True", "False"],
-     ),
-
-    # (["--config.postproc_config.iterated_options.preset"], ["MEAN"]),
-    # (["--config.postproc_config.iterated_options.sample"], ["B", "C"]),
+keys_to_collect = [
+    ['score_WS', 'cremi-score'],
+    ['score_WS', 'adapted-rand'],
+    ['score_WS', 'vi-merge'],
+    ['score_WS', 'vi-split'],
+    # ['runtime'],
+    # ['energy']
 ]
 
+nb_flt_digits = [
+    3,
+    3,
+    3,
+    3,
+    2,
+    # 2,
+]
+nb_formats = [
+    'f',
+    'f',
+    'f',
+    'f',
+    'e',
+    # 'e',
+]
 
-# -----------------------
-# Compose list of commands to execute:
-# -----------------------
+# label_names = {
+#     'MutexWatershed': "Abs Max",
+#     'mean': "Average",
+#     "max": "Max",
+#     "min": "Min",
+#     "sum": "Sum",
+# }
 
-cmd_base_string = CUDA
-if type == "infer":
-    cmd_base_string += " ipython experiments/cremi/infer_IoU.py"
-elif type == "postproc":
-    cmd_base_string += " ipython experiments/cremi/post_process.py"
+collected_results = []
+# energies, ARAND = [], []
+# SEL_PROB = 0.1
+
+
+for exp_name in EXP_NAMES:
+    os.path.join(project_dir, exp_name)
+    scores_path = os.path.join(project_dir, exp_name, "scores")
+
+    # Get all the configs:
+    for item in os.listdir(scores_path):
+        if os.path.isfile(os.path.join(scores_path, item)):
+            filename = item
+            if not filename.endswith(".yml") or filename.startswith("."):
+                continue
+            result_file = os.path.join(scores_path, filename)
+            config = yaml2dict(result_file)
+
+            new_table_entrance = ["{}_{}".format(exp_name, filename.replace(".yml", ""))]
+
+            for j, key in enumerate(keys_to_collect):
+                cell_value = return_recursive_key_in_dict(config, key)
+                # if key[-1] == 'adapted-rand':
+                #     new_table_entrance.append("{0:.{prec}{type}}".format(1. - cell_value, prec=nb_flt_digits[j],
+                #                                                          type=nb_formats[j]))
+                # else:
+                new_table_entrance.append("{0:.{prec}{type}}".format(cell_value, prec=nb_flt_digits[j],
+                                                                     type=nb_formats[j]))
+
+            collected_results.append(new_table_entrance)
+
+collected_results = np.array(collected_results)
+collected_results = collected_results[collected_results[:, sorting_column_idx + 1].argsort()]
+ID = np.random.randint(255000)
+print(ID)
+from segmfriends.utils.various import check_dir_and_create
+export_dir = os.path.join(project_dir, "collected_scores")
+check_dir_and_create(export_dir)
+if LATEX_OUTPUT:
+    np.savetxt(os.path.join(export_dir, "collected_cremi_{}.csv".format(ID)), collected_results, delimiter=' & ',
+           fmt='%s',
+           newline=' \\\\\n')
 else:
-    raise ValueError
-
-
-def recursively_get_cmd(current_cmd, accumulated_cmds):
-    current_arg_spec_indx = len(current_cmd)
-    if current_arg_spec_indx == len(list_of_args):
-
-        # We are done, compose the command:
-        new_cmd = cmd_base_string
-        for i, arg_spec in enumerate(list_of_args):
-            for nb_arg, arg_name in enumerate(arg_spec[0]):
-                new_arg_str = current_cmd[i][nb_arg]
-                if "///" in new_arg_str:
-                    new_arg_str = new_arg_str.split("///")[0]
-
-                new_cmd += " {} {}".format(arg_name, new_arg_str)
-        accumulated_cmds.append(new_cmd)
-
-    elif current_arg_spec_indx < len(list_of_args):
-        # Here we add all options at current level and then recursively go deeper:
-        current_arg_spec = list_of_args[current_arg_spec_indx]
-        total_current_options = len(current_arg_spec[1])
-
-        for nb_option in range(total_current_options):
-            new_cmd_entry = []
-            for arg in current_arg_spec[1:]:
-                assert len(arg) == total_current_options, "All args  passed in the same entry should have the same number of options! {}, {}".format(arg, total_current_options)
-                if isinstance(arg[nb_option], str):
-                    # Here we simply append the string:
-                    new_cmd_entry.append(arg[nb_option])
-                else:
-                    # Format the string from previously chosen options:
-                    assert isinstance(arg[nb_option], tuple)
-                    assert len(arg[nb_option]) >= 2
-
-                    collected_format_args = []
-                    for format_args in arg[nb_option][1:]:
-                        indx1, indx2 = format_args.split(":")
-                        assert int(indx1) < current_arg_spec_indx
-                        collected_str = current_cmd[int(indx1)][int(indx2)]
-                        if "///" in collected_str:
-                            collected_str = collected_str.split("///")[1]
-                        collected_format_args.append(collected_str)
-
-                    # Compose new command entry:
-                    new_cmd_entry.append(arg[nb_option][0].format(*collected_format_args))
-            # Recursively go deeper:
-            accumulated_cmds = recursively_get_cmd(current_cmd+[new_cmd_entry], accumulated_cmds)
-    else:
-        raise ValueError("Something went wrong")
-
-    return accumulated_cmds
-
-cmds_to_run = recursively_get_cmd([], [])
-
-for cmd in cmds_to_run:
-    print("\n\n\n\n{}\n\n".format(cmd))
-    os.system(cmd)
+    np.savetxt(os.path.join(export_dir, "collected_cremi_{}.csv".format(ID)), collected_results, delimiter=';',
+               fmt='%s',
+               newline=' \n')
