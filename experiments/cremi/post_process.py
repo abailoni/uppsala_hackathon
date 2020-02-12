@@ -236,6 +236,7 @@ class PostProcessingExperiment(BaseExperiment):
             self.get_valid_out_paths(sample, presets_collected,
                                      overwrite_previous=post_proc_config.get("overwrite_prev_files", False))
 
+        print(segm_file_path)
         config_to_save = deepcopy(self._config)
 
         if mask_used_edges is not None:
@@ -311,6 +312,9 @@ class PostProcessingExperiment(BaseExperiment):
             segm_utils.check_dir_and_create(dir_path)
 
             # Backup old file, it already exists:
+            post_fix = self.get('postproc_config/save_name_postfix', None)
+            if post_fix is not None:
+                filename = filename + "__" + post_fix
             candidate_file = os.path.join(dir_path, filename + file_ext)
             if os.path.exists(candidate_file) and not overwrite_previous:
                 candidate_file = candidate_file.replace(file_ext, "__{}{}".format(ID, file_ext))

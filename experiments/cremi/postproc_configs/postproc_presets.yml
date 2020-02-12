@@ -20,6 +20,13 @@ gen_HC_pix:
             B: [None, None, None, None]
             C: [None, None, None, None]
 
+ignoreGlia:
+  postproc:
+    WSDT_kwargs:
+      boundary_pixels_kwargs:
+        # Noise experiments:
+        boundary_threshold: 0.5
+
 noise_sups:
   postproc:
     WSDT_kwargs:

@@ -17,6 +17,9 @@ volume_config:
 
   GT:
     path:
+      0: '$HCI_HOME/datasets/new_cremi/sample0.h5'
+      1: '$HCI_HOME/datasets/new_cremi/sample1.h5'
+      2: '$HCI_HOME/datasets/new_cremi/sample2.h5'
       A: '$HCI_HOME/datasets/new_cremi/sampleA.h5'
       B: '$HCI_HOME/datasets/new_cremi/sampleB.h5'
       C: '$HCI_HOME/datasets/new_cremi/sampleC.h5'
@@ -46,7 +49,8 @@ postproc_config:
   save_segm: True
   WS_growing: True
   connected_components_on_final_segm: False
-  overwrite_prev_files: False
+  save_name_postfix: ""
+  overwrite_prev_files: True
   extra_presets:
     - "simple_WSDT"
 #    - "gen_HC_DTWS"
@@ -61,21 +65,22 @@ postproc_config:
   # ------------------------------
   # Iterated options (from each combination of the below, a segm is generated):
   # ------------------------------
-  nb_threads: 3
-  nb_thread_pools: 1
+  nb_threads: 4
+  nb_thread_pools: 3
   nb_iterations: 1
 
   iterated_options:
     preset: ["MEAN"]
-    sample: ["B"]
+#    sample: ["B", "C", "A"]
+    sample: ["B", "C", "A", "0", "1", "2"]
     edge_prob: 0.
     noise_factor: 0.
     local_attraction: False
 
-    crop_slice:
-      A: [":,:,:,:"]
-      B: ":,:,:,:"
-      C: ":,:,:,:"
+    crop_slice: ":,:,:,:"
+#      A: [":,:,:,:"]
+#      B:
+#      C: ":,:,:,:"
 
     sub_crop_slice: ":,:,:,:"
 

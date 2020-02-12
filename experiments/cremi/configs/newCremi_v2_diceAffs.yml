@@ -64,7 +64,7 @@ loaders:
 
 model:
   model_kwargs:
-    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/v2_diceAffs/checkpoint.pytorch"
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/v2_diceAffs_b/checkpoint.pytorch"
     type_of_model: 'MultiScaleInputsUNet3D'
     models_kwargs:
       global:

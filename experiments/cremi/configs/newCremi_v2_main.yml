@@ -283,7 +283,7 @@ model:
   model_class: embeddingutils.models.unet.GeneralizedStackedPyramidUNet3D
 #  model_class: vaeAffs.models.compute_IoU.ProbabilisticBoundaryFromEmb
   model_kwargs:
-    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/v2_main/checkpoint.pytorch"
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/v2_main_b/checkpoint.pytorch"
 
     nb_stacked: 1 # Number of stacked models
     # If only model 1 is trained, then model 0 is run in inference mode. Atm there is no backprop between models:

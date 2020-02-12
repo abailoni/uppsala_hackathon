@@ -1,6 +1,6 @@
 model:
   model_kwargs:
-    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/v2_main_b/checkpoint.pytorch"
+    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/v2_ignoreGlia/checkpoint.pytorch"
 
 
 trainer:

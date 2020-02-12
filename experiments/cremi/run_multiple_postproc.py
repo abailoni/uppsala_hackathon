@@ -26,27 +26,40 @@ list_of_args = [
      ],
      [
          "v2_ignoreGlia_trainedAffs_thinBound",
-         # "ignoreGlia_trainedAffs",
-         # "diceAffs_trainedAffs",
-         # "main_trainedAffs",
+         "v2_ignoreGlia_trainedAffs",
+         "v2_main_trainedAffs_thinBound",
+         "v2_main_trainedAffs",
+         "v2_diceAffs_trainedAffs_thinBound",
+         "v2_diceAffs_trainedAffs",
      ],
      [
          "trainedAffs_from_patch.json",
-         # "dice_affs.json",
-         # "trainedAffs_from_patch.json",
+         "trainedAffs_from_patch.json",
+         "trainedAffs_from_patch.json",
+         "trainedAffs_from_patch.json",
+         "dice_affs.json",
+         "dice_affs.json",
      ],
      [
          "True",
-         # "True",
-         # "True",
+         "True",
+         "True",
+         "True",
+         "True",
+         "True",
      ],
      ),
 
+    (["--config.postproc_config.save_name_postfix",
+      "--config.volume_config.ignore_glia"],
+     ["fullGT", "ignoreGlia"],
+     ["False", "True"]),
     # (["--config.postproc_config.iterated_options.preset"], ["MEAN"]),
-    (["--config.postproc_config.iterated_options.sample"], [
-        "B",
-        "C"
-    ]),
+    # (["--config.postproc_config.iterated_options.sample"], [
+    #     ["B", "C", "A"],
+    #     ["0", "1", "2"],
+    #     # "C"
+    # ]),
 ]
 
 

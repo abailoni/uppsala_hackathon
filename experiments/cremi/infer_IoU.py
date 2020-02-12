@@ -147,9 +147,10 @@ class BaseCremiExperiment(BaseExperiment, AffinityInferenceMixin):
         dir_path = os.path.join(get_trendytukan_drive_path(), "projects/pixel_embeddings", self.get("name_experiment", default="generic_experiment"))
         check_dir_and_create(dir_path)
         filename = os.path.join(dir_path, "predictions_sample_{}.h5".format(self.get("loaders/infer/name")))
-        with h5py.File(filename, 'w') as f:
-            f.create_dataset('data', data=output.astype(np.float16), compression='gzip')
-            print("Saved to ", filename)
+        print("Writing to ", self.get("inner_path_output", 'data'))
+        from segmfriends.utils.various import writeHDF5
+        writeHDF5(output.astype(np.float16), filename, self.get("inner_path_output", 'data'))
+        print("Saved to ", filename)
 
         # Dump configuration to export folder:
         self.dump_configuration(os.path.join(dir_path, "prediction_config.yml"))

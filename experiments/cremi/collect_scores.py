@@ -13,7 +13,14 @@ from segmfriends.utils.various import yaml2dict
 
 project_dir = os.path.join(get_trendytukan_drive_path(),"projects/pixel_embeddings")
 
-EXP_NAMES = ["ignoreGlia_trainedAffs", "v2_ignoreGlia_trainedAffs_thinBound", ]
+EXP_NAMES = [
+    "v2_main_trainedAffs_thinBound",
+    "v2_diceAffs_trainedAffs_thinBound",
+    "v2_ignoreGlia_trainedAffs_thinBound",
+    "v2_ignoreGlia_trainedAffs",
+    "v2_diceAffs_trainedAffs",
+    "v2_main_trainedAffs"
+]
 
 LATEX_OUTPUT = False
 
@@ -65,6 +72,23 @@ collected_results = []
 # SEL_PROB = 0.1
 
 
+# for exp_name in EXP_NAMES:
+#     os.path.join(project_dir, exp_name)
+#     scores_path = os.path.join(project_dir, exp_name, "out_segms")
+#     import shutil
+#
+#     # Get all the configs:
+#     for item in os.listdir(scores_path):
+#         if os.path.isfile(os.path.join(scores_path, item)):
+#             filename = item
+#             if not filename.endswith(".h5") or filename.startswith("."):
+#                 continue
+#             result_file = os.path.join(scores_path, filename)
+#             new_filename = result_file.replace("_fullGT.", "__fullGT.")
+#             new_filename = new_filename.replace("_ignoreGlia.", "__ignoreGlia.")
+#             shutil.move(result_file, new_filename)
+
+
 for exp_name in EXP_NAMES:
     os.path.join(project_dir, exp_name)
     scores_path = os.path.join(project_dir, exp_name, "scores")
@@ -78,7 +102,12 @@ for exp_name in EXP_NAMES:
             result_file = os.path.join(scores_path, filename)
             config = yaml2dict(result_file)
 
-            new_table_entrance = ["{}_{}".format(exp_name, filename.replace(".yml", ""))]
+            # print(filename.replace(".yml", "").split("__"))
+            # new_table_entrance = [exp_name + "__" + filename.replace(".yml", "")]
+            new_table_entrance = [exp_name] + \
+                                 ["{}".format(spl) for spl in filename.replace(".yml", "").split("__")]
+            nb_first_columns = len(new_table_entrance)
+
 
             for j, key in enumerate(keys_to_collect):
                 cell_value = return_recursive_key_in_dict(config, key)
@@ -91,13 +120,22 @@ for exp_name in EXP_NAMES:
 
             collected_results.append(new_table_entrance)
 
-collected_results = np.array(collected_results)
-collected_results = collected_results[collected_results[:, sorting_column_idx + 1].argsort()]
+# nb_col, nb_rows = len(collected_results[0]), len(collected_results)
+#
+# collected_array = np.empty((nb_rows, nb_col), dtype="str")
+# for r in range(nb_rows):
+#     for c in range(nb_col):
+#         collected_array[r, c] = collected_results[r][c]
+
+# collected_results = np.array([np.array(item, dtype="str") for item in collected_results], dtype="str")
+collected_results = np.array(collected_results, dtype="str")
+collected_results = collected_results[collected_results[:, sorting_column_idx + nb_first_columns].argsort()]
 ID = np.random.randint(255000)
 print(ID)
 from segmfriends.utils.various import check_dir_and_create
 export_dir = os.path.join(project_dir, "collected_scores")
 check_dir_and_create(export_dir)
+# print(collected_results)
 if LATEX_OUTPUT:
     np.savetxt(os.path.join(export_dir, "collected_cremi_{}.csv".format(ID)), collected_results, delimiter=' & ',
            fmt='%s',
