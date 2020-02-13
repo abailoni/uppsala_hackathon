@@ -67,7 +67,14 @@ for sample in ["A", "B", "C", "0", "1", "2"]:
         [0, 1, 0],
         [0, 0, 1],
     ]
-    print(GT.max())
+    max_GT = GT.max()
+
+    GLIA_LABEL = 1
+    BOUNDARY_LABEL = 2
+    DEFECTED_LABEL = 3
+
+    # Ignore boundaries inside glias:
+    GT[glia == GLIA_LABEL] = max_GT + 1
 
     # affs: 0 boundary, 1 segment;
     # valid_mask: 1 is valid
@@ -87,13 +94,10 @@ for sample in ["A", "B", "C", "0", "1", "2"]:
         eroded_segment_mask[z] = vigra.filters.multiBinaryErosion(segment_mask[z], radius=1.)
     boundary_mask = np.logical_not(eroded_segment_mask)
 
-    GLIA_LABEL = 1
-    BOUNDARY_LABEL = 2
-    DEFECTED_LABEL = 3
     out_mask = glia.copy()
     out_mask[boundary_mask] = BOUNDARY_LABEL
-    # Make sure not to have added some boundary inside glia:
-    out_mask[glia == GLIA_LABEL] = GLIA_LABEL
+    # # Make sure not to have added some boundary inside glia:
+    # out_mask[glia == GLIA_LABEL] = GLIA_LABEL
 
     # Mask defected slices:
     for slc in defected_slices[sample]:
@@ -107,5 +111,5 @@ for sample in ["A", "B", "C", "0", "1", "2"]:
     print("Now writing...")
 
     from segmfriends.utils.various import writeHDF5
-    writeHDF5(out_mask, data_path, 'volumes/labels/various_masks_noDefects')
+    writeHDF5(out_mask, data_path, 'volumes/labels/various_masks_noDefects_thinBound')
     # writeHDF5(GT, data_path, 'volumes/labels/neuron_ids_fixed')

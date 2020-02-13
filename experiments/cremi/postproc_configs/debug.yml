@@ -23,7 +23,19 @@ volume_config:
       A: '$HCI_HOME/datasets/new_cremi/sampleA.h5'
       B: '$HCI_HOME/datasets/new_cremi/sampleB.h5'
       C: '$HCI_HOME/datasets/new_cremi/sampleC.h5'
-    inner_path: 'volumes/labels/neuron_ids_fixed_2x'
+      A+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleA+_cropped.h5'
+      B+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleB+_cropped.h5'
+      C+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleC+_cropped.h5'
+    inner_path:
+      0: 'volumes/labels/neuron_ids_fixed_2x'
+      1: 'volumes/labels/neuron_ids_fixed_2x'
+      2: 'volumes/labels/neuron_ids_fixed_2x'
+      A: 'volumes/labels/neuron_ids_fixed_2x'
+      B: 'volumes/labels/neuron_ids_fixed_2x'
+      C: 'volumes/labels/neuron_ids_fixed_2x'
+      A+: 'volumes/labels/mask_gt_2x'
+      B+: 'volumes/labels/mask_gt_2x'
+      C+: 'volumes/labels/mask_gt_2x'
     dtype: int32
 #    ds_factor: [1, 2, 2]
     ds_order: 1
@@ -42,10 +54,10 @@ postproc_config:
   # ------------------------------
   # Generic options
   # ------------------------------
-  restrict_to_GT_bbox: False
+  restrict_to_GT_bbox: True
   from_superpixels: True
   use_multicut: False # Deprecate...?
-  compute_scores: True
+  compute_scores: False
   save_segm: True
   WS_growing: True
   connected_components_on_final_segm: False
@@ -72,7 +84,8 @@ postproc_config:
   iterated_options:
     preset: ["MEAN"]
 #    sample: ["B", "C", "A"]
-    sample: ["B", "C", "A", "0", "1", "2"]
+#    sample: ["B", "C", "A", "0", "1", "2"]
+    sample: ["A+", "B+", "C+"]
     edge_prob: 0.
     noise_factor: 0.
     local_attraction: False

@@ -6,6 +6,7 @@ from copy import deepcopy
 # -----------------------
 
 type = "infer"
+# CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
 CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
 # CUDA = "CUDA_VISIBLE_DEVICES=0"
 
@@ -63,27 +64,27 @@ list_of_args = [
         "newCremi_v2_main.yml",
       ]),
     (["--update0",
-      "--config.model.model_kwargs.path_backbone"
+      # "--config.model.model_kwargs.path_backbone"
       ], [
-        "newCremi_v2_trainAffsFromPatches.yml///main",
+        # "newCremi_v2_trainAffsFromPatches.yml///main",
         # "newCremi_v2_ignoreGlia.yml///ignoreGlia",
-        # "newCremi_v2_diceAffs.yml///diceAffs",
+        "newCremi_v2_diceAffs.yml///diceAffs",
     ],
-     [
-        "RUNS__HOME/v2_main_b/checkpoint.pytorch",
-    #     # "RUNS__HOME/v2_ignoreGlia/checkpoint.pytorch",
-    #     "RUNS__HOME/v2_diceAffs_b/checkpoint.pytorch",
-    ]
+    #  [
+    #     # "RUNS__HOME/../runs_pre_feb_20/v2_main_b/checkpoint.pytorch",
+    #     # "RUNS__HOME/../runs_pre_feb_20/v2_ignoreGlia/checkpoint.pytorch",
+    #     "RUNS__HOME/../runs_pre_feb_20/v2_diceAffs_b/checkpoint.pytorch",
+    # ]
      ),
     (["--config.model.model_kwargs.loadfrom", "--update1"], [
-        ("RUNS__HOME/v2_{}_trainAffs/checkpoint.pytorch///", "2:0"),
-        # ("RUNS__HOME/v2_{}_trainAffs_thinBound/checkpoint.pytorch///_thinBound", "2:0"),
-        # "RUNS__HOME/v2_diceAffs_b/checkpoint.pytorch///",
-        # "RUNS__HOME/v2_diceAffs_thinBound/checkpoint.pytorch///_thinBound",
+        # ("RUNS__HOME/../runs_pre_feb_20/v2_{}_trainAffs/checkpoint.pytorch///", "2:0"),
+        # ("RUNS__HOME/../runs_pre_feb_20/v2_{}_trainAffs_thinBound/checkpoint.pytorch///_thinBound", "2:0"),
+        "RUNS__HOME/../runs_pre_feb_20/v2_diceAffs_b/checkpoint.pytorch///",
+        # "RUNS__HOME/../runs_pre_feb_20/v2_diceAffs_thinBound/checkpoint.pytorch///_thinBound",
     ], [
-        "newCremi_v2_trainAffsFromPatches.yml",
+        # "newCremi_v2_trainAffsFromPatches.yml",
         # "newCremi_v2_trainAffsFromPatches_thinBound.yml",
-        # "empty_config.yml",
+        "empty_config.yml",
         # "newCremi_v2_finetuneDiceLoss.yml",
     ]),
     (["--config.name_experiment"], [ ("v2_{}_trainedAffs{}", "2:0", "3:0") ]),
@@ -91,12 +92,15 @@ list_of_args = [
     # (["--config.loaders.infer.loader_config.batch_size"], ["1"]),
     (["--config.loaders.infer.loader_config.num_workers"], ["20"]),
     (["--config.loaders.infer.name"], [
-        "B",
+        # "B",
         # "C",
         # "A",
         # "0",
         # "1",
         # "2",
+        "A+",
+        "B+",
+        "C+",
     ]),
 ]
 

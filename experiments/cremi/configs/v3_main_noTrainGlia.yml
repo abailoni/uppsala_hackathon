@@ -1,0 +1,11 @@
+#model:
+#  model_kwargs:
+#    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/v2_ignoreGlia/checkpoint.pytorch"
+
+
+trainer:
+  criterion:
+    kwargs:
+      train_glia_mask: True
+      train_patches_on_glia: False
+

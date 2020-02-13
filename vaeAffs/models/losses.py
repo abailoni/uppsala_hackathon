@@ -377,6 +377,7 @@ class PatchBasedLoss(nn.Module):
                  train_glia_mask=False,
                  boundary_label=None,
                  glia_label=None,
+                 train_patches_on_glia=False,
                  defected_label=None,
                  IoU_loss_kwargs=None,
                  model_kwargs=None, devices=(0,1)):
@@ -396,6 +397,7 @@ class PatchBasedLoss(nn.Module):
         self.glia_label = glia_label
         self.defected_label = defected_label
         self.train_glia_mask = train_glia_mask
+        self.train_patches_on_glia = train_patches_on_glia
         self.add_IoU_loss = False
         if IoU_loss_kwargs is not None:
             self.add_IoU_loss = True
@@ -653,7 +655,8 @@ class PatchBasedLoss(nn.Module):
                 patch_is_on_boundary = (mask_at_patch_center == self.boundary_label).repeat(1, 1, *real_patch_shape)
 
                 # Ignore patches that represent a glia:
-                if self.glia_label is not None:
+                if not self.train_patches_on_glia:
+                    assert self.glia_label is not None
                     # print("Glia: ", (mask_at_patch_center != self.glia_label).min())
                     valid_patches = valid_patches & (mask_at_patch_center != self.glia_label)
 

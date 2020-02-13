@@ -45,8 +45,8 @@ for sample in ["A", "B", "C", "0", "1", "2"]:
     with h5py.File(data_path, 'r+') as f:
         print([atr for atr in f['volumes/labels']])
         #     glia = f['volumes/labels/glia'][:]
-        raw = f['volumes/raw'][crp_slc]
-        GT = f['volumes/labels/neuron_ids_fixed'][crp_slc]
+        # raw = f['volumes/raw'][crp_slc]
+        # GT = f['volumes/labels/neuron_ids_fixed'][crp_slc]
         # various_masks = f['volumes/labels/various_masks'][crp_slc]
         various_masks = f['volumes/labels/various_masks_noDefects'][crp_slc]
 
