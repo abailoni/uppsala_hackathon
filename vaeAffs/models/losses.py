@@ -284,7 +284,7 @@ class MultiLevelAffinityLoss(nn.Module):
         self.train_glia_mask = train_glia_mask
 
     def forward(self, predictions, all_targets):
-        predictions = [predictions] if not isinstance(predictions, (list, tuple)) else predictions
+        # predictions = [predictions] if not isinstance(predictions, (list, tuple)) else predictions
         all_targets = [all_targets] if not isinstance(all_targets, (list, tuple)) else all_targets
 
         loss = 0

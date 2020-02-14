@@ -15,6 +15,11 @@ volume_config:
     glia_label: 1
     ignore_label: 0
 
+  paths_padded_boxes:
+    A+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleA+_cropped.csv'
+    B+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleB+_cropped.csv'
+    C+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleC+_cropped.csv'
+
   GT:
     path:
       0: '$HCI_HOME/datasets/new_cremi/sample0.h5'
@@ -54,10 +59,14 @@ postproc_config:
   # ------------------------------
   # Generic options
   # ------------------------------
+  # TODO: Create a test-setup?
+  compute_scores: False
   restrict_to_GT_bbox: True
+  prepare_submission: True
+
   from_superpixels: True
   use_multicut: False # Deprecate...?
-  compute_scores: False
+
   save_segm: True
   WS_growing: True
   connected_components_on_final_segm: False
@@ -85,7 +94,8 @@ postproc_config:
     preset: ["MEAN"]
 #    sample: ["B", "C", "A"]
 #    sample: ["B", "C", "A", "0", "1", "2"]
-    sample: ["A+", "B+", "C+"]
+    sample: ["A+"]
+#    sample: ["A+", "B+", "C+"]
     edge_prob: 0.
     noise_factor: 0.
     local_attraction: False

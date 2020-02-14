@@ -290,6 +290,15 @@ class PostProcessingExperiment(BaseExperiment):
                 binary_boundaries = np.logical_not(binary_boundaries)
                 io.imsave(segm_file_path.replace(".h5", ".tif"), binary_boundaries.astype('float32'))
 
+            if post_proc_config.get("prepare_submission", False):
+                from vaeAffs.postproc.utils import prepare_submission
+                # FIXME: generalize the ds factor and path to bbox
+                path_bbox_slice = self.get("volume_config/paths_padded_boxes", ensure_exists=True)
+                prepare_submission(sample, segm_file_path,
+                                   inner_path_segm="segm_WS" if grow_WS else "segm",
+                                   path_bbox_slice=path_bbox_slice[sample],
+                                   ds_factor=(1,2,2))
+
         if post_proc_config.get("save_UCM", False):
             raise DeprecationWarning()
 
@@ -303,6 +312,9 @@ class PostProcessingExperiment(BaseExperiment):
         filename = sample
         for preset in presets_collected:
             filename += "__{}".format(preset)
+        post_fix = self.get('postproc_config/save_name_postfix', None)
+        if post_fix is not None:
+            filename = filename + "__" + post_fix
 
         ID = str(np.random.randint(1000000000))
         out_file_paths = []
@@ -312,9 +324,6 @@ class PostProcessingExperiment(BaseExperiment):
             segm_utils.check_dir_and_create(dir_path)
 
             # Backup old file, it already exists:
-            post_fix = self.get('postproc_config/save_name_postfix', None)
-            if post_fix is not None:
-                filename = filename + "__" + post_fix
             candidate_file = os.path.join(dir_path, filename + file_ext)
             if os.path.exists(candidate_file) and not overwrite_previous:
                 candidate_file = candidate_file.replace(file_ext, "__{}{}".format(ID, file_ext))
