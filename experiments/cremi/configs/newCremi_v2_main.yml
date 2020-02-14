@@ -252,8 +252,8 @@ loaders:
       # Sliding window size
       window_size: [14, 352, 352]  # 288
       stride: [40, 40, 40] # Not needed anymore, automatically deduced
-      data_slice: ':,:,:'
-#      data_slice: ':40,:,:'
+#      data_slice: ':,:,:'
+      data_slice: ':30,:,:'
       padding_mode: "reflect"
       padding:
         A+: [[0,0], [0,0], [0,0]]

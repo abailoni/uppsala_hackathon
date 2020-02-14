@@ -688,6 +688,7 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
                  slicing_config=None,
                  IoU_on_GPU=True,
                  affinity_mode="classic",
+                 temperature_parameter=1.,
                  patch_threshold=0.5,
                  *super_args, **super_kwargs):
         super(ProbabilisticBoundaryFromEmb, self).__init__(*super_args, **super_kwargs)
@@ -704,7 +705,8 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         self.offsets = offsets
 
         # TODO: Assert
-        assert affinity_mode in ["classic", "probabilistic"]
+        assert affinity_mode in ["classic", "probabilistic", "probNoThresh"]
+        self.temperature_parameter = temperature_parameter
         self.affinity_mode = affinity_mode
         self.patch_threshold = patch_threshold
         self.IoU_on_GPU = IoU_on_GPU
@@ -724,6 +726,8 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
             return self.forward_affinities(*inputs)
         elif self.affinity_mode == "probabilistic":
             return self.forward_probAffs(*inputs)
+        elif self.affinity_mode == "probNoThresh":
+            return self.forward_probAffsNoThresh(*inputs)
         else:
             raise ValueError
 
@@ -924,6 +928,187 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         else:
             raise NotImplementedError()
 
+    def forward_probAffsNoThresh(self, *inputs):
+        with torch.no_grad():
+            all_predictions = super(ProbabilisticBoundaryFromEmb, self).forward(*inputs)
+
+        def make_sliding_windows(volume_shape, window_size, stride, downsampling_ratio=None):
+            from inferno.io.volumetric import volumetric_utils as vu
+            assert isinstance(volume_shape, tuple)
+            ndim = len(volume_shape)
+            if downsampling_ratio is None:
+                downsampling_ratio = [1] * ndim
+            elif isinstance(downsampling_ratio, int):
+                downsampling_ratio = [downsampling_ratio] * ndim
+            elif isinstance(downsampling_ratio, (list, tuple)):
+                # assert_(len(downsampling_ratio) == ndim, exception_type=ShapeError)
+                downsampling_ratio = list(downsampling_ratio)
+            else:
+                raise NotImplementedError
+
+            return list(vu.slidingwindowslices(shape=list(volume_shape),
+                                               ds=downsampling_ratio,
+                                               window_size=window_size,
+                                               strides=stride,
+                                               shuffle=False,
+                                               add_overhanging=True))
+
+        del inputs
+        # torch.cuda.empty_cache()
+
+        total_nb_patchnets = 0
+        for _, off_specs in enumerate(self.offsets):
+            new_max = np.array(off_specs[1]).max()
+            total_nb_patchnets = new_max if new_max > total_nb_patchnets else total_nb_patchnets
+        all_predictions = all_predictions[:total_nb_patchnets+1]
+        patch_nets = range(total_nb_patchnets+1)
+        # TODO: generalize to multiscale inputs?
+        first_shape = all_predictions[0].shape
+        for pred in all_predictions[1:]:
+            assert first_shape == pred.shape
+
+        """
+        # Pre-crop prediction:
+        # !!!!!!!!!!!!!!!!!!!!!
+        # Important: pre-cropping the prediction that was not trained during training is really important
+        # (for instance the first and last two slices), because otherwise their patches could mess up the
+        # statistics of the probabilistic affinities.
+        # !!!!!!!!!!!!!!!!!!!!!
+        """
+        if self.pre_crop_pred is not None:
+            all_predictions = [pred[self.pre_crop_pred] for pred in all_predictions]
+
+        # TODO: is there a better way to do this?
+        # The problem is that partially they already overlap (sometimes I compute partial results on the boundaries)
+        # So simply keeping a how-many-times-a-pixel-was-active mask is not enough in this case..
+        # Atm, the easiest solution is to ensure to have sliding windows fitting exactly
+        assert all(shp % wdw_shp == 0 for wdw_shp, shp in zip(self.slicing_config["window_size"], all_predictions[0].shape[2:])), \
+            "The slicing window size {} should be an exact multiple of the prediction shape {}".format(self.slicing_config["window_size"],
+                                                                                                       all_predictions[0].shape[2:])
+
+        # Initialize stuff:
+        device = all_predictions[0].get_device()
+        sliding_windows = make_sliding_windows(all_predictions[0].shape[2:], **self.slicing_config)
+
+        # Get padding of each patch: it will be useful later to crop/pad the predictions
+        patch_padding = {}
+        for nb_patch_net in patch_nets:
+            kwargs = self.ptch_kwargs[nb_patch_net]
+            patch_padding[nb_patch_net] = [int(shp/2)*dws for shp, dws in zip(kwargs["patch_size"], kwargs["patch_dws_fact"])]
+
+        # Get biggest real patch-dimensions (for the final output shape)
+        max_patch_padding = [max([patch_padding[nb_patch][i] for nb_patch in patch_nets]) for i in range(3)]
+        boundary_stats_shape = [2, len(self.offsets)] + [sh+max_pad*2 for sh, max_pad in zip(all_predictions[0].shape[2:], max_patch_padding)]
+        # Create array with output probability-affinities:
+        if self.IoU_on_GPU:
+            boundary_stats = torch.zeros(boundary_stats_shape).cuda(device)
+        else:
+            boundary_stats = np.empty(boundary_stats_shape)
+            raise NotImplementedError()
+
+
+
+        # Predict all patches:
+        # print("Sliding windows: ", len(sliding_windows))
+        for i, current_slice in enumerate(sliding_windows):
+            for pred, nb_patch_net in zip(all_predictions, patch_nets):
+                assert pred.shape[0] == 1, "Only batch == 1 is supported atm"
+
+                kwargs = self.ptch_kwargs[nb_patch_net]
+                sliding_window_size = self.slicing_config["window_size"]
+
+                # Collect options from config:
+                patch_shape = kwargs.get("patch_size")
+                assert all(i % 2 == 1 for i in patch_shape), "Patch should be odd"
+                patch_dws_fact = kwargs.get("patch_dws_fact", [1, 1, 1])
+                real_patch_shape = tuple(pt * fc for pt, fc in zip(patch_shape, patch_dws_fact))
+
+                full_slice = (slice(None), slice(None),) + current_slice
+                # Now this is simply doing a reshape...
+                emb_vectors, _, nb_patches = extract_patches_torch_new(pred[full_slice], shape=(1, 1, 1), stride=(1,1,1))
+                patches = self.models[-1].patch_models[nb_patch_net](emb_vectors[:, :, 0, 0, 0])
+
+                patches = patches.view(*nb_patches, *patch_shape)
+                # # From now on we can work on the CPU (too memory consuming):
+                # patch_shape = patches.shape[2:]
+                # if not self.IoU_on_GPU:
+                #     patches = patches.cpu().numpy()
+                #     patches = patches.reshape(*nb_patches, *patch_shape)
+                # else:
+                #     patches = patches.view(*nb_patches, *patch_shape)
+
+                # Make sure to have me-masks:
+                if patch_dws_fact[1] <= 6:
+                    patches = 1. - patches
+                # Threshold masks:
+                # patches = patches >= self.patch_threshold
+
+
+                # Make center always true:
+                center_coord = (slice(None), slice(None), slice(None)) + tuple(int(shp/2) for shp in patches.shape[-3:])
+                patches[center_coord] = torch.from_numpy(np.array([True], dtype='uint8')).cuda()
+
+                # Compute affinities:
+                for nb_off, off_specs in enumerate(self.offsets):
+                    if nb_patch_net in off_specs[1]:
+                        assert all(off%dws == 0 for off, dws in zip(off_specs[0], patch_dws_fact))
+                        offset_in_patch_res = [int(off/dws) for off, dws in zip(off_specs[0], patch_dws_fact)]
+
+                        # Compute affinities and relevance:
+                        probAffs, relevanceAffs = get_probAffs_from_patches(patches, offset_in_patch_res)
+
+                        relevanceAffs = relevanceAffs**self.temperature_parameter
+
+                        # Get stats for the final average:
+                        probAffs = relevanceAffs * probAffs
+
+                        # FIXME: I need to adjust/check the final crop and the output_size_xy...
+                        # Check if I should crop the patches (the global padding does not take this into account atm):
+                        if len(off_specs) > 2:
+                            patch_crop_slc = (slice(None), slice(None), slice(None)) + parse_data_slice(off_specs[2])
+                            probAffs = probAffs[patch_crop_slc]
+                            relevanceAffs = relevanceAffs[patch_crop_slc]
+
+                        updated_patch_padding = [int(shp / 2) * dws for shp, dws in
+                                                 zip(probAffs.shape[-3:], patch_dws_fact)]
+
+                        output_size_xy = [shp+pad*2 for shp, pad in zip(sliding_window_size, updated_patch_padding)][1:]
+                        # TODO: add channel dimension
+                        # Here we fold the patches convolutionally,
+                        probAffs = fold_3d(probAffs, output_size_xy, dilation=patch_dws_fact,
+                                                padding=(0,0,0), stride=(1,1,1))
+                        relevanceAffs = fold_3d(relevanceAffs, output_size_xy, dilation=patch_dws_fact,
+                                                padding=(0, 0, 0), stride=(1, 1, 1))
+
+                        # Update the global output with the collected values:
+                        # first compute the actual sliding_window_slice (prediction is bigger)
+                        prediction_slice = tuple(slice(sl.start+max_pad-cur_pad, sl.stop+max_pad+cur_pad)
+                                                 for sl, max_pad, cur_pad in zip(current_slice, max_patch_padding, updated_patch_padding))
+                        boundary_stats[0,nb_off][prediction_slice] += probAffs[0,0]
+                        boundary_stats[1,nb_off][prediction_slice] += relevanceAffs[0,0]
+
+        # Now crop the invalid borders:
+        final_crop = (slice(None), slice(None)) + tuple(slice(max_pad, -max_pad if max_pad > 0 else shp)
+                                                        for max_pad, shp in
+                                                        zip(max_patch_padding, boundary_stats.shape[-3:]))
+        boundary_stats = boundary_stats[final_crop]
+
+        # Compute the actual boundary statistics:
+        valid_mask = (boundary_stats[1] > 0) # Check if the edge was considered at least once
+
+        output_tensor = torch.zeros_like(boundary_stats)
+        output_tensor[0][valid_mask] = boundary_stats[0][valid_mask] / boundary_stats[1][valid_mask]
+        output_tensor[1][valid_mask] = boundary_stats[1][valid_mask]
+
+        # Concatenate:
+        output_tensor = torch.cat([output_tensor[0], output_tensor[1]], dim=0)
+
+        if self.IoU_on_GPU:
+            return output_tensor.unsqueeze(0)
+        else:
+            raise NotImplementedError()
+
+
 
     def forward_affinities(self, *inputs):
         with torch.no_grad():
@@ -1113,6 +1298,29 @@ def get_affinities_from_binary_patch(me_masks, offset_in_patch_res, set_invalid_
     negative_affs = negative_affs & valid_values
 
     return positive_affs, negative_affs
+
+
+def get_probAffs_from_patches(me_masks, offset_in_patch_res):
+    """
+    This only works for binary masks (aff is one only if both pixels are active in the mask).
+    The spatial dimensions are assumed to be the last three
+    """
+    assert len(offset_in_patch_res) == 3, "Only 3D case implemented"
+    kernel_shape = me_masks.shape[-3:]
+    rolled_me_masks = me_masks.roll(shifts=tuple(-offs for offs in offset_in_patch_res), dims=(-3, -2, -1))
+    probAffs = torch.min(me_masks, rolled_me_masks)
+    relevanceAffs = torch.max(me_masks, rolled_me_masks)
+
+    # Mask invalid values:
+    left_crop = [-off if off < 0 else 0 for off in offset_in_patch_res]
+    right_crop = [sh - off if off > 0 else None for off, sh in zip(offset_in_patch_res, kernel_shape)]
+    valid_crop = tuple(slice(None) for _ in range(len(me_masks.shape)-3)) + tuple(slice(lft, rgt) for lft, rgt in zip(left_crop, right_crop))
+    valid_values = torch.zeros_like(me_masks)
+    valid_values[valid_crop] = 1
+    relevanceAffs = relevanceAffs * valid_values
+
+    return probAffs, relevanceAffs
+
 
 class IntersectOverUnionUNetOld(GeneralizedStackedPyramidUNet3D):
     def __init__(self, offsets, stride, num_IoU_workers=1,
