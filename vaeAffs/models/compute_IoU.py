@@ -690,6 +690,7 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
                  affinity_mode="classic",
                  temperature_parameter=1.,
                  patch_threshold=0.5,
+                 T_norm_type=None,
                  *super_args, **super_kwargs):
         super(ProbabilisticBoundaryFromEmb, self).__init__(*super_args, **super_kwargs)
 
@@ -707,6 +708,7 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         # TODO: Assert
         assert affinity_mode in ["classic", "probabilistic", "probNoThresh"]
         self.temperature_parameter = temperature_parameter
+        self.T_norm_type = T_norm_type
         self.affinity_mode = affinity_mode
         self.patch_threshold = patch_threshold
         self.IoU_on_GPU = IoU_on_GPU
@@ -1046,7 +1048,7 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
 
                 # Make center always true:
                 center_coord = (slice(None), slice(None), slice(None)) + tuple(int(shp/2) for shp in patches.shape[-3:])
-                patches[center_coord] = torch.from_numpy(np.array([True], dtype='uint8')).cuda()
+                patches[center_coord] = torch.from_numpy(np.array([1.], dtype='float32')).cuda()
 
                 # Compute affinities:
                 for nb_off, off_specs in enumerate(self.offsets):
@@ -1055,9 +1057,19 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
                         offset_in_patch_res = [int(off/dws) for off, dws in zip(off_specs[0], patch_dws_fact)]
 
                         # Compute affinities and relevance:
-                        probAffs, relevanceAffs = get_probAffs_from_patches(patches, offset_in_patch_res)
+                        use_nilpotent_min = self.T_norm_type == "nilpotent_min"
+                        probAffs, relevanceAffs = get_probAffs_from_patches(patches, offset_in_patch_res,
+                                                                            use_nilpotent_min)
+
+                        # Threshold relevance:
+                        # relevanceAffs[relevanceAffs > 0.5] = 1.0
+                        # relevanceAffs[relevanceAffs < 0.5] = 0.0
+
+                        # probAffs[probAffs > 0.5] = 1.
+                        # probAffs[probAffs < 0.5] = 0.
 
                         relevanceAffs = relevanceAffs**self.temperature_parameter
+
 
                         # Get stats for the final average:
                         probAffs = relevanceAffs * probAffs
@@ -1300,7 +1312,7 @@ def get_affinities_from_binary_patch(me_masks, offset_in_patch_res, set_invalid_
     return positive_affs, negative_affs
 
 
-def get_probAffs_from_patches(me_masks, offset_in_patch_res):
+def get_probAffs_from_patches(me_masks, offset_in_patch_res, use_nilpotent_min=False):
     """
     This only works for binary masks (aff is one only if both pixels are active in the mask).
     The spatial dimensions are assumed to be the last three
@@ -1308,7 +1320,11 @@ def get_probAffs_from_patches(me_masks, offset_in_patch_res):
     assert len(offset_in_patch_res) == 3, "Only 3D case implemented"
     kernel_shape = me_masks.shape[-3:]
     rolled_me_masks = me_masks.roll(shifts=tuple(-offs for offs in offset_in_patch_res), dims=(-3, -2, -1))
+
     probAffs = torch.min(me_masks, rolled_me_masks)
+    # Nilpotent minimum:
+    if use_nilpotent_min:
+        probAffs[me_masks + rolled_me_masks < 1] = 0.
     relevanceAffs = torch.max(me_masks, rolled_me_masks)
 
     # Mask invalid values:
