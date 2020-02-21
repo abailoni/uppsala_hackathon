@@ -1000,7 +1000,7 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
 
         # Get biggest real patch-dimensions (for the final output shape)
         max_patch_padding = [max([patch_padding[nb_patch][i] for nb_patch in patch_nets]) for i in range(3)]
-        boundary_stats_shape = [2, len(self.offsets)] + [sh+max_pad*2 for sh, max_pad in zip(all_predictions[0].shape[2:], max_patch_padding)]
+        boundary_stats_shape = [5, len(self.offsets)] + [sh+max_pad*2 for sh, max_pad in zip(all_predictions[0].shape[2:], max_patch_padding)]
         # Create array with output probability-affinities:
         if self.IoU_on_GPU:
             boundary_stats = torch.zeros(boundary_stats_shape).cuda(device)
@@ -1045,10 +1045,12 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
                 # Threshold masks:
                 # patches = patches >= self.patch_threshold
 
+                # (patches.max(-1)[0].max(-1)[0].max(-1)[0] < 0.01).sum()
 
                 # Make center always true:
                 center_coord = (slice(None), slice(None), slice(None)) + tuple(int(shp/2) for shp in patches.shape[-3:])
                 patches[center_coord] = torch.from_numpy(np.array([1.], dtype='float32')).cuda()
+
 
                 # Compute affinities:
                 for nb_off, off_specs in enumerate(self.offsets):
@@ -1056,48 +1058,108 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
                         assert all(off%dws == 0 for off, dws in zip(off_specs[0], patch_dws_fact))
                         offset_in_patch_res = [int(off/dws) for off, dws in zip(off_specs[0], patch_dws_fact)]
 
-                        # Compute affinities and relevance:
+                        # ---------------------------
+                        # Collect new data-points:
+                        # ---------------------------
                         use_nilpotent_min = self.T_norm_type == "nilpotent_min"
-                        probAffs, relevanceAffs = get_probAffs_from_patches(patches, offset_in_patch_res,
+                        probs, w = get_probAffs_from_patches(patches, offset_in_patch_res,
                                                                             use_nilpotent_min)
 
-                        # Threshold relevance:
+                        # FIXME: I need to adjust/check the final crop and the output_size_xy...
+                        # Check if I should crop the patches (the global padding does not take this into account atm):
+                        if len(off_specs) > 2:
+                            patch_crop_slc = (slice(None), slice(None), slice(None)) + parse_data_slice(off_specs[2])
+                            probs = probs[patch_crop_slc]
+                            w = w[patch_crop_slc]
+
+
+                        # ---------------------------
+                        # Pre-process new statistics:
+                        # ---------------------------
+
+                        # # Threshold relevance:
                         # relevanceAffs[relevanceAffs > 0.5] = 1.0
                         # relevanceAffs[relevanceAffs < 0.5] = 0.0
 
                         # probAffs[probAffs > 0.5] = 1.
                         # probAffs[probAffs < 0.5] = 0.
 
-                        relevanceAffs = relevanceAffs**self.temperature_parameter
+                        w = w**self.temperature_parameter
 
 
-                        # Get stats for the final average:
-                        probAffs = relevanceAffs * probAffs
-
-                        # FIXME: I need to adjust/check the final crop and the output_size_xy...
-                        # Check if I should crop the patches (the global padding does not take this into account atm):
-                        if len(off_specs) > 2:
-                            patch_crop_slc = (slice(None), slice(None), slice(None)) + parse_data_slice(off_specs[2])
-                            probAffs = probAffs[patch_crop_slc]
-                            relevanceAffs = relevanceAffs[patch_crop_slc]
-
+                        # ---------------------------
+                        # Collect previous statistics:
+                        # ---------------------------
                         updated_patch_padding = [int(shp / 2) * dws for shp, dws in
-                                                 zip(probAffs.shape[-3:], patch_dws_fact)]
-
+                                                 zip(probs.shape[-3:], patch_dws_fact)]
                         output_size_xy = [shp+pad*2 for shp, pad in zip(sliding_window_size, updated_patch_padding)][1:]
-                        # TODO: add channel dimension
-                        # Here we fold the patches convolutionally,
-                        probAffs = fold_3d(probAffs, output_size_xy, dilation=patch_dws_fact,
-                                                padding=(0,0,0), stride=(1,1,1))
-                        relevanceAffs = fold_3d(relevanceAffs, output_size_xy, dilation=patch_dws_fact,
-                                                padding=(0, 0, 0), stride=(1, 1, 1))
 
                         # Update the global output with the collected values:
                         # first compute the actual sliding_window_slice (prediction is bigger)
-                        prediction_slice = tuple(slice(sl.start+max_pad-cur_pad, sl.stop+max_pad+cur_pad)
+                        prediction_slice = (slice(None), slice(None)) + tuple(slice(sl.start+max_pad-cur_pad, sl.stop+max_pad+cur_pad)
                                                  for sl, max_pad, cur_pad in zip(current_slice, max_patch_padding, updated_patch_padding))
-                        boundary_stats[0,nb_off][prediction_slice] += probAffs[0,0]
-                        boundary_stats[1,nb_off][prediction_slice] += relevanceAffs[0,0]
+
+
+                        def unfold_old_statistics(old_statistic, patch_shp, patch_dws):
+                            if old_statistic.ndimension() > 3:
+                                old_statistic = old_statistic.squeeze()
+                            assert old_statistic.ndimension() == 3
+
+                            real_patch_shp = tuple(shp + (shp-1) * (dws-1) for shp, dws in zip(patch_shp, patch_dws))
+
+                            for d in range(3):
+                                old_statistic = old_statistic.unfold(d, size=real_patch_shp[d], step=1)
+
+                            # Crop
+                            return old_statistic[
+                                (slice(None), slice(None), slice(None)) + tuple(slice(None, None, dws) for dws in patch_dws)]
+
+                        # Save the direct predictions:
+
+
+
+                        # ---------------------------
+                        # Add new statistics: (weighted Welford's online algorithm)
+                        # ---------------------------
+                        center_slice = (slice(None), slice(None), slice(None)) + tuple(int(sh/2) for sh in probs.shape[-3:])
+                        restricted_prediction_slice = tuple(
+                            slice(sl.start + max_pad, sl.stop + max_pad)
+                            for sl, max_pad, cur_pad in zip(current_slice, max_patch_padding, updated_patch_padding))
+                        boundary_stats[4, nb_off][restricted_prediction_slice] = probs[center_slice]
+
+
+                        # Update sum of weights:
+                        boundary_stats[0:1,nb_off:nb_off+1][prediction_slice] += \
+                               fold_3d(w, output_size_xy, dilation=patch_dws_fact,
+                                                padding=(0, 0, 0), stride=(1, 1, 1))
+                        wSum_unfolded = unfold_old_statistics(boundary_stats[0:1,nb_off:nb_off+1][prediction_slice],
+                                                              probs.shape[-3:], patch_dws_fact)
+
+                        # Update sum of squared weights:
+                        boundary_stats[1:2,nb_off:nb_off+1][prediction_slice] += \
+                                fold_3d(w * w,
+                                        output_size_xy, dilation=patch_dws_fact,
+                                          padding=(0, 0, 0), stride=(1, 1, 1))
+
+
+                        # Update weighted mean:
+                        mean_old_unfolded = unfold_old_statistics(boundary_stats[2:3, nb_off:nb_off + 1][prediction_slice],
+                                                                  probs.shape[-3:], patch_dws_fact)
+
+                        boundary_stats[2:3, nb_off:nb_off + 1][prediction_slice] += \
+                            fold_3d((w/wSum_unfolded) * (probs - mean_old_unfolded),
+                                    output_size_xy, dilation=patch_dws_fact,
+                                                padding=(0, 0, 0), stride=(1, 1, 1))
+                        mean_new_unfolded = unfold_old_statistics(
+                            boundary_stats[2:3, nb_off:nb_off + 1][prediction_slice],
+                            probs.shape[-3:], patch_dws_fact)
+
+                        # Update M2:
+                        boundary_stats[3:4, nb_off:nb_off + 1][prediction_slice] += fold_3d(
+                            w * (probs - mean_old_unfolded) * (probs - mean_new_unfolded),
+                                    output_size_xy, dilation=patch_dws_fact,
+                                                padding=(0, 0, 0), stride=(1, 1, 1))
+
 
         # Now crop the invalid borders:
         final_crop = (slice(None), slice(None)) + tuple(slice(max_pad, -max_pad if max_pad > 0 else shp)
@@ -1108,9 +1170,16 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         # Compute the actual boundary statistics:
         valid_mask = (boundary_stats[1] > 0) # Check if the edge was considered at least once
 
-        output_tensor = torch.zeros_like(boundary_stats)
-        output_tensor[0][valid_mask] = boundary_stats[0][valid_mask] / boundary_stats[1][valid_mask]
-        output_tensor[1][valid_mask] = boundary_stats[1][valid_mask]
+        output_tensor = torch.zeros_like(boundary_stats[:2])
+
+        # Save weighted mean:
+        # output_tensor[0][valid_mask] = torch.min(boundary_stats[2][valid_mask], boundary_stats[4][valid_mask])
+        output_tensor[0][valid_mask] = boundary_stats[2][valid_mask]
+        output_tensor[1][valid_mask] = boundary_stats[4][valid_mask]
+
+        # # Save weighted standard deviation (with Bessel's correction for reliability weights):
+        # output_tensor[1][valid_mask] = boundary_stats[3][valid_mask] / \
+        #                                (boundary_stats[0][valid_mask] - (boundary_stats[1][valid_mask] / boundary_stats[0][valid_mask]))
 
         # Concatenate:
         output_tensor = torch.cat([output_tensor[0], output_tensor[1]], dim=0)
