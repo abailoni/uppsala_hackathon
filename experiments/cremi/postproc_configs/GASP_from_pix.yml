@@ -1,0 +1,48 @@
+postproc_config:
+  # ------------------------------
+  # Generic options
+  # ------------------------------
+  from_superpixels: False
+  restrict_to_GT_bbox: True
+  use_multicut: False # Deprecate...?
+  save_segm: True
+  WS_growing: True
+  connected_components_on_final_segm: False
+  overwrite_prev_files: True
+  extra_presets: []
+#  extra_presets: ["DTWS"]
+
+  WSDT_kwargs:
+    intersect_with_boundary_pixels: True
+    boundary_pixels_kwargs:
+      boundary_threshold: 0.5
+      used_offsets: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      offset_weights: [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]
+
+
+
+
+  # ------------------------------
+  # Iterated options (from each combination of the below, a segm is generated):
+  # ------------------------------
+  nb_threads: 4
+  nb_thread_pools: 2
+
+  iterated_options:
+#    preset: ["MutexWatershed", "MEAN"]
+    preset: ["MutexWatershed"]
+#    preset: ["MEAN"]
+#    sample: ["B", "C", "A"]
+#    sample: ["B", "C", "A", "0", "1", "2"]
+#    sample: ["A+"]
+#    sample: ["A+", "B+", "C+"]
+    edge_prob: 0.1
+    noise_factor: 0.
+    local_attraction: False
+
+    crop_slice: "16:,:,:,:"
+#      A: [":,:,:,:"]
+#      B:
+#      C: ":,:,:,:"
+
+    sub_crop_slice: ":,:,:,:"

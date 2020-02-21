@@ -59,10 +59,9 @@ postproc_config:
   # ------------------------------
   # Generic options
   # ------------------------------
-  # TODO: Create a test-setup?
-  compute_scores: False
-  restrict_to_GT_bbox: True
-  prepare_submission: True
+  compute_scores: True
+  restrict_to_GT_bbox: False
+  prepare_submission: False
 
   from_superpixels: True
   use_multicut: False # Deprecate...?
@@ -72,8 +71,8 @@ postproc_config:
   connected_components_on_final_segm: False
   save_name_postfix: ""
   overwrite_prev_files: True
-  extra_presets:
-    - "simple_WSDT"
+#  extra_presets:
+#    - "simple_WSDT"
 #    - "gen_HC_DTWS"
 
   save_UCM: False
@@ -100,7 +99,7 @@ postproc_config:
     noise_factor: 0.
     local_attraction: False
 
-    crop_slice: ":,:,:,:"
+    crop_slice: ":16,:30,:,:"
 #      A: [":,:,:,:"]
 #      B:
 #      C: ":,:,:,:"

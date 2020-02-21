@@ -7,7 +7,8 @@ from copy import deepcopy
 
 type = "infer"
 # CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
-CUDA = "CUDA_VISIBLE_DEVICES=0,1,3,4,5,6"
+CUDA = "CUDA_VISIBLE_DEVICES=2,3,4,5,6,7"
+# CUDA = "CUDA_VISIBLE_DEVICES=0,4,5,6"
 # CUDA = "CUDA_VISIBLE_DEVICES=0"
 
 # -----------
@@ -127,8 +128,9 @@ list_of_args = [
     #     "RUNS__HOME/../runs_pre_feb_20/v2_diceAffs_b/checkpoint.pytorch",
     # ]
      ),
+
     (["--config.model.model_kwargs.loadfrom", "--update1"], [
-        "RUNS__HOME/../runs_pre_feb_20/v2_ignoreGlia/checkpoint.pytorch///_minMaxAffs_2",
+        "RUNS__HOME/../runs_pre_feb_20/v2_ignoreGlia/checkpoint.pytorch///_maxMinNew",
     ], [
         "newCremi_v2_inferAffsFromPatches.yml",
     ]),

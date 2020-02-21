@@ -115,6 +115,7 @@ class PostProcessingExperiment(BaseExperiment):
                        noise_factor,
                        mask_used_edges):
         affinities = affinities.copy()
+        sample = str(sample)
 
         # -----------------------------------
         # FIXME: temporary fix
@@ -174,6 +175,7 @@ class PostProcessingExperiment(BaseExperiment):
         # ------------------------------
         print("Starting prediction...")
         tick = time.time()
+        # FIXME: from_superpixels to use_fragmenter
         if post_proc_config.get("from_superpixels", False) and post_proc_config.get("restrict_to_GT_bbox", True):
             print("Restricting to GT bbox")
             outputs = segmentation_pipeline(affinities, GT != 0)
@@ -217,7 +219,8 @@ class PostProcessingExperiment(BaseExperiment):
                                            offsets,
                                            hmap_kwargs=post_proc_config['prob_map_kwargs'],
                                            apply_WS_growing=True,
-                                           size_of_2d_slices=False)
+                                           size_of_2d_slices=False,
+                                           invert_affinities=invert_affinities)
             pred_segm_WS = grow(affinities, pred_segm)
 
 

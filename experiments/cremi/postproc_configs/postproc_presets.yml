@@ -1,5 +1,5 @@
 gen_HC:
-  parent_model: ['simple_WSDT']
+#  parent_model: ['simple_WSDT']
   postproc:
     segm_pipeline_type: 'gen_HC'
 
@@ -289,9 +289,6 @@ smart_noise_exp_merge_allLong_fromPx:
   postproc:
     experiment_name: 'NEW_merge_noise_exp_allLongRange_fromPixels'
 
-smart_noise_exp_merge_allLong_fromSP:
-  postproc:
-    experiment_name: 'NEW_merge_noise_exp_allLongRange_fromSP'
 
 smart_noise_split_fewEdges:
   postproc:

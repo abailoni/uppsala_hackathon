@@ -10,6 +10,66 @@ from copy import deepcopy
 type = "postproc"
 CUDA = "CUDA_VISIBLE_DEVICES=0"
 
+# WSDT superpixels plus GASP:
+
+# list_of_args = [
+#     (["--"], ["deb_infer"]),
+#     (["--inherit"], [
+#         "debug.yml",
+#       ]),
+#     # (["--config.experiment_name", "--config.offsets_file_name"],
+#     #  ["mainFullTrain_cls", "bigUNet_cls", "main_classic", "clsDefct_cls", "noSideLoss_cls", "noGlia_cls", "main_dice", "2patches_cls"],
+#     #  ["default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "dice_affs.json", "two_patches_only.json"],
+#     #  ),
+#     ([
+#          "--config.experiment_name",
+#          "--config.offsets_file_name",
+#          "--config.postproc_config.invert_affinities"
+#      ],
+#      [
+#          "v2_ignoreGlia_trainedAffs_thinBound",
+#          # "v2_ignoreGlia_trainedAffs",
+#          # "v2_main_trainedAffs_thinBound",
+#          # "v2_main_trainedAffs",
+#          # "v2_diceAffs_trainedAffs_thinBound",
+#          # "v2_diceAffs_trainedAffs",
+#      ],
+#      [
+#          "trainedAffs_from_patch.json",
+#          # "trainedAffs_from_patch.json",
+#          # "trainedAffs_from_patch.json",
+#          # "trainedAffs_from_patch.json",
+#          # "dice_affs.json",
+#          # "dice_affs.json",
+#      ],
+#      [
+#          "True",
+#          # "True",
+#          # "True",
+#          # "True",
+#          # "True",
+#          # "True",
+#      ],
+#      ),
+#
+#     (["--config.postproc_config.save_name_postfix",
+#       "--config.volume_config.ignore_glia"],
+#      [
+#          "fullGT",
+#          # "ignoreGlia"
+#      ],
+#      [
+#          "False",
+#          # "True"
+#      ]),
+#     # (["--config.postproc_config.iterated_options.preset"], ["MEAN"]),
+#     # (["--config.postproc_config.iterated_options.sample"], [
+#     #     ["B", "C", "A"],
+#     #     ["0", "1", "2"],
+#     #     # "C"
+#     # ]),
+# ]
+
 list_of_args = [
     (["--"], ["deb_infer"]),
     (["--inherit"], [
@@ -25,49 +85,42 @@ list_of_args = [
          "--config.postproc_config.invert_affinities"
      ],
      [
-         "v2_ignoreGlia_trainedAffs_thinBound",
+         # "v2_ignoreGlia_trainedAffs_thinBound",
          # "v2_ignoreGlia_trainedAffs",
-         # "v2_main_trainedAffs_thinBound",
-         # "v2_main_trainedAffs",
-         # "v2_diceAffs_trainedAffs_thinBound",
-         # "v2_diceAffs_trainedAffs",
+         "v2_ignoreGlia_trainedAffs_maxMinNew",
      ],
      [
-         "trainedAffs_from_patch.json",
          # "trainedAffs_from_patch.json",
          # "trainedAffs_from_patch.json",
-         # "trainedAffs_from_patch.json",
-         # "dice_affs.json",
-         # "dice_affs.json",
+         "probs_from_patch.json",
      ],
      [
-         "True",
          # "True",
          # "True",
-         # "True",
-         # "True",
-         # "True",
+         "False",
      ],
      ),
 
     (["--config.postproc_config.save_name_postfix",
       "--config.volume_config.ignore_glia"],
      [
-         "fullGT",
+         "combinedAffs_fullGT",
          # "ignoreGlia"
      ],
      [
          "False",
          # "True"
      ]),
-    # (["--config.postproc_config.iterated_options.preset"], ["MEAN"]),
-    # (["--config.postproc_config.iterated_options.sample"], [
-    #     ["B", "C", "A"],
-    #     ["0", "1", "2"],
-    #     # "C"
-    # ]),
+    (["--update0"], ["GASP_from_pix.yml"]),
+    # (["--config.postproc_config.iterated_options.preset"], ["DTWS"]),
+    (["--config.postproc_config.iterated_options.sample"], [
+        # ["B", "C", "A"],
+        # ["0", "1", "2"],
+        "B",
+        # "C", "A",
+        # "0", "1", "2",
+    ]),
 ]
-
 
 # -----------------------
 # Compose list of commands to execute:

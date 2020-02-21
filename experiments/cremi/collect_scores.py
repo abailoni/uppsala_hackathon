@@ -14,17 +14,30 @@ from segmfriends.utils.various import yaml2dict
 project_dir = os.path.join(get_trendytukan_drive_path(),"projects/pixel_embeddings")
 
 EXP_NAMES = [
-    "v2_main_trainedAffs_thinBound",
-    "v2_diceAffs_trainedAffs_thinBound",
-    "v2_ignoreGlia_trainedAffs_thinBound",
-    "v2_ignoreGlia_trainedAffs",
-    "v2_diceAffs_trainedAffs",
-    "v2_main_trainedAffs"
+    # "v2_ignoreGlia_trainedAffs_thinBound",
+    # "v2_ignoreGlia_trainedAffs",
+    "v2_ignoreGlia_trainedAffs_nilpotentMin",
+    # "v2_ignoreGlia_trainedAffs_minMaxAffs",
+    # "v2_ignoreGlia_trainedAffs",
+    # "v2_diceAffs_trainedAffs",
+    # "v2_main_trainedAffs"
 ]
+
+REQUIRED_STRINGS = [
+    # "smallBox"
+]
+
+EXCLUDE_STRINGS = [
+    # "gen_HC_DTWS",
+]
+
+INCLUDE_STRINGS = [
+]
+
 
 LATEX_OUTPUT = False
 
-sorting_column_idx = 0
+sorting_column_idx = 1
 
 # -------------------------------------------------------
 
@@ -99,6 +112,22 @@ for exp_name in EXP_NAMES:
             filename = item
             if not filename.endswith(".yml") or filename.startswith("."):
                 continue
+            skip = False
+            for char in REQUIRED_STRINGS:
+                if char not in filename:
+                    skip = True
+                    break
+            if not skip:
+                for excl_string in EXCLUDE_STRINGS:
+                    if excl_string in filename:
+                        skip = True
+                        break
+                for excl_string in INCLUDE_STRINGS:
+                    if excl_string in filename:
+                        skip = False
+                        break
+            if skip:
+                continue
             result_file = os.path.join(scores_path, filename)
             config = yaml2dict(result_file)
 
@@ -110,6 +139,7 @@ for exp_name in EXP_NAMES:
 
 
             for j, key in enumerate(keys_to_collect):
+                # print(result_file)
                 cell_value = return_recursive_key_in_dict(config, key)
                 # if key[-1] == 'adapted-rand':
                 #     new_table_entrance.append("{0:.{prec}{type}}".format(1. - cell_value, prec=nb_flt_digits[j],
@@ -128,6 +158,16 @@ for exp_name in EXP_NAMES:
 #         collected_array[r, c] = collected_results[r][c]
 
 # collected_results = np.array([np.array(item, dtype="str") for item in collected_results], dtype="str")
+
+if len(collected_results) == 0:
+    raise ValueError("No scores collected")
+
+if any(len(row) != len(collected_results[0]) for row in collected_results):
+    # Collapse first columns?
+    for i, row in enumerate(collected_results):
+        collected_results[i] = ['__'.join(row[:nb_first_columns])] + row[nb_first_columns:]
+    nb_first_columns = 1
+
 collected_results = np.array(collected_results, dtype="str")
 collected_results = collected_results[collected_results[:, sorting_column_idx + nb_first_columns].argsort()]
 ID = np.random.randint(255000)

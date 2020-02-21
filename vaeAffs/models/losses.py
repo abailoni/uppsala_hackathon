@@ -284,7 +284,7 @@ class MultiLevelAffinityLoss(nn.Module):
         self.train_glia_mask = train_glia_mask
 
     def forward(self, predictions, all_targets):
-        # predictions = [predictions] if not isinstance(predictions, (list, tuple)) else predictions
+        predictions = [predictions] if not isinstance(predictions, (list, tuple)) else predictions
         all_targets = [all_targets] if not isinstance(all_targets, (list, tuple)) else all_targets
 
         loss = 0
@@ -378,6 +378,7 @@ class PatchBasedLoss(nn.Module):
                  boundary_label=None,
                  glia_label=None,
                  train_patches_on_glia=False,
+                 fix_bug_multiscale_patches=False,
                  defected_label=None,
                  IoU_loss_kwargs=None,
                  model_kwargs=None, devices=(0,1)):
@@ -392,6 +393,7 @@ class PatchBasedLoss(nn.Module):
             raise ValueError
 
         self.apply_checkerboard = apply_checkerboard
+        self.fix_bug_multiscale_patches = fix_bug_multiscale_patches
         self.ignore_label = ignore_label
         self.boundary_label = boundary_label
         self.glia_label = glia_label
@@ -452,21 +454,31 @@ class PatchBasedLoss(nn.Module):
         if self.train_glia_mask:
             assert self.glia_label is not None
 
-            glia_pred = all_predictions.pop(-1)
+            frg_kwargs = self.model.models[-1].foreground_prediction_kwargs
+            if frg_kwargs is None:
+                # Legacy:
+                nb_glia_preds = 1
+                nb_glia_targets = [0]
+            else:
+                nb_glia_preds = len(frg_kwargs)
+                nb_glia_targets = [frg_kwargs[dpth]["nb_target"] for dpth in frg_kwargs]
 
-            # TODO: generalize to multiple targets and downscaling factors
-            glia_target = (target[0][:, [1]] == self.glia_label).float()
-            valid_mask = (target[0][:, [0]] != self.ignore_label).float()
+            all_glia_preds = all_predictions[-nb_glia_preds:]
+            all_predictions = all_predictions[:-nb_glia_preds]
 
-            glia_target = auto_crop_tensor_to_shape(glia_target, glia_pred.shape)
-            valid_mask = auto_crop_tensor_to_shape(valid_mask, glia_pred.shape)
-            glia_pred = glia_pred * valid_mask
-            glia_target = glia_target * valid_mask
-            with warnings.catch_warnings(record=True) as w:
-                loss_glia = data_parallel(self.loss, (glia_pred, glia_target), self.devices).mean()
-            loss = loss + loss_glia
-            log_image("glia_target", glia_target)
-            log_image("glia_pred", glia_pred)
+            for counter, glia_pred, nb_tar in zip(range(len(all_glia_preds)), all_glia_preds, nb_glia_targets):
+                glia_target = (target[nb_tar][:, [1]] == self.glia_label).float()
+                valid_mask = (target[nb_tar][:, [0]] != self.ignore_label).float()
+
+                glia_target = auto_crop_tensor_to_shape(glia_target, glia_pred.shape)
+                valid_mask = auto_crop_tensor_to_shape(valid_mask, glia_pred.shape)
+                glia_pred = glia_pred * valid_mask
+                glia_target = glia_target * valid_mask
+                with warnings.catch_warnings(record=True) as w:
+                    loss_glia = data_parallel(self.loss, (glia_pred, glia_target), self.devices).mean()
+                loss = loss + loss_glia
+                log_image("glia_target_d{}".format(counter), glia_target)
+                log_image("glia_pred_d{}".format(counter), glia_pred)
             log_scalar("loss_glia", loss_glia)
         else:
             glia_pred = all_predictions.pop(-1)
@@ -513,7 +525,10 @@ class PatchBasedLoss(nn.Module):
 
             central_shape = tuple(kwargs.get("central_shape", [1,3,3]))
             max_random_crop = tuple(kwargs.get("max_random_crop", [0,5,5]))
-            real_patch_shape = tuple(pt*fc for pt, fc in zip(patch_shape_input, patch_dws_fact))
+            if self.fix_bug_multiscale_patches:
+                real_patch_shape = tuple(pt * fc - fc + 1 for pt, fc in zip(patch_shape_input, patch_dws_fact))
+            else:
+                real_patch_shape = tuple(pt*fc for pt, fc in zip(patch_shape_input, patch_dws_fact))
 
             full_target_shape = gt_segm.shape[-3:]
             assert all([i <= j for i, j in zip(real_patch_shape, full_target_shape)]), "Real-sized patch is too large!"

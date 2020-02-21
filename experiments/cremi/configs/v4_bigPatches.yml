@@ -31,7 +31,7 @@ loaders:
       p_missing_slice: 0.006 #0.006
       p_low_contrast: 0.000
       p_deformed_slice: 0.000
-      p_artifact_source: 0.001 # 0.006
+      p_artifact_source: 0.006 # 0.006
       deformation_mode: 'compress'
       deformation_strength: 16
       artifact_source:
@@ -252,23 +252,11 @@ loaders:
       # Sliding window size
       window_size: [14, 352, 352]  # 288
       stride: [40, 40, 40] # Not needed anymore, automatically deduced
-#      data_slice: ':,:,:'
       data_slice: ':,:,:'
+#      data_slice: ':40,:,:'
       padding_mode: "reflect"
-      padding:
-        A+: [[0,0], [0,0], [0,0]]
-        B+: [[0,0], [0,0], [0,0]]
-        C+: [[0,0], [0,0], [0,0]]
-        A: *dataset_padding
-        B: *dataset_padding
-        C: *dataset_padding
-        0: *dataset_padding
-        1: *dataset_padding
-        2: *dataset_padding
+      padding: *dataset_padding
       path:
-        A+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleA+_cropped.h5'
-        B+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleB+_cropped.h5'
-        C+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleC+_cropped.h5'
         A: '$HCI_HOME/datasets/new_cremi/sampleA.h5'
         B: '$HCI_HOME/datasets/new_cremi/sampleB.h5'
         C: '$HCI_HOME/datasets/new_cremi/sampleC.h5'
@@ -295,7 +283,6 @@ model:
   model_class: embeddingutils.models.unet.GeneralizedStackedPyramidUNet3D
 #  model_class: vaeAffs.models.compute_IoU.ProbabilisticBoundaryFromEmb
   model_kwargs:
-    loadfrom: "$HCI_HOME/pyCharm_projects/uppsala_hackathon/experiments/cremi/runs/v2_main_b/checkpoint.pytorch"
 
     nb_stacked: 1 # Number of stacked models
     # If only model 1 is trained, then model 0 is run in inference mode. Atm there is no backprop between models:
@@ -323,14 +310,20 @@ model:
         output_fmaps: 32
         res_blocks_3D: [[True], [True], [True], [True]]
         res_blocks_decoder_3D: [[True], [True], [True], [True]]
-        encoder_fmaps: [32, 64, 128]
-        decoder_fmaps: [32, 64, 128, 256]
+        encoder_fmaps: [16, 64, 128]
+        decoder_fmaps: [64, 64, 128, 256]
         pre_kernel_size_res_block: [3,3,3]
         add_final_conv_in_res_block: False
         add_embedding_heads: True
         keep_raw: True
         add_foreground_prediction_module: True
+        foreground_prediction_kwargs:
+          0:
+            nb_target: 0
+          1:
+            nb_target: 1
         number_multiscale_inputs: 2
+        fix_patch_ordering: True
       0:
         in_channels: 1
         scale_factor:
@@ -345,23 +338,23 @@ model:
         nb_patch_nets: 5
         patchNet_kwargs:
           global:
-            latent_variable_size: 32
             legacy: False
             feature_maps: 16
             downscaling_factor: [1, 1, 1] # Inside patchNet, to reduce memory
             precrop_pred: "2:-2,:,:" # Pre-crop part of prediction to avoid training on borders
           0:
+            latent_variable_size: 16
             depth_level: 0
             nb_target: 0
             #            skip_standard_patch_loss: True
-            patch_size: [5,7,7]
+            patch_size: [1,5,5]
             patch_dws_fact: [1, 1, 1]
             pred_dws_fact: [1, 1, 1]
             central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
             patch_stride: # in the original resolution (of the target)
               - [2, 7, 7]
             limit_nb_patches: # 'factor', 'number'
-              - [120, 'number']
+              - [130, 'number']
             max_random_crop: [1, 7, 7] # in the donwscaled res
             ASPP_kwargs:
               use_ASPP: False
@@ -374,59 +367,39 @@ model:
           #              min_stride: [2, 9, 9] # If offset is 0 along a given dim, this stride is applied
           #              subcrop_shape: [0, 50, 50]
           1:
+            latent_variable_size: 64
             depth_level: 0
             nb_target: 0
             #            skip_standard_patch_loss: True
-            patch_size: [5,7,7]
+            patch_size: [5,19,19]
             patch_dws_fact: [1, 4, 4] # With respect to the given target!
             pred_dws_fact: [1, 1, 1]
             central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
             patch_stride: # in the original resolution (of the target)
               - [2, 7, 7]
             limit_nb_patches: # 'factor', 'number'
-              - [120, 'number']
+              - [130, 'number']
             max_random_crop: [1, 7, 7] # in the donwscaled res
             ASPP_kwargs:
               use_ASPP: False
-              inner_planes: 32
+              inner_planes: 64
               #              dilations: [[1,8,8], [1,16,16], [1,24,24], [2,8,8], [2,16,16]]
               dilations: []
           2:
-            depth_level: 0
-            nb_target: 0
-            #            skip_standard_patch_loss: True
-            patch_size: [5,7,7]
-            patch_dws_fact: [1, 8, 8] # With respect to the given target!
-            pred_dws_fact: [1, 1, 1]
-            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
-            patch_stride: # in the original resolution (of the target)
-              - [2, 7, 7]
-            limit_nb_patches: # 'factor', 'number'
-              - [120, 'number']
-            max_random_crop: [1, 7, 7] # in the donwscaled res
-            ASPP_kwargs:
-              use_ASPP: False
-              inner_planes: 32
-#              dilations: [[1,8,8], [1,16,16], [1,24,24], [2,8,8], [2,16,16]]
-              dilations: []
-          #            IoU_kwargs:
-          #              nb_random_IoU: 10
-          #              min_random_offset: [0, 1, 1] # In patch-pixels
-          #              min_stride: [1, 7, 7] # If offset is 0 along a given dim, this stride is applied
-          3:
+            latent_variable_size: 64
             depth_level: 1
             nb_target: 1
             #            skip_standard_patch_loss: True
-            patch_size: [5,7,7]
+            patch_size: [5,19,19]
             patch_dws_fact: [1, 2, 2] # With respect to the given target!
             pred_dws_fact: [1, 1, 1]
             central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
             patch_stride: [2, 7, 7] # in the original resolution (of the target)
-            limit_nb_patches: [120, 'number'] # 'factor', 'number'
+            limit_nb_patches: [240, 'number'] # 'factor', 'number'
             max_random_crop: [1, 4, 4] # in the donwscaled res!!
             ASPP_kwargs:
               use_ASPP: False
-              inner_planes: 32
+              inner_planes: 64
 #              dilations: [[1,2,2], [1,6,6], [2,2,2]]
               dilations: []
           #            IoU_kwargs:
@@ -434,16 +407,17 @@ model:
           #              min_random_offset: [0, 2, 2] # In patch-pixels
           #              subcrop_shape: [0, 50, 50]
           #             min_stride: [2, 9, 9] # If offset is 0 along a given dim, this stride is applied
-          4:
+          3:
+            latent_variable_size: 64
             depth_level: 2
             nb_target: 2
             #            skip_standard_patch_loss: True
             patch_dws_fact: [1, 2, 2] # With respect to the given target!
             pred_dws_fact: [1, 1, 1] # With respect to the given target!
-            patch_size: [5,7,7]
+            patch_size: [5,19,19]
             central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
             patch_stride: [2, 7, 7] # in the original resolution (of the target)
-            limit_nb_patches: [90, 'number'] # 'factor', 'number'
+            limit_nb_patches: [240, 'number'] # 'factor', 'number'
 #            limit_nb_patches: [0.25, 'factor'] # 'factor', 'number'
             max_random_crop: [1, 2, 2] # in the donwscaled res!!
             ASPP_kwargs:
@@ -473,6 +447,7 @@ trainer:
       boundary_label: 2
       defected_label: 3
       train_glia_mask: True
+      train_patches_on_glia: True
 
 
 
@@ -558,8 +533,8 @@ firelight:
             input: ['prediction', index: 0]
         - PcaVisualizer:
             input: ['prediction', index: 1]
-        - PcaVisualizer:
-            input: ['prediction', index: 2]
+#        - PcaVisualizer:
+#            input: ['prediction', index: 2]
 
 
   glia_mask:
@@ -584,11 +559,11 @@ firelight:
 #            input: ['inputs', index: 0, W: "8:-8", H: "8:-8"]
 #            cmap: gray
         - IdentityVisualizer:
-            input: ['glia_target', C: 0]
+            input: ['glia_target_d1', C: 0]
             cmap: gray
             value_range: [0,1]
         - IdentityVisualizer:
-            input: ['glia_pred', C: 0]
+            input: ['glia_pred_d1', C: 0]
             cmap: gray
             value_range: [0,1]
 
@@ -619,7 +594,7 @@ firelight:
 
 #        # visualize raw input
         - PcaVisualizer:
-            input: ['prediction', index: 3]
+            input: ['prediction', index: 2]
 #  pcaEmbeddings_lvl2:
 #    ImageGridVisualizer:
 #
@@ -721,77 +696,77 @@ firelight:
 #            input: ['encoder_layer_depth_base']
 
 
-#  rdmPatches_l0:
-#    ImageGridVisualizer:
-#      input_mapping:
-#        global: [B: ":", D: ":"]
-#
-#      pad_width: 1  # width of the border between images in pixels
-#      pad_value: .2  # intensity of the border pixels
-#      upsampling_factor: 5  # the whole grid is upsampled by this factor
-#
-#      row_specs: ['H', 'S', 'D', 'C', 'B']
-#      column_specs: ['W', 'V']
-#
-#      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
-#      visualizers:
-#
-#        - OverlayVisualizer:
-#            visualizers:
-#              - SegmentationVisualizer:
-#                  input: ['gt_label_patch_l0']
-#                  background_label: 0
-#                  opacity: 0.5 # Make output only partially opaque.
-#              - IdentityVisualizer:
-#                  input: ['raw_patch_l0']
-#                  cmap: gray
-##        - IdentityVisualizer:
-##            input: ['raw_patch_l0']
-##            cmap: gray
+  rdmPatches_l0:
+    ImageGridVisualizer:
+      input_mapping:
+        global: [B: ":", D: ":"]
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 5  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'D', 'C', 'B']
+      column_specs: ['W', 'V']
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        - OverlayVisualizer:
+            visualizers:
+              - SegmentationVisualizer:
+                  input: ['gt_label_patch_l0']
+                  background_label: 0
+                  opacity: 0.5 # Make output only partially opaque.
+              - IdentityVisualizer:
+                  input: ['raw_patch_l0']
+                  cmap: gray
 #        - IdentityVisualizer:
-#            input: ['gt_mask_patch_l0']
+#            input: ['raw_patch_l0']
 #            cmap: gray
-#            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['gt_mask_patch_l0']
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['pred_patch_l0']
+            cmap: gray
+            value_range: [0,1]
+
+  rdmPatches_l1:
+    ImageGridVisualizer:
+      input_mapping:
+        global: [B: ":", D: ":"]
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 1  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'D', 'C', 'B']
+      column_specs: ['W', 'V']
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        - OverlayVisualizer:
+            visualizers:
+              - SegmentationVisualizer:
+                  input: ['gt_label_patch_l1']
+                  background_label: 0
+                  opacity: 0.5 # Make output only partially opaque.
+              - IdentityVisualizer:
+                  input: ['raw_patch_l1']
+                  cmap: gray
 #        - IdentityVisualizer:
-#            input: ['pred_patch_l0']
+#            input: ['raw_patch_l1']
 #            cmap: gray
-#            value_range: [0,1]
-#
-#  rdmPatches_l1:
-#    ImageGridVisualizer:
-#      input_mapping:
-#        global: [B: ":", D: ":"]
-#
-#      pad_width: 1  # width of the border between images in pixels
-#      pad_value: .2  # intensity of the border pixels
-#      upsampling_factor: 1  # the whole grid is upsampled by this factor
-#
-#      row_specs: ['H', 'S', 'D', 'C', 'B']
-#      column_specs: ['W', 'V']
-#
-#      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
-#      visualizers:
-#
-#        - OverlayVisualizer:
-#            visualizers:
-#              - SegmentationVisualizer:
-#                  input: ['gt_label_patch_l1']
-#                  background_label: 0
-#                  opacity: 0.5 # Make output only partially opaque.
-#              - IdentityVisualizer:
-#                  input: ['raw_patch_l1']
-#                  cmap: gray
-##        - IdentityVisualizer:
-##            input: ['raw_patch_l1']
-##            cmap: gray
-#        - IdentityVisualizer:
-#            input: ['gt_mask_patch_l1']
-#            cmap: gray
-#            value_range: [0,1]
-#        - IdentityVisualizer:
-#            input: ['pred_patch_l1']
-#            cmap: gray
-#            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['gt_mask_patch_l1']
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['pred_patch_l1']
+            cmap: gray
+            value_range: [0,1]
 #
 #  rdmPatches_l2:
 #    ImageGridVisualizer:

@@ -1,0 +1,9 @@
+postproc_config:
+  # ------------------------------
+  # Generic options
+  # ------------------------------
+  # TODO: Create a test-setup?
+  compute_scores: False
+  restrict_to_GT_bbox: True
+  prepare_submission: True
+

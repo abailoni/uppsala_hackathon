@@ -1,0 +1,62 @@
+shortcuts:
+  z_size: &z_size 12
+  xy_size: &xy_size 288
+  xy_size_precrop: &xy_size_precrop 318
+
+
+loaders:
+  general:
+    defect_augmentation_config:
+      artifact_source:
+        min_masking_ratio: .5
+        slicing_config:
+          window_size:
+            - 1
+            - *xy_size_precrop
+            - *xy_size_precrop
+    # Configuration for the master dataset.
+    master_config:
+      random_slides:
+        shape_after_slide:
+          - *xy_size
+          - *xy_size
+
+  train:
+
+    slicing_config:
+      window_size:
+        A:
+          - *z_size
+          - *xy_size_precrop
+          - *xy_size_precrop
+        B:
+          - *z_size
+          - *xy_size_precrop
+          - *xy_size_precrop
+        C:
+          - *z_size
+          - *xy_size_precrop
+          - *xy_size_precrop
+
+  val:
+    slicing_config:
+      window_size:
+        B:
+          - *z_size
+          - *xy_size_precrop
+          - *xy_size_precrop
+        C:
+          - *z_size
+          - *xy_size_precrop
+          - *xy_size_precrop
+
+
+
+  infer:
+    volume_config:
+      window_size:
+        - *z_size
+        - *xy_size
+        - *xy_size
+
+
