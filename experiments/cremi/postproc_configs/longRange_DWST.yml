@@ -1,0 +1,6 @@
+postproc_config:
+  extra_presets:
+    - "simple_WSDT"
+    - "longRangeEdges"
+  iterated_options:
+    edge_prob: 0.1

@@ -4,6 +4,18 @@ shortcuts:
   xy_size_precrop: &xy_size_precrop 318
 
 
+#inference:
+#  crop_prediction: # How much I crop the predicted tensor: (local_crop in the output resolution)
+#    - [2,2]
+#    - [24,24]
+#    - [24,24]
+
+model:
+  model_kwargs:
+    slicing_config:
+      window_size: [1,240,240]
+
+
 loaders:
   general:
     defect_augmentation_config:

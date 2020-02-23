@@ -1,0 +1,10 @@
+postproc_config:
+  save_name_postfix: "directAffs_noGliaGT"
+  iterated_options:
+    crop_slice:
+      '0': "12:24,:,:,:"
+      '1': "12:24,:,:,:"
+      '2': "12:24,:,:,:"
+      C: "12:24,:,:,:"
+
+

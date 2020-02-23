@@ -7,9 +7,9 @@ from copy import deepcopy
 
 type = "infer"
 # CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
-CUDA = "CUDA_VISIBLE_DEVICES=2,3,4,5,6,7"
+# CUDA = "CUDA_VISIBLE_DEVICES=2,3,4,5,6,7"
 # CUDA = "CUDA_VISIBLE_DEVICES=0,4,5,6"
-# CUDA = "CUDA_VISIBLE_DEVICES=0"
+CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,5"
 
 # -----------
 # Old?
@@ -105,52 +105,156 @@ CUDA = "CUDA_VISIBLE_DEVICES=2,3,4,5,6,7"
 #     ]),
 # ]
 
+# # -----------
+# # Infer new prob affs V2
+# # -----------
+#
+# list_of_args = [
+#     (["--"], ["deb_infer"]),
+#     (["--inherit"], [
+#         "newCremi_v2_main.yml",
+#       ]),
+#     (["--update0",
+#       # "--config.model.model_kwargs.path_backbone"
+#       ], [
+#         # "newCremi_v2_trainAffsFromPatches.yml///main",
+#         "newCremi_v2_ignoreGlia.yml///ignoreGlia",
+#         # "newCremi_v2_diceAffs.yml///diceAffs",
+#     ],
+#     #  [
+#     #     # "RUNS__HOME/../runs_pre_feb_20/v2_main_b/checkpoint.pytorch",
+#     #     # "RUNS__HOME/../runs_pre_feb_20/v2_ignoreGlia/checkpoint.pytorch",
+#     #     "RUNS__HOME/../runs_pre_feb_20/v2_diceAffs_b/checkpoint.pytorch",
+#     # ]
+#      ),
+#
+#     (["--config.model.model_kwargs.loadfrom", "--update1"], [
+#         "RUNS__HOME/../runs_pre_feb_20/v2_ignoreGlia/checkpoint.pytorch///_maxMinNew",
+#     ], [
+#         "newCremi_v2_inferAffsFromPatches.yml",
+#     ]),
+#     (["--config.name_experiment"], [ ("v2_{}_trainedAffs{}", "2:0", "3:0") ]),
+#     (["--config.loaders.infer.loader_config.batch_size"], ["6"]),
+#     # (["--config.loaders.infer.loader_config.batch_size"], ["1"]),
+#     (["--config.loaders.infer.loader_config.num_workers"], ["20"]),
+#     (["--config.loaders.infer.name"], [
+#         "B",
+#         # "C",
+#         # "A",
+#         # "0",
+#         # "1",
+#         # "2",
+#         # "A+",
+#         # "B+",
+#         # "C+",
+#     ]),
+# ]
+
+
 # -----------
-# Infer new prob affs
+# Infer new prob affs V3
 # -----------
+CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7"
 
 
 list_of_args = [
     (["--"], ["deb_infer"]),
     (["--inherit"], [
-        "newCremi_v2_main.yml",
+        "v3_main.yml",
       ]),
-    (["--update0",
+    (["--update0", "--config.model.model_kwargs.loadfrom", "--update2"
       # "--config.model.model_kwargs.path_backbone"
       ], [
-        # "newCremi_v2_trainAffsFromPatches.yml///main",
-        "newCremi_v2_ignoreGlia.yml///ignoreGlia",
-        # "newCremi_v2_diceAffs.yml///diceAffs",
-    ],
-    #  [
-    #     # "RUNS__HOME/../runs_pre_feb_20/v2_main_b/checkpoint.pytorch",
-    #     # "RUNS__HOME/../runs_pre_feb_20/v2_ignoreGlia/checkpoint.pytorch",
-    #     "RUNS__HOME/../runs_pre_feb_20/v2_diceAffs_b/checkpoint.pytorch",
-    # ]
-     ),
-
-    (["--config.model.model_kwargs.loadfrom", "--update1"], [
-        "RUNS__HOME/../runs_pre_feb_20/v2_ignoreGlia/checkpoint.pytorch///_maxMinNew",
+        # "v3_noMultiScale.yml///v3_noMultiScale",
+        # "v3_diceAffs.yml///v3_diceAffs",
+        # "v3_diceAffs.yml///v3_diceAffs_noTrainGlia",
+        # "empty_config.yml///v3_main",
+        # "v3_main_noTrainGlia.yml///v3_main_noTrainGlia",
+        "v3_noMultiScale.yml///v3_noMultiScale_small",
+    ],[
+        # "RUNS__HOME/v3_noMultiScale/checkpoint.pytorch///avgLocVar",
+        # "RUNS__HOME/v3_diceAffs_b/checkpoint.pytorch///direct",
+        # "RUNS__HOME/v3_diceAffs_noTrainGlia_b/checkpoint.pytorch///direct",
+        # "RUNS__HOME/v3_main_b/checkpoint.pytorch",
+        # "RUNS__HOME/v3_main_noTrainGlia_b/checkpoint.pytorch",
+        "RUNS__HOME/v3_noMultiScale_small/checkpoint.pytorch",
     ], [
-        "newCremi_v2_inferAffsFromPatches.yml",
+        # "empty_config.yml",
+        # "empty_config.yml",
+        # "empty_config.yml",
+        # "empty_config.yml",
+        "v3_restrictBatchVol.yml",
+    ]
+     ),
+    (["--update1"], [
+        # "empty_config.yml///_direct",
+        # "empty_config.yml",
+        # "v3_inferAffsFromPatches.yml///_avgDirectVar",
+        "v3_inferAffsFromPatches_b.yml///_avgDirectVarCropped",
     ]),
-    (["--config.name_experiment"], [ ("v2_{}_trainedAffs{}", "2:0", "3:0") ]),
-    (["--config.loaders.infer.loader_config.batch_size"], ["6"]),
+    (["--config.name_experiment"], [ ("{}{}", "2:0", "3:0") ]),
+    (["--config.loaders.infer.loader_config.batch_size"], ["8"]),
     # (["--config.loaders.infer.loader_config.batch_size"], ["1"]),
     (["--config.loaders.infer.loader_config.num_workers"], ["20"]),
     (["--config.loaders.infer.name"], [
-        "B",
-        # "C",
+        "C",
+        # "B",
         # "A",
-        # "0",
-        # "1",
-        # "2",
+        "0",
+        "1",
+        "2",
         # "A+",
         # "B+",
         # "C+",
     ]),
 ]
 
+# CUDA = "CUDA_VISIBLE_DEVICES=1,3,4,5,6,7"
+# CUDA = "CUDA_VISIBLE_DEVICES=0"
+#
+# list_of_args = [
+#     (["--"], ["deb_infer"]),
+#     (["--inherit"], [
+#         "v3_main.yml",
+#       ]),
+#     (["--update0", "--config.model.model_kwargs.loadfrom", "--update1"
+#       # "--config.model.model_kwargs.path_backbone"
+#       ], [
+#         "v3_noMultiScale.yml///v3_noMultiScale",
+#         # "v3_diceAffs.yml///v3_diceAffs",
+#         # "v3_diceAffs.yml///v3_diceAffs_noTrainGlia",
+#         # "empty_config.yml///v3_main",
+#         # "v3_main_noTrainGlia.yml///v3_main_noTrainGlia",
+#     ],[
+#         "RUNS__HOME/v3_noMultiScale/checkpoint.pytorch///maxMinNew",
+#         # "RUNS__HOME/v3_diceAffs_b/checkpoint.pytorch///direct",
+#         # "RUNS__HOME/v3_diceAffs_noTrainGlia_b/checkpoint.pytorch///direct",
+#         # "RUNS__HOME/v3_main_b/checkpoint.pytorch///avgDirectVar",
+#         # "RUNS__HOME/v3_main_noTrainGlia_b/checkpoint.pytorch///avgDirectVar",
+#     ], [
+#         "newCremi_v2_inferGlia.yml",
+#         # "newCremi_v2_inferGlia.yml",
+#         # "newCremi_v2_inferGlia.yml",
+#         # "newCremi_v2_inferGlia.yml",
+#         # "newCremi_v2_inferGlia.yml",
+#     ]
+#      ),
+#     (["--config.name_experiment"], [ ("{}_{}", "2:0", "2:1") ]),
+#     (["--config.loaders.infer.loader_config.batch_size"], ["1"]),
+#     # (["--config.loaders.infer.loader_config.batch_size"], ["1"]),
+#     (["--config.loaders.infer.loader_config.num_workers"], ["20"]),
+#     (["--config.loaders.infer.name"], [
+#         "B",
+#         "C",
+#         "A",
+#         # "0",
+#         # "1",
+#         # "2",
+#         # "A+",
+#         # "B+",
+#         # "C+",
+#     ]),
+# ]
 
 
 

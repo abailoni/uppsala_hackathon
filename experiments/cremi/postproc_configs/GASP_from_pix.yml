@@ -10,7 +10,6 @@ postproc_config:
   connected_components_on_final_segm: False
   overwrite_prev_files: True
   extra_presets: []
-#  extra_presets: ["DTWS"]
 
   WSDT_kwargs:
     intersect_with_boundary_pixels: True
@@ -25,9 +24,6 @@ postproc_config:
   # ------------------------------
   # Iterated options (from each combination of the below, a segm is generated):
   # ------------------------------
-  nb_threads: 4
-  nb_thread_pools: 2
-
   iterated_options:
 #    preset: ["MutexWatershed", "MEAN"]
     preset: ["MutexWatershed"]
@@ -37,12 +33,4 @@ postproc_config:
 #    sample: ["A+"]
 #    sample: ["A+", "B+", "C+"]
     edge_prob: 0.1
-    noise_factor: 0.
-    local_attraction: False
 
-    crop_slice: "16:,:,:,:"
-#      A: [":,:,:,:"]
-#      B:
-#      C: ":,:,:,:"
-
-    sub_crop_slice: ":,:,:,:"

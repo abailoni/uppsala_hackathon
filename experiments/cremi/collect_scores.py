@@ -14,21 +14,20 @@ from segmfriends.utils.various import yaml2dict
 project_dir = os.path.join(get_trendytukan_drive_path(),"projects/pixel_embeddings")
 
 EXP_NAMES = [
-    # "v2_ignoreGlia_trainedAffs_thinBound",
-    # "v2_ignoreGlia_trainedAffs",
-    "v2_ignoreGlia_trainedAffs_nilpotentMin",
-    # "v2_ignoreGlia_trainedAffs_minMaxAffs",
-    # "v2_ignoreGlia_trainedAffs",
-    # "v2_diceAffs_trainedAffs",
-    # "v2_main_trainedAffs"
+    "v3_main_avgDirectVar",
+    "v3_main_avgDirectVarCropped",
+    "v3_main_noTrainGlia_avgDirectVar",
+    "v3_diceAffs_noTrainGlia_direct",
+    "v3_main_noTrainGlia_avgDirectVarCropped",
+    "v3_diceAffs_direct",
 ]
 
 REQUIRED_STRINGS = [
-    # "smallBox"
+    "2__"
 ]
 
 EXCLUDE_STRINGS = [
-    # "gen_HC_DTWS",
+    "longRangeEdges",
 ]
 
 INCLUDE_STRINGS = [
@@ -101,6 +100,7 @@ collected_results = []
 #             new_filename = new_filename.replace("_ignoreGlia.", "__ignoreGlia.")
 #             shutil.move(result_file, new_filename)
 
+max_nb_columns = 0
 
 for exp_name in EXP_NAMES:
     os.path.join(project_dir, exp_name)
@@ -136,7 +136,17 @@ for exp_name in EXP_NAMES:
             new_table_entrance = [exp_name] + \
                                  ["{}".format(spl) for spl in filename.replace(".yml", "").split("__")]
             nb_first_columns = len(new_table_entrance)
-
+            if nb_first_columns > max_nb_columns:
+                # Add empty columns to all previous rows:
+                cols_to_add = nb_first_columns - max_nb_columns
+                for i, row in enumerate(collected_results):
+                    collected_results[i] = row[:max_nb_columns] + ["" for _ in range(cols_to_add)] + \
+                                           row[max_nb_columns:]
+                max_nb_columns = nb_first_columns
+            elif nb_first_columns < max_nb_columns:
+                # Add empty columns only to this row:
+                cols_to_add = max_nb_columns - nb_first_columns
+                new_table_entrance += ["" for _ in range(cols_to_add)]
 
             for j, key in enumerate(keys_to_collect):
                 # print(result_file)
@@ -161,15 +171,15 @@ for exp_name in EXP_NAMES:
 
 if len(collected_results) == 0:
     raise ValueError("No scores collected")
-
-if any(len(row) != len(collected_results[0]) for row in collected_results):
-    # Collapse first columns?
-    for i, row in enumerate(collected_results):
-        collected_results[i] = ['__'.join(row[:nb_first_columns])] + row[nb_first_columns:]
-    nb_first_columns = 1
+assert all(len(row) == len(collected_results[0]) for row in collected_results)
+# if any(len(row) != len(collected_results[0]) for row in collected_results):
+#     # Collapse first columns?
+#     for i, row in enumerate(collected_results):
+#         collected_results[i] = ['__'.join(row[:nb_first_columns])] + row[nb_first_columns:]
+#     nb_first_columns = 1
 
 collected_results = np.array(collected_results, dtype="str")
-collected_results = collected_results[collected_results[:, sorting_column_idx + nb_first_columns].argsort()]
+collected_results = collected_results[collected_results[:, sorting_column_idx + max_nb_columns].argsort()]
 ID = np.random.randint(255000)
 print(ID)
 from segmfriends.utils.various import check_dir_and_create

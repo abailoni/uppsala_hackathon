@@ -1102,8 +1102,9 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
 
                         def unfold_old_statistics(old_statistic, patch_shp, patch_dws):
                             if old_statistic.ndimension() > 3:
-                                old_statistic = old_statistic.squeeze()
-                            assert old_statistic.ndimension() == 3
+                                assert old_statistic.ndimension() == 5
+                                old_statistic = old_statistic.squeeze(0)
+                                old_statistic = old_statistic.squeeze(0)
 
                             real_patch_shp = tuple(shp + (shp-1) * (dws-1) for shp, dws in zip(patch_shp, patch_dws))
 
@@ -1146,13 +1147,25 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
                         mean_old_unfolded = unfold_old_statistics(boundary_stats[2:3, nb_off:nb_off + 1][prediction_slice],
                                                                   probs.shape[-3:], patch_dws_fact)
 
-                        boundary_stats[2:3, nb_off:nb_off + 1][prediction_slice] += \
-                            fold_3d((w/wSum_unfolded) * (probs - mean_old_unfolded),
+                        # if torch.isnan(fold_3d((w / wSum_unfolded) * (probs - mean_old_unfolded),
+                        #         output_size_xy, dilation=patch_dws_fact,
+                        #         padding=(0, 0, 0), stride=(1, 1, 1))).sum() != 0:
+                        #     import segmfriends.vis as segm_vis
+                        #     from segmfriends.utils.various import writeHDF5
+                        #     writeHDF5(boundary_stats[0:1,nb_off:nb_off+1][prediction_slice][0,0].cpu().numpy(), "./deb_volume.h5", 'data')
+                        #     raise ValueError
+
+                        # Here we need to check if the division by zero created some nan values and mask them:
+                        new_mean_contribution = fold_3d((w/wSum_unfolded) * (probs - mean_old_unfolded),
                                     output_size_xy, dilation=patch_dws_fact,
                                                 padding=(0, 0, 0), stride=(1, 1, 1))
+                        valid_mean_mask = ~torch.isnan(new_mean_contribution)
+                        boundary_stats[2:3, nb_off:nb_off + 1][prediction_slice][valid_mean_mask] += \
+                            new_mean_contribution[valid_mean_mask]
                         mean_new_unfolded = unfold_old_statistics(
                             boundary_stats[2:3, nb_off:nb_off + 1][prediction_slice],
                             probs.shape[-3:], patch_dws_fact)
+                        assert torch.isnan(mean_new_unfolded).sum() == 0
 
                         # Update M2:
                         boundary_stats[3:4, nb_off:nb_off + 1][prediction_slice] += fold_3d(
@@ -1168,21 +1181,22 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         boundary_stats = boundary_stats[final_crop]
 
         # Compute the actual boundary statistics:
-        valid_mask = (boundary_stats[1] > 0) # Check if the edge was considered at least once
+        valid_mask = (boundary_stats[0] > 0) # Check if the edge was considered at least once
 
-        output_tensor = torch.zeros_like(boundary_stats[:2])
+        output_tensor = torch.zeros_like(boundary_stats[:3])
 
         # Save weighted mean:
         # output_tensor[0][valid_mask] = torch.min(boundary_stats[2][valid_mask], boundary_stats[4][valid_mask])
-        output_tensor[0][valid_mask] = boundary_stats[2][valid_mask]
-        output_tensor[1][valid_mask] = boundary_stats[4][valid_mask]
+        output_tensor[0][valid_mask] = boundary_stats[2][valid_mask] # Weighted average
+        output_tensor[1][valid_mask] = boundary_stats[4][valid_mask] # Directly predicted values
 
-        # # Save weighted standard deviation (with Bessel's correction for reliability weights):
-        # output_tensor[1][valid_mask] = boundary_stats[3][valid_mask] / \
-        #                                (boundary_stats[0][valid_mask] - (boundary_stats[1][valid_mask] / boundary_stats[0][valid_mask]))
+        # Save weighted variance (with Bessel's correction for reliability weights):
+        output_tensor[2][valid_mask] = boundary_stats[3][valid_mask] / \
+                                       (boundary_stats[0][valid_mask] - (boundary_stats[1][valid_mask] / boundary_stats[0][valid_mask]))
 
         # Concatenate:
-        output_tensor = torch.cat([output_tensor[0], output_tensor[1]], dim=0)
+        # output_tensor = torch.cat([output_tensor[0], output_tensor[1]], dim=0)
+        output_tensor = torch.cat([output_tensor[0], output_tensor[1], output_tensor[2]], dim=0)
 
         if self.IoU_on_GPU:
             return output_tensor.unsqueeze(0)

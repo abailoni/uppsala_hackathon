@@ -3,6 +3,10 @@ gen_HC:
   postproc:
     segm_pipeline_type: 'gen_HC'
 
+longRangeEdges:
+  postproc:
+    use_fragmenter: True
+
 gen_HC_pix:
   parent_model: ['gen_HC']
   postproc:

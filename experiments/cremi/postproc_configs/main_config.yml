@@ -69,10 +69,12 @@ postproc_config:
   save_segm: True
   WS_growing: True
   connected_components_on_final_segm: False
-  save_name_postfix: ""
+
+  save_name_postfix: "directAffs_noGliaGT"
+
   overwrite_prev_files: True
-#  extra_presets:
-#    - "simple_WSDT"
+  extra_presets:
+    - "simple_WSDT"
 #    - "gen_HC_DTWS"
 
   save_UCM: False
@@ -89,20 +91,21 @@ postproc_config:
   nb_thread_pools: 3
   nb_iterations: 1
 
+
   iterated_options:
     preset: ["MEAN"]
 #    sample: ["B", "C", "A"]
-#    sample: ["B", "C", "A", "0", "1", "2"]
-    sample: ["A+"]
-#    sample: ["A+", "B+", "C+"]
+    sample: ["C", "0", "1", "2"]
+#    sample: ["0"]
     edge_prob: 0.
     noise_factor: 0.
     local_attraction: False
 
-    crop_slice: ":16,:30,:,:"
-#      A: [":,:,:,:"]
-#      B:
-#      C: ":,:,:,:"
+    crop_slice:
+      '0': ":,:,:,:"
+      '1': ":,:,:,:"
+      '2': ":,:,:,:"
+      C: ":,:,:,:"
 
     sub_crop_slice: ":,:,:,:"
 

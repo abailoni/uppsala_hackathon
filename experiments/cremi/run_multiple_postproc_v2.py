@@ -70,10 +70,11 @@ CUDA = "CUDA_VISIBLE_DEVICES=0"
 #     # ]),
 # ]
 
+
 list_of_args = [
     (["--"], ["deb_infer"]),
     (["--inherit"], [
-        "debug.yml",
+        "main_config.yml",
       ]),
     # (["--config.experiment_name", "--config.offsets_file_name"],
     #  ["mainFullTrain_cls", "bigUNet_cls", "main_classic", "clsDefct_cls", "noSideLoss_cls", "noGlia_cls", "main_dice", "2patches_cls"],
@@ -81,46 +82,58 @@ list_of_args = [
     #  ),
     ([
          "--config.experiment_name",
-         "--config.offsets_file_name",
-         "--config.postproc_config.invert_affinities"
      ],
      [
-         # "v2_ignoreGlia_trainedAffs_thinBound",
-         # "v2_ignoreGlia_trainedAffs",
-         "v2_ignoreGlia_trainedAffs_maxMinNew",
-     ],
-     [
-         # "trainedAffs_from_patch.json",
-         # "trainedAffs_from_patch.json",
-         "probs_from_patch.json",
-     ],
-     [
-         # "True",
-         # "True",
-         "False",
+         # "v3_noMultiScale_small_avgDirectVarCropped",
+         "v3_noMultiScale_small_avgDirectVar",
+         # "v3_main_noTrainGlia_avgDirectVarCropped",
+         # "v3_main_noTrainGlia_avgDirectVar",
+         # "v3_main_avgDirectVarCropped",
+         # "v3_main_avgDirectVar",
      ],
      ),
 
-    (["--config.postproc_config.save_name_postfix",
-      "--config.volume_config.ignore_glia"],
-     [
-         "combinedAffs_fullGT",
-         # "ignoreGlia"
-     ],
-     [
-         "False",
-         # "True"
-     ]),
-    (["--update0"], ["GASP_from_pix.yml"]),
-    # (["--config.postproc_config.iterated_options.preset"], ["DTWS"]),
-    (["--config.postproc_config.iterated_options.sample"], [
-        # ["B", "C", "A"],
-        # ["0", "1", "2"],
-        "B",
-        # "C", "A",
-        # "0", "1", "2",
+    # (["--config.postproc_config.save_name_postfix",
+    #   "--config.volume_config.ignore_glia"],
+    #  [
+    #      "combinedAffs_fullGT",
+    #      # "ignoreGlia"
+    #  ],
+    #  [
+    #      # "False",
+    #      "True"
+    #  ]),
+    (["--update0"], [
+        "empty_config.yml",
+        "longRange_DWST.yml",
+        "GASP_from_pix.yml",
+    ],
+     ),
+    (["--update1"], [
+        "crop_avg_affs.yml",
+        "crop_direct_affs.yml",
     ]),
+    (["--config.offsets_file_name"], ["reduced_probs_from_patch.json"]),
+    (["--config.postproc_config.invert_affinities"], ["False"]),
+    (["--config.volume_config.ignore_glia"], ["True"]),
+    # (["--config.postproc_config.iterated_options.preset"], ["DTWS"]),
+    # (["--config.postproc_config.iterated_options.sample"], [
+    #     # ["B", "C", "A"],
+    #     # ["0", "1", "2"],
+    #     "B",
+    #     # "C", "A",
+    #     # "0", "1", "2",
+    # ]),
 ]
+"""
+- MWS and DTWS+GASP (local)
+- direct and averaged affs (not for dice..)
+- partial sample C, 0, 1, 2 (all)
+- ignore glia (all)
+- offsets
+
+"""
+
 
 # -----------------------
 # Compose list of commands to execute:
@@ -186,6 +199,7 @@ def recursively_get_cmd(current_cmd, accumulated_cmds):
     return accumulated_cmds
 
 cmds_to_run = recursively_get_cmd([], [])
+print("Number of commands to run: {}".format(len(cmds_to_run)))
 
 for cmd in cmds_to_run:
     print("\n\n\n\n{}\n\n".format(cmd))

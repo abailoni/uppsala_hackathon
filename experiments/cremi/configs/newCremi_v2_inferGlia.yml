@@ -2,3 +2,6 @@ model:
   model_class: embeddingutils.models.unet.PredictForegroundFromStackedModel
   model_kwargs:
     keep_only_first_foreground: True
+
+
+inner_path_output: "glia_mask"

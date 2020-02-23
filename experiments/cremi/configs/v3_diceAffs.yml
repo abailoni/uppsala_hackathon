@@ -65,7 +65,11 @@ loaders:
             - [0, -3, -3]
             - [0, 3, -3]
 
-
+inference:
+  crop_prediction: # How much I crop the predicted tensor: (local_crop in the output resolution)
+    - [4,2]
+    - [24,24]
+    - [24,24]
 
 model:
   model_kwargs:
