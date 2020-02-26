@@ -20,10 +20,11 @@ EXP_NAMES = [
     "v3_diceAffs_noTrainGlia_direct",
     "v3_main_noTrainGlia_avgDirectVarCropped",
     "v3_diceAffs_direct",
+    "v3_noMultiScale_small_avgDirectVar",
 ]
 
 REQUIRED_STRINGS = [
-    "2__"
+    "C__"
 ]
 
 EXCLUDE_STRINGS = [

@@ -72,3 +72,7 @@ loaders:
         - *xy_size
 
 
+inference:
+  window_overlap: [1, 15, 15]
+  blending_kwargs:
+    dim: 3

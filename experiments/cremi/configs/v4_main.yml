@@ -2,6 +2,11 @@ global:
   offsets: null
 
 
+shortcuts:
+  z_size: &z_size 13
+  xy_size: &xy_size 272
+  xy_size_precrop: &xy_size_precrop 302
+
 device: cuda
 
 loaders:
@@ -31,13 +36,16 @@ loaders:
       p_missing_slice: 0.006 #0.006
       p_low_contrast: 0.000
       p_deformed_slice: 0.000
-      p_artifact_source: 0.002 # 0.006
+      p_artifact_source: 0.003 # 0.006
       deformation_mode: 'compress'
       deformation_strength: 16
       artifact_source:
         min_masking_ratio: .5
         slicing_config:
-          window_size: [1, 382, 382]
+          window_size:
+            - 1
+            - *xy_size_precrop
+            - *xy_size_precrop
           stride: [1, 300, 300]
           downsampling_ratio: [1, 1, 1]
         volume_config:
@@ -62,7 +70,9 @@ loaders:
         sigma: 50.
         order: 0
       random_slides:
-        shape_after_slide: [352, 352]   #change to x, y of window size
+        shape_after_slide:
+          - *xy_size
+          - *xy_size
 #        max_misalign: [30, 30]   #change to x, y of window size
         shift_vs_slide_proba: 0.
         apply_proba: 0.5 # 0.2
@@ -80,14 +90,14 @@ loaders:
       downscale_and_crop:
         # Inputs:
         - {ds_factor: [1, 1, 1],
-          crop_factor: [1, 2, 2],
-          apply_to: 0}
-        - {ds_factor: [1, 2, 2],
           crop_factor: [1, 1, 1],
           apply_to: 0}
+#        - {ds_factor: [1, 2, 2],
+#          crop_factor: [1, 2, 2],
+#          apply_to: 0}
         # Targets:
         - {ds_factor: [1, 1, 1],
-          crop_factor: [1, 2, 2],
+          crop_factor: [1, 1, 1],
           apply_to: 1}
         - {ds_factor: [1, 2, 2],
           crop_factor: [1, 1, 1],
@@ -123,21 +133,28 @@ loaders:
     slicing_config:
       # Sliding window size
       window_size:
-        A: &shape [14, 382, 382] # 25
-        B: *shape
-        C: *shape
+        A:
+          - *z_size
+          - *xy_size_precrop
+          - *xy_size_precrop
+        B:
+          - *z_size
+          - *xy_size_precrop
+          - *xy_size_precrop
+        C:
+          - *z_size
+          - *xy_size_precrop
+          - *xy_size_precrop
       # Sliding window stride
       stride:
-        A: &stride [5, 200, 200]
+        A: &stride [3, 180, 180]
         B: *stride
         C: *stride
       # Data slice to iterate over.
       data_slice:
         A: ':, :, :'
         B: ':, :, :'
-        C: ':, :, :'
-#        B: '44:, :, :' # 40
-#        C: ':87, :, :' # 75
+        C: ':70, :, :'
 
     # Specify paths to volumes
     volume_config:
@@ -187,14 +204,20 @@ loaders:
 
     slicing_config:
       window_size:
-        B: *shape
-        C: *shape
+        B:
+          - *z_size
+          - *xy_size_precrop
+          - *xy_size_precrop
+        C:
+          - *z_size
+          - *xy_size_precrop
+          - *xy_size_precrop
       stride:
         B: *stride
         C: *stride
       data_slice:
         B: ':52, :, :' # 40
-        C: '79:, :, :' # 75
+        C: '70:, :, :' # 75
 
     volume_config:
       raw:
@@ -242,15 +265,15 @@ loaders:
       downscale_and_crop:
         # Inputs:
         - {ds_factor: [1, 1, 1],
-          crop_factor: [1, 2, 2],
-          apply_to: 0}
-        - {ds_factor: [1, 2, 2],
-          crop_factor: [1, 1, 1],
-          apply_to: 0}
+           crop_factor: [1, 1, 1],
+           apply_to: 0}
 
     volume_config:
       # Sliding window size
-      window_size: [14, 352, 352]  # 288
+      window_size:
+        - *z_size
+        - *xy_size
+        - *xy_size
       stride: [40, 40, 40] # Not needed anymore, automatically deduced
       data_slice: ':,:,:'
 #      data_slice: ':40,:,:'
@@ -300,7 +323,7 @@ model:
     # If only model 1 is trained, then model 0 is run in inference mode. Atm there is no backprop between models:
     models_to_train: [0]
     detach_stacked_models: True
-    nb_inputs_per_model: 2 # TODO: remove and use only 'number_multiscale_inputs'
+    nb_inputs_per_model: 1 # TODO: remove and use only 'number_multiscale_inputs'
 
 #    stacked_upscl_fact:
 #      - [1,2,2]
@@ -323,13 +346,17 @@ model:
         res_blocks_3D: [[True], [True], [True], [True]]
         res_blocks_decoder_3D: [[True], [True], [True], [True]]
         encoder_fmaps: [32, 64, 128]
-        decoder_fmaps: [32, 64, 128, 256]
+        decoder_fmaps: [48, 64, 128, 256]
         pre_kernel_size_res_block: [3,3,3]
         add_final_conv_in_res_block: False
         add_embedding_heads: True
         keep_raw: True
         add_foreground_prediction_module: True
-        number_multiscale_inputs: 2
+        number_multiscale_inputs: 1
+        fix_patch_ordering: True
+        foreground_prediction_kwargs:
+          0:
+            nb_target: 0
       0:
         in_channels: 1
         scale_factor:
@@ -341,7 +368,7 @@ model:
           0: ":, 8:-8, 8:-8"
           1: ":, 4:-4, 4:-4"
           2: ":, 2:-2, 2:-2"
-        nb_patch_nets: 5
+        nb_patch_nets: 4
         patchNet_kwargs:
           global:
             latent_variable_size: 32
@@ -360,7 +387,7 @@ model:
             patch_stride: # in the original resolution (of the target)
               - [2, 7, 7]
             limit_nb_patches: # 'factor', 'number'
-              - [130, 'number']
+              - [120, 'number']
             max_random_crop: [1, 7, 7] # in the donwscaled res
             ASPP_kwargs:
               use_ASPP: False
@@ -383,36 +410,36 @@ model:
             patch_stride: # in the original resolution (of the target)
               - [2, 7, 7]
             limit_nb_patches: # 'factor', 'number'
-              - [130, 'number']
+              - [120, 'number']
             max_random_crop: [1, 7, 7] # in the donwscaled res
             ASPP_kwargs:
               use_ASPP: False
               inner_planes: 32
               #              dilations: [[1,8,8], [1,16,16], [1,24,24], [2,8,8], [2,16,16]]
               dilations: []
+#          2:
+#            depth_level: 0
+#            nb_target: 0
+#            #            skip_standard_patch_loss: True
+#            patch_size: [5,7,7]
+#            patch_dws_fact: [1, 8, 8] # With respect to the given target!
+#            pred_dws_fact: [1, 1, 1]
+#            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+#            patch_stride: # in the original resolution (of the target)
+#              - [2, 7, 7]
+#            limit_nb_patches: # 'factor', 'number'
+#              - [120, 'number']
+#            max_random_crop: [1, 7, 7] # in the donwscaled res
+#            ASPP_kwargs:
+#              use_ASPP: False
+#              inner_planes: 32
+##              dilations: [[1,8,8], [1,16,16], [1,24,24], [2,8,8], [2,16,16]]
+#              dilations: []
+#          #            IoU_kwargs:
+#          #              nb_random_IoU: 10
+#          #              min_random_offset: [0, 1, 1] # In patch-pixels
+#          #              min_stride: [1, 7, 7] # If offset is 0 along a given dim, this stride is applied
           2:
-            depth_level: 0
-            nb_target: 0
-            #            skip_standard_patch_loss: True
-            patch_size: [5,7,7]
-            patch_dws_fact: [1, 8, 8] # With respect to the given target!
-            pred_dws_fact: [1, 1, 1]
-            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
-            patch_stride: # in the original resolution (of the target)
-              - [2, 7, 7]
-            limit_nb_patches: # 'factor', 'number'
-              - [130, 'number']
-            max_random_crop: [1, 7, 7] # in the donwscaled res
-            ASPP_kwargs:
-              use_ASPP: False
-              inner_planes: 32
-#              dilations: [[1,8,8], [1,16,16], [1,24,24], [2,8,8], [2,16,16]]
-              dilations: []
-          #            IoU_kwargs:
-          #              nb_random_IoU: 10
-          #              min_random_offset: [0, 1, 1] # In patch-pixels
-          #              min_stride: [1, 7, 7] # If offset is 0 along a given dim, this stride is applied
-          3:
             depth_level: 1
             nb_target: 1
             #            skip_standard_patch_loss: True
@@ -421,7 +448,7 @@ model:
             pred_dws_fact: [1, 1, 1]
             central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
             patch_stride: [2, 7, 7] # in the original resolution (of the target)
-            limit_nb_patches: [130, 'number'] # 'factor', 'number'
+            limit_nb_patches: [120, 'number'] # 'factor', 'number'
             max_random_crop: [1, 4, 4] # in the donwscaled res!!
             ASPP_kwargs:
               use_ASPP: False
@@ -433,7 +460,7 @@ model:
           #              min_random_offset: [0, 2, 2] # In patch-pixels
           #              subcrop_shape: [0, 50, 50]
           #             min_stride: [2, 9, 9] # If offset is 0 along a given dim, this stride is applied
-          4:
+          3:
             depth_level: 2
             nb_target: 2
             #            skip_standard_patch_loss: True
@@ -442,7 +469,7 @@ model:
             patch_size: [5,7,7]
             central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
             patch_stride: [2, 7, 7] # in the original resolution (of the target)
-            limit_nb_patches: [110, 'number'] # 'factor', 'number'
+            limit_nb_patches: [90, 'number'] # 'factor', 'number'
 #            limit_nb_patches: [0.25, 'factor'] # 'factor', 'number'
             max_random_crop: [1, 2, 2] # in the donwscaled res!!
             ASPP_kwargs:
@@ -491,7 +518,7 @@ trainer:
 
   tensorboard:
     log_scalars_every: [1, 'iterations']
-    log_images_every: [20, 'iterations']
+    log_images_every: [500, 'iterations']
     log_histograms_every: 'never'
     send_image_at_batch_indices: [0]
     send_image_at_channel_indices: [0]
@@ -549,82 +576,25 @@ firelight:
 
         #        # visualize raw input
         - SegmentationVisualizer:
-            input: ['target', index: 0, C: 0, W: "8:-8", H: "8:-8"]
+            input: ['target', index: 0, C: 0, W: "24:-24", H: "24:-24"]
             background_label: 0
         - IdentityVisualizer:
-            input: ['inputs', index: 0, W: "8:-8", H: "8:-8"]
+            input: ['inputs', index: 0, W: "24:-24", H: "24:-24"]
             cmap: gray
         - PcaVisualizer:
             input: ['prediction', index: 0]
         - PcaVisualizer:
             input: ['prediction', index: 1]
-        - PcaVisualizer:
-            input: ['prediction', index: 2]
+#        - PcaVisualizer:
+#            input: ['prediction', index: 2]
 
 
-#  glia_mask:
-#    ImageGridVisualizer:
-#
-#      input_mapping:
-#        global: [B: ":", D: "2:7"] # the mapping specified in 'global' is applied to all keys
-##        global: [B: ":", D: ":"] # the mapping specified in 'global' is applied to all keys
-#
-#      pad_width: 1  # width of the border between images in pixels
-#      pad_value: .2  # intensity of the border pixels
-#      upsampling_factor: 2  # the whole grid is upsampled by this factor
-#
-#      row_specs: ['H', 'S', 'B', 'V']
-#      column_specs: ['W', 'C', 'D', ]
-#
-#      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
-#      visualizers:
-#
-#        #        # visualize raw input
-##        - IdentityVisualizer:
-##            input: ['inputs', index: 0, W: "8:-8", H: "8:-8"]
-##            cmap: gray
-#        - IdentityVisualizer:
-#            input: ['glia_target', C: 0]
-#            cmap: gray
-#            value_range: [0,1]
-#        - IdentityVisualizer:
-#            input: ['glia_pred', C: 0]
-#            cmap: gray
-#            value_range: [0,1]
-
-
-
-  pcaEmbeddings_lvl1:
+  glia_mask:
     ImageGridVisualizer:
 
       input_mapping:
         global: [B: ":", D: "2:7"] # the mapping specified in 'global' is applied to all keys
-
-      pad_width: 1  # width of the border between images in pixels
-      pad_value: .2  # intensity of the border pixels
-      upsampling_factor: 2  # the whole grid is upsampled by this factor
-
-      row_specs: ['H', 'S', 'B', 'V']
-      column_specs: ['W', 'C', 'D', ]
-
-      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
-      visualizers:
-
-        - SegmentationVisualizer:
-            input: ['target', index: 1, C: 0, W: "8:-8", H: "8:-8"]
-            background_label: 0
-        - IdentityVisualizer:
-            input: ['inputs', index: 1, W: "8:-8", H: "8:-8"]
-            cmap: gray
-
-#        # visualize raw input
-        - PcaVisualizer:
-            input: ['prediction', index: 3]
-  pcaEmbeddings_lvl2:
-    ImageGridVisualizer:
-
-      input_mapping:
-        global: [B: ":"] # the mapping specified in 'global' is applied to all keys
+#        global: [B: ":", D: ":"] # the mapping specified in 'global' is applied to all keys
 
       pad_width: 1  # width of the border between images in pixels
       pad_value: .2  # intensity of the border pixels
@@ -637,8 +607,65 @@ firelight:
       visualizers:
 
         #        # visualize raw input
-        - PcaVisualizer:
-            input: ['prediction', index: 4,  D: "2: 7"]
+#        - IdentityVisualizer:
+#            input: ['inputs', index: 0, W: "8:-8", H: "8:-8"]
+#            cmap: gray
+        - IdentityVisualizer:
+            input: ['glia_target_d0', C: 0]
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['glia_pred_d0', C: 0]
+            cmap: gray
+            value_range: [0,1]
+
+
+
+#  pcaEmbeddings_lvl1:
+#    ImageGridVisualizer:
+#
+#      input_mapping:
+#        global: [B: ":", D: "2:7"] # the mapping specified in 'global' is applied to all keys
+#
+#      pad_width: 1  # width of the border between images in pixels
+#      pad_value: .2  # intensity of the border pixels
+#      upsampling_factor: 2  # the whole grid is upsampled by this factor
+#
+#      row_specs: ['H', 'S', 'B', 'V']
+#      column_specs: ['W', 'C', 'D', ]
+#
+#      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+#      visualizers:
+#
+#        - SegmentationVisualizer:
+#            input: ['target', index: 1, C: 0, W: "8:-8", H: "8:-8"]
+#            background_label: 0
+#        - IdentityVisualizer:
+#            input: ['inputs', index: 1, W: "8:-8", H: "8:-8"]
+#            cmap: gray
+#
+##        # visualize raw input
+#        - PcaVisualizer:
+#            input: ['prediction', index: 3]
+#  pcaEmbeddings_lvl2:
+#    ImageGridVisualizer:
+#
+#      input_mapping:
+#        global: [B: ":"] # the mapping specified in 'global' is applied to all keys
+#
+#      pad_width: 1  # width of the border between images in pixels
+#      pad_value: .2  # intensity of the border pixels
+#      upsampling_factor: 2  # the whole grid is upsampled by this factor
+#
+#      row_specs: ['H', 'S', 'B', 'V']
+#      column_specs: ['W', 'C', 'D', ]
+#
+#      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+#      visualizers:
+#
+#        #        # visualize raw input
+#        - PcaVisualizer:
+#            input: ['prediction', index: 4,  D: "2: 7"]
 #
 
 #  debug_depth_0:
@@ -862,41 +889,5 @@ firelight:
             value_range: [0,1]
         - IdentityVisualizer:
             input: ['pred_patch_l3']
-            cmap: gray
-            value_range: [0,1]
-
-  rdmPatches_l4:
-    ImageGridVisualizer:
-      input_mapping:
-        global: [B: ":", D: ":"]
-
-      pad_width: 1  # width of the border between images in pixels
-      pad_value: .2  # intensity of the border pixels
-      upsampling_factor: 2  # the whole grid is upsampled by this factor
-
-      row_specs: ['H', 'S', 'D', 'C', 'B']
-      column_specs: ['W', 'V']
-
-      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
-      visualizers:
-
-        - OverlayVisualizer:
-            visualizers:
-              - SegmentationVisualizer:
-                  input: ['gt_label_patch_l4']
-                  background_label: 0
-                  opacity: 0.5 # Make output only partially opaque.
-              - IdentityVisualizer:
-                  input: ['raw_patch_l4']
-                  cmap: gray
-#        - IdentityVisualizer:
-#            input: ['raw_patch_l3']
-#            cmap: gray
-        - IdentityVisualizer:
-            input: ['gt_mask_patch_l4']
-            cmap: gray
-            value_range: [0,1]
-        - IdentityVisualizer:
-            input: ['pred_patch_l4']
             cmap: gray
             value_range: [0,1]

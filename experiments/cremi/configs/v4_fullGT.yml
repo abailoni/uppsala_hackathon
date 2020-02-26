@@ -1,0 +1,7 @@
+loaders:
+
+  train:
+    slicing_config:
+      data_slice:
+        C: ':, :, :'
+

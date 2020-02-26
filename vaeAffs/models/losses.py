@@ -254,6 +254,7 @@ class MultiLevelAffinityLoss(nn.Module):
                  predictions_specs=None,
                  train_glia_mask=False,
                  target_has_label_segm=False,
+                 target_has_various_masks=False,
                  precrop_pred=None):
         super(MultiLevelAffinityLoss, self).__init__()
         if loss_type == "Dice":
@@ -281,6 +282,7 @@ class MultiLevelAffinityLoss(nn.Module):
         self.predictions_specs = predictions_specs
         self.precrop_pred = precrop_pred
         self.target_has_label_segm = target_has_label_segm
+        self.target_has_various_masks = target_has_various_masks
         self.train_glia_mask = train_glia_mask
 
     def forward(self, predictions, all_targets):
@@ -293,29 +295,43 @@ class MultiLevelAffinityLoss(nn.Module):
         # # Predict glia mask:
         # # ----------------------------
         if self.train_glia_mask:
-            glia_pred = predictions.pop(-1)
-            # TODO: generalize to multiple targets
-            glia_target = all_targets[0][:,[-1]]
-            all_targets[0] = all_targets[0][:, :-1]
-            assert self.target_has_label_segm
-            gt_segm = all_targets[0][:,[0]]
+            assert not self.target_has_various_masks, "To be implemented"
+            frg_kwargs = self.model.models[-1].foreground_prediction_kwargs
+            if frg_kwargs is None:
+                # Legacy:
+                nb_glia_preds = 1
+                nb_glia_targets = [0]
+            else:
+                nb_glia_preds = len(frg_kwargs)
+                nb_glia_targets = [frg_kwargs[dpth]["nb_target"] for dpth in frg_kwargs]
 
-            glia_target = auto_crop_tensor_to_shape(glia_target, glia_pred.shape)
-            gt_segm = auto_crop_tensor_to_shape(gt_segm, glia_pred.shape)
-            # TODO: generalize ignore label:
-            valid_mask = (gt_segm != 0).float()
-            glia_pred = glia_pred * valid_mask
-            glia_target = glia_target * valid_mask
-            with warnings.catch_warnings(record=True) as w:
-                loss_glia = data_parallel(self.loss, (glia_pred, glia_target), self.devices).mean()
+            all_glia_preds = predictions[-nb_glia_preds:]
+            predictions = predictions[:-nb_glia_preds]
+
+            loss_glia = 0
+            for counter, glia_pred, nb_tar in zip(range(len(all_glia_preds)), all_glia_preds, nb_glia_targets):
+                glia_target = all_targets[nb_tar][:,[-1]]
+                all_targets[nb_tar] = all_targets[nb_tar][:, :-1]
+                assert self.target_has_label_segm
+                gt_segm = all_targets[nb_tar][:,[0]]
+
+                glia_target = auto_crop_tensor_to_shape(glia_target, glia_pred.shape)
+                gt_segm = auto_crop_tensor_to_shape(gt_segm, glia_pred.shape)
+                # TODO: generalize ignore label:
+                valid_mask = (gt_segm != 0).float()
+                glia_pred = glia_pred * valid_mask
+                glia_target = glia_target * valid_mask
+                with warnings.catch_warnings(record=True) as w:
+                    loss_glia_new = data_parallel(self.loss, (glia_pred, glia_target), self.devices).mean()
+                loss_glia = loss_glia + loss_glia_new
+                log_image("glia_target_d{}".format(counter), glia_target)
+                log_image("glia_pred_d{}".format(counter), glia_pred)
             loss = loss + loss_glia
-            log_image("glia_target", glia_target)
-            log_image("glia_pred", glia_pred)
             log_scalar("loss_glia", loss_glia)
 
-        assert len(predictions) == len(self.predictions_specs)
-
-        for nb_pred, pred in enumerate(predictions):
+        for counter, nb_pred in enumerate(self.predictions_specs):
+            assert len(predictions) > nb_pred
+            pred = predictions[nb_pred]
             # TODO: add precrop_pred?
             # if self.precrop_pred is not None:
             #     from segmfriends.utils.various import parse_data_slice
@@ -333,7 +349,10 @@ class MultiLevelAffinityLoss(nn.Module):
                                             ignore_channel_and_batch_dims=True)
 
             if self.target_has_label_segm:
-                target = target[:,1:]
+                if self.target_has_various_masks:
+                    target = target[:, 2:]
+                else:
+                    target = target[:,1:]
             assert target.shape[1] % 2 == 0, "Target should include both affinities and masks"
 
             # Get ignore-mask and affinities:
@@ -364,7 +383,9 @@ class MultiLevelAffinityLoss(nn.Module):
             gt_affs = gt_affs*valid_pixels
 
             with warnings.catch_warnings(record=True) as w:
-                loss = loss + data_parallel(self.loss, (pred, gt_affs), self.devices).mean()
+                loss_new = data_parallel(self.loss, (pred, gt_affs), self.devices).mean()
+            loss = loss + loss_new
+            log_scalar("loss_sparse_d{}".format(counter), loss_new)
 
         # TODO: use Callback from Roman to run it every N iterations
         gc.collect()
@@ -381,6 +402,8 @@ class PatchBasedLoss(nn.Module):
                  fix_bug_multiscale_patches=False,
                  defected_label=None,
                  IoU_loss_kwargs=None,
+                 sparse_affs_loss_kwargs=None,
+                 indx_trained_patchNets=None,
                  model_kwargs=None, devices=(0,1)):
         super(PatchBasedLoss, self).__init__()
         if loss_type == "Dice":
@@ -400,6 +423,7 @@ class PatchBasedLoss(nn.Module):
         self.defected_label = defected_label
         self.train_glia_mask = train_glia_mask
         self.train_patches_on_glia = train_patches_on_glia
+        self.indx_trained_patchNets = indx_trained_patchNets
         self.add_IoU_loss = False
         if IoU_loss_kwargs is not None:
             self.add_IoU_loss = True
@@ -418,6 +442,14 @@ class PatchBasedLoss(nn.Module):
         self.VAE_loss = VAE_loss()
 
         self.model = model
+
+        self.train_sparse_loss = False
+        self.sparse_multilevelDiceLoss = None
+        if sparse_affs_loss_kwargs is not None:
+            self.train_sparse_loss = True
+            self.sparse_multilevelDiceLoss = MultiLevelAffinityLoss(model, model_kwargs=model_kwargs,
+                                                                    devices=devices,
+                                                                    **sparse_affs_loss_kwargs)
 
         # TODO: hack to adapt to stacked model:
         self.downscale_and_crop_targets = {}
@@ -465,7 +497,7 @@ class PatchBasedLoss(nn.Module):
 
             all_glia_preds = all_predictions[-nb_glia_preds:]
             all_predictions = all_predictions[:-nb_glia_preds]
-
+            loss_glia = 0
             for counter, glia_pred, nb_tar in zip(range(len(all_glia_preds)), all_glia_preds, nb_glia_targets):
                 glia_target = (target[nb_tar][:, [1]] == self.glia_label).float()
                 valid_mask = (target[nb_tar][:, [0]] != self.ignore_label).float()
@@ -475,33 +507,41 @@ class PatchBasedLoss(nn.Module):
                 glia_pred = glia_pred * valid_mask
                 glia_target = glia_target * valid_mask
                 with warnings.catch_warnings(record=True) as w:
-                    loss_glia = data_parallel(self.loss, (glia_pred, glia_target), self.devices).mean()
-                loss = loss + loss_glia
+                    loss_glia_cur = data_parallel(self.loss, (glia_pred, glia_target), self.devices).mean()
+                loss_glia = loss_glia + loss_glia_cur
                 log_image("glia_target_d{}".format(counter), glia_target)
                 log_image("glia_pred_d{}".format(counter), glia_pred)
+            loss = loss + loss_glia
             log_scalar("loss_glia", loss_glia)
         else:
             glia_pred = all_predictions.pop(-1)
 
-
-        nb_preds = len(all_predictions)
-        assert len(ptch_kwargs) == nb_preds
-
+        if self.train_sparse_loss:
+            loss = loss + self.sparse_multilevelDiceLoss(all_predictions, target)
+            # Delete affinities from targets:
+            target = [tar[:, :2].int() for tar in target]
 
         # IoU loss:
         if self.add_IoU_loss:
             assert self.boundary_label is None, "Not implemented"
+            assert self.indx_trained_patchNets is None
             loss = loss + self.IoU_loss(all_predictions, target)
 
-        boundary_loss_computed = False
+        if self.indx_trained_patchNets is None:
+            nb_preds = len(all_predictions)
+            assert len(ptch_kwargs) == nb_preds
+            indx_trained_patchNets = zip(range(nb_preds), range(nb_preds))
+        else:
+            indx_trained_patchNets = self.indx_trained_patchNets
+
         # ----------------------------
         # Loss on patches:
         # ----------------------------
-        for nb_patch_net in range(nb_preds):
+        for nb_patch_net, nb_pr in indx_trained_patchNets:
             # ----------------------------
             # Initializations:
             # ----------------------------
-            pred = all_predictions[nb_patch_net]
+            pred = all_predictions[nb_pr]
             kwargs = ptch_kwargs[nb_patch_net]
             if isinstance(target, (list, tuple)):
                 assert "nb_target" in kwargs, "Multiple targets passed. Target should be specified"
@@ -546,8 +586,10 @@ class PatchBasedLoss(nn.Module):
             # # ----------------------------
             # # Plot some random patches with associated raw patch:
             # # ----------------------------
-            if self.model.models[-1].keep_raw and nb_patch_net<3:
-                raw = raw_inputs[kwargs["nb_target"]]
+            if self.model.models[-1].keep_raw and nb_patch_net<5:
+                # raw = raw_inputs[kwargs["nb_target"]][crop_slice_targets]
+                # FIXME: raw is not correct for deeper ones
+                raw = raw_inputs[0][crop_slice_targets]
                 raw_to_plot, gt_labels_to_plot, gt_masks_to_plot, pred_emb_to_plot = [], [], [], []
                 for n in range(5):
                     # Select a random pixel and define sliding-window crop slices:

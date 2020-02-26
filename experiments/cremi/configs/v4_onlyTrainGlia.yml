@@ -1,0 +1,189 @@
+# TODO: val_crop, batch_size, keep_raw, plot patches, stride?
+
+shortcuts:
+  z_size: &z_size 15 # 15
+  xy_size: &xy_size 352
+  xy_size_precrop: &xy_size_precrop 382
+
+
+
+loaders:
+  general:
+    defect_augmentation_config:
+      artifact_source:
+        min_masking_ratio: .5
+        slicing_config:
+          window_size:
+            - 1
+            - *xy_size_precrop
+            - *xy_size_precrop
+    # Configuration for the master dataset.
+    master_config:
+      random_slides:
+        shape_after_slide:
+          - *xy_size
+          - *xy_size
+
+  train:
+    slicing_config:
+      window_size:
+        A:
+          - *z_size
+          - *xy_size_precrop
+          - *xy_size_precrop
+        B:
+          - *z_size
+          - *xy_size_precrop
+          - *xy_size_precrop
+        C:
+          - *z_size
+          - *xy_size_precrop
+          - *xy_size_precrop
+      data_slice:
+        C: ':, :, :'
+
+  val:
+    slicing_config:
+      window_size:
+        B:
+          - *z_size
+          - *xy_size_precrop
+          - *xy_size_precrop
+        C:
+          - *z_size
+          - *xy_size_precrop
+          - *xy_size_precrop
+#      data_slice:
+#        B: ':, :, :' # 40
+#        C: '70:, :, :' # 75
+
+
+
+  infer:
+    volume_config:
+      window_size:
+        - *z_size
+        - *xy_size
+        - *xy_size
+
+
+model:
+  model_kwargs:
+    models_kwargs:
+      global:
+        encoder_fmaps: [16, 64, 128]
+        decoder_fmaps: [16, 64, 128, 256]
+        keep_raw: False
+        foreground_prediction_kwargs:
+          0:
+            nb_target: 0
+          1:
+            nb_target: 1
+          2:
+            nb_target: 2
+      0:
+        patchNet_kwargs:
+          0: "KeyDeleter"
+          1: "KeyDeleter"
+          2: "KeyDeleter"
+          3: "KeyDeleter"
+
+
+
+firelight:
+  pcaEmbeddings_lvl0: "KeyDeleter"
+    #  pcaEmbeddings_lvl1: "KeyDeleter"
+    #  pcaEmbeddings_lvl2: "KeyDeleter"
+  rdmPatches_l0: "KeyDeleter"
+  rdmPatches_l1: "KeyDeleter"
+  rdmPatches_l2: "KeyDeleter"
+  rdmPatches_l3: "KeyDeleter"
+
+  glia_mask:
+    ImageGridVisualizer:
+
+      input_mapping:
+        global: [B: ":", D: "2:-2"] # the mapping specified in 'global' is applied to all keys
+#        global: [B: ":", D: ":"] # the mapping specified in 'global' is applied to all keys
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 2  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'B', 'V']
+      column_specs: ['W', 'C', 'D', ]
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        #        # visualize raw input
+        - IdentityVisualizer:
+            input: ['inputs', index: 0, W: "16:-16", H: "16:-16"]
+            cmap: gray
+        - IdentityVisualizer:
+            input: ['glia_target_d0', C: 0]
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['glia_pred_d0', C: 0]
+            cmap: gray
+
+
+  glia_mask_d1:
+    ImageGridVisualizer:
+
+      input_mapping:
+        global: [B: ":", D: "2:-2"] # the mapping specified in 'global' is applied to all keys
+#        global: [B: ":", D: ":"] # the mapping specified in 'global' is applied to all keys
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 2  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'B', 'V']
+      column_specs: ['W', 'C', 'D', ]
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        #        # visualize raw input
+        - IdentityVisualizer:
+            input: ['inputs', index: 0, W: "8:-8:2", H: "8:-8:2"]
+            cmap: gray
+        - IdentityVisualizer:
+            input: ['glia_target_d1', C: 0]
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['glia_pred_d1', C: 0]
+            cmap: gray
+
+
+  glia_mask_d2:
+    ImageGridVisualizer:
+
+      input_mapping:
+        global: [B: ":", D: "2:-2"] # the mapping specified in 'global' is applied to all keys
+      #        global: [B: ":", D: ":"] # the mapping specified in 'global' is applied to all keys
+
+      pad_width: 1  # width of the border between images in pixels
+      pad_value: .2  # intensity of the border pixels
+      upsampling_factor: 2  # the whole grid is upsampled by this factor
+
+      row_specs: ['H', 'S', 'B', 'V']
+      column_specs: ['W', 'C', 'D', ]
+
+      # Container visualizers always have the 'visualizers' argument. Its value has to be a list of visualizers
+      visualizers:
+
+        #        # visualize raw input
+        - IdentityVisualizer:
+            input: ['inputs', index: 0, W: "::4", H: "::4"]
+            cmap: gray
+        - IdentityVisualizer:
+            input: ['glia_target_d2', C: 0]
+            cmap: gray
+            value_range: [0,1]
+        - IdentityVisualizer:
+            input: ['glia_pred_d2', C: 0]
+            cmap: gray
