@@ -66,6 +66,16 @@ loaders:
         - *xy_size
         - *xy_size
 
+inference:
+  crop_prediction:
+    - [2,2]
+    - [24,24]
+    - [24,24]
+  window_overlap: [3, 100, 100]
+  blending_kwargs:
+    dim: 3
+
+inner_path_output: "glia_mask"
 
 model:
   model_kwargs:

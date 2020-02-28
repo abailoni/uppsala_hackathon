@@ -8,6 +8,7 @@ offsets_file_name: "default_from_patch.json"
 
 
 
+
 volume_config:
   ignore_glia: False
   glia_specs:
@@ -70,7 +71,7 @@ postproc_config:
   WS_growing: True
   connected_components_on_final_segm: False
 
-  save_name_postfix: "directAffs_noGliaGT"
+  save_name_postfix: "directAffs"
 
   overwrite_prev_files: True
   extra_presets:
@@ -101,11 +102,11 @@ postproc_config:
     noise_factor: 0.
     local_attraction: False
 
-    crop_slice:
-      '0': ":,:,:,:"
-      '1': ":,:,:,:"
-      '2': ":,:,:,:"
-      C: ":,:,:,:"
+    crop_slice: ":,:,:,:"
+#      '0': ":,:,:,:"
+#      '1': ":,:,:,:"
+#      '2': ":,:,:,:"
+#      C: ":,:,:,:"
 
     sub_crop_slice: ":,:,:,:"
 

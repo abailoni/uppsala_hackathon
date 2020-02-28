@@ -14,21 +14,22 @@ from segmfriends.utils.various import yaml2dict
 project_dir = os.path.join(get_trendytukan_drive_path(),"projects/pixel_embeddings")
 
 EXP_NAMES = [
-    "v3_main_avgDirectVar",
-    "v3_main_avgDirectVarCropped",
-    "v3_main_noTrainGlia_avgDirectVar",
-    "v3_diceAffs_noTrainGlia_direct",
-    "v3_main_noTrainGlia_avgDirectVarCropped",
-    "v3_diceAffs_direct",
-    "v3_noMultiScale_small_avgDirectVar",
+    "v4_addSparseAffs_eff",
+    "v4_onlySparseAffs_eff",
+    "v4_main_avgDirectVar",
+    "v4_addSparseAffs_avgDirectVar",
+    # "v3_diceAffs_noTrainGlia_direct",
+    # "v3_main_noTrainGlia_avgDirectVarCropped",
+    # "v3_diceAffs_direct",
+    # "v3_noMultiScale_small_avgDirectVar",
 ]
 
 REQUIRED_STRINGS = [
-    "C__"
+    # "C__"
 ]
 
 EXCLUDE_STRINGS = [
-    "longRangeEdges",
+    "multicut_kerLin",
 ]
 
 INCLUDE_STRINGS = [

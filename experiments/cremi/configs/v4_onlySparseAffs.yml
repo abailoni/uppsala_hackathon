@@ -65,9 +65,12 @@ loaders:
 
 inference:
   crop_prediction: # How much I crop the predicted tensor: (local_crop in the output resolution)
-    - [4,2]
+    - [4,1]
     - [24,24]
     - [24,24]
+  window_overlap: [3, 50, 50]
+  blending_kwargs:
+    dim: 3
 
 model:
   model_kwargs:

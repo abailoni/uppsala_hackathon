@@ -1,0 +1,13 @@
+postproc_config:
+  use_multicut: True
+  extra_presets:
+    - "simple_WSDT"
+    - "multicut_exact"
+    - "longRangeEdges"
+  iterated_options:
+    preset: ["multicut_exact"]
+    edge_prob: 0.1
+
+
+#  multicut_kwargs:
+#    weighting_scheme: "KeyDeleter"

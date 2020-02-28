@@ -66,6 +66,15 @@ loaders:
         - *xy_size
         - *xy_size
 
+inference:
+  crop_prediction:
+    - [4,2]
+    - [24,24]
+    - [24,24]
+  window_overlap: [3, 50, 50]
+  blending_kwargs:
+    dim: 3
+  index_output: 2
 
 model:
   model_kwargs:

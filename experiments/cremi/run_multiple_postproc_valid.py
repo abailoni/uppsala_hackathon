@@ -75,46 +75,62 @@ list_of_args = [
     (["--inherit"], [
         "main_config.yml",
       ]),
+    (["--update0"], ["validation_crop.yml",]),
     # (["--config.experiment_name", "--config.offsets_file_name"],
     #  ["mainFullTrain_cls", "bigUNet_cls", "main_classic", "clsDefct_cls", "noSideLoss_cls", "noGlia_cls", "main_dice", "2patches_cls"],
     #  ["default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "dice_affs.json", "two_patches_only.json"],
     #  ),
     ([
          "--config.experiment_name",
+         "--update2",
+        "--config.offsets_file_name",
+        "--config.postproc_config.invert_affinities"
      ],
      [
-         "v3_diceAffs_direct",
-         "v3_diceAffs_noTrainGlia_direct",
-         # "v2_ignoreGlia_trainedAffs_maxMinNew",
-     ],
+         "v4_addSparseAffs_eff",
+         "v4_onlySparseAffs_eff",
+         # "v4_addSparseAffs_avgDirectVar",
+         # "v4_main_avgDirectVar",
+     ],[
+         "empty_config.yml",
+         "empty_config.yml",
+         # "crop_avg_affs.yml",
+         # "crop_avg_affs.yml",
+     ], [
+        "dice_affs_v3.json",
+        "dice_affs_v3.json",
+        # "aggr_affs_v4.json",
+        # "aggr_affs_v4.json",
+     ], [
+        "True",
+        "True",
+        # "False",
+        # "False",
+     ]
      ),
 
-    # (["--config.postproc_config.save_name_postfix",
-    #   "--config.volume_config.ignore_glia"],
-    #  [
-    #      "combinedAffs_fullGT",
-    #      # "ignoreGlia"
-    #  ],
-    #  [
-    #      # "False",
-    #      "True"
-    #  ]),
-    (["--update0"], [
-        "empty_config.yml",
-        "GASP_from_pix.yml",
+    (["--update1"], [
+        # "empty_config.yml",
+        # "GASP_from_pix.yml",
         "longRange_DWST.yml",
+        # "multicut.yml",
+        # "multicut_longR.yml",
     ]),
     (["--config.offsets_file_name"], ["dice_affs_v3.json"]),
-    (["--config.postproc_config.invert_affinities"], ["True"]),
-    (["--config.volume_config.ignore_glia"], ["True"]),
-    # (["--config.postproc_config.iterated_options.preset"], ["DTWS"]),
-    # (["--config.postproc_config.iterated_options.sample"], [
-    #     # ["B", "C", "A"],
-    #     # ["0", "1", "2"],
-    #     "B",
-    #     # "C", "A",
-    #     # "0", "1", "2",
-    # ]),
+    (["--config.volume_config.affinities.inner_path", "--config.postproc_config.save_name_postfix"],
+     [
+         "data",
+         # "affs_plus_glia_2",
+     ],
+     [
+         "_affs",
+         # "plusGliaMask2",
+     ]
+     ),
+    (["--config.volume_config.ignore_glia"], ["False"]),
+    (["--config.postproc_config.iterated_options.sample"], [
+        "C",
+    ]),
 ]
 
 """

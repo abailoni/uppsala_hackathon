@@ -2,7 +2,7 @@ postproc_config:
   # ------------------------------
   # Generic options
   # ------------------------------
-  from_superpixels: False
+  from_superpixels: True #TODO
   restrict_to_GT_bbox: True
   use_multicut: False # Deprecate...?
   save_segm: True
@@ -14,7 +14,7 @@ postproc_config:
   WSDT_kwargs:
     intersect_with_boundary_pixels: True
     boundary_pixels_kwargs:
-      boundary_threshold: 0.5
+      boundary_threshold: 1.0 #TODO
       used_offsets: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       offset_weights: [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]
 

@@ -518,7 +518,7 @@ class PostProcessingExperiment(BaseExperiment):
         presets_collected = presets_collected if not local_attraction else presets_collected + ["impose_local_attraction"]
         if post_proc_config.get("from_superpixels", False):
             if post_proc_config.get("use_multicut", False):
-                presets_collected = ["use_fragmenter", 'multicut_exact']
+                presets_collected = ["use_fragmenter"]
             else:
                 presets_collected += ["gen_HC_DTWS"]  # DTWS
 

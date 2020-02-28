@@ -162,29 +162,33 @@ list_of_args = [
     (["--inherit"], [
         "v4_main.yml",
       ]),
-    (["--update0", "--config.model.model_kwargs.loadfrom", "--update1"
+    (["--update0", "--config.model.model_kwargs.loadfrom", "--update2"
       # "--config.model.model_kwargs.path_backbone"
       ], [
-        # "empty_config.yml///v4_main",
+        # "v4_onlySparseAffs.yml///v4_onlySparseAffs",
         # "v4_addSparseAffs.yml///v4_addSparseAffs",
         "v4_addSparseAffs.yml///v4_addSparseAffs_fullGT",
-        "empty_config.yml///v4_main_fullGT",
+        # "v4_onlyTrainGlia.yml///v4_onlyTrainGlia",
+        # "empty_config.yml///v4_main",
     ],[
-        # "RUNS__HOME/deb/checkpoint.pytorch",
+        # "RUNS__HOME/v4_onlySparseAffs_b/checkpoint.pytorch",
         # "RUNS__HOME/v4_addSparseAffs_b/checkpoint.pytorch",
         "RUNS__HOME/v4_addSparseAffs_fullGT_b/checkpoint.pytorch",
-        "RUNS__HOME/v4_main_fullGT/checkpoint.pytorch",
+        # "RUNS__HOME/v4_onlyTrainGlia/checkpoint.pytorch",
+        # "RUNS__HOME/deb/checkpoint.pytorch",
     ], [
         # "empty_config.yml",
         # "empty_config.yml",
         "v4_submission.yml",
-        "v4_submission.yml",
+        # "empty_config.yml",
+        # "empty_config.yml",
     ]
      ),
-    (["--update2"], [
+    (["--update1"], [
         # "empty_config.yml///_eff",
+        "v4_inferGlia.yml///_eff",
         # "empty_config.yml",
-        "v4_inferAffsFromPatches.yml///_avgDirectVar",
+        # "v3_inferAffsFromPatches.yml///_avgDirectVar",
         # "v3_inferAffsFromPatches_b.yml///_avgDirectVarCropped",
     ]),
     (["--config.name_experiment"], [ ("{}{}", "2:0", "3:0") ]),
@@ -198,14 +202,14 @@ list_of_args = [
         # "0",
         # "1",
         # "2",
-        "C+",
         "A+",
         "B+",
+        "C+",
     ]),
 ]
 
-### # INFER GLIA
-
+# ### # INFER GLIA
+#
 # # CUDA = "CUDA_VISIBLE_DEVICES=1,3,4,5,6,7"
 # CUDA = "CUDA_VISIBLE_DEVICES=0,3"
 #
@@ -223,7 +227,7 @@ list_of_args = [
 #         # "empty_config.yml///v3_main",
 #         # "v3_main_noTrainGlia.yml///v3_main_noTrainGlia",
 #     ],[
-#         "RUNS__HOME/v4_onlyTrainGlia/checkpoint.pytorch///maxMinNew",
+#         "RUNS__HOME/v4_onlyTrainGlia/checkpoint.pytorch",
 #         # "RUNS__HOME/v3_diceAffs_b/checkpoint.pytorch///direct",
 #         # "RUNS__HOME/v3_diceAffs_noTrainGlia_b/checkpoint.pytorch///direct",
 #         # "RUNS__HOME/v3_main_b/checkpoint.pytorch///avgDirectVar",
@@ -236,14 +240,14 @@ list_of_args = [
 #     (["--config.loaders.infer.loader_config.num_workers"], ["20"]),
 #     (["--config.loaders.infer.name"], [
 #         # "B",
-#         "C",
+#         # "C",
 #         # "A",
 #         # "0",
 #         # "1",
 #         # "2",
-#         # "A+",
-#         # "B+",
-#         # "C+",
+#         "A+",
+#         "B+",
+#         "C+",
 #     ]),
 # ]
 

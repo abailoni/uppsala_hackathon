@@ -15,7 +15,7 @@ def get_abailoni_hci_home_path():
         # elif hostname == 'sfb1129gpu01':
         #     return '/net/hcihome/storage/abailoni/ial_local_home/'
         elif hostname == 'quadxeon5':
-            return '/srv/scratch/abailoni'
+            return '/srv/scratch/abailoni/'
         elif hostname == 'hgsgpu01':
             return '/srv/scratch/abailoni/'
         elif hostname == 'hgsgpu02':
@@ -47,7 +47,7 @@ def get_trendytukan_drive_path():
     elif username == 'abailoni_local' and hostname == 'fatchicken':
         return '/home/abailoni_local/trendyTukan_drive/'
     elif hostname == 'quadxeon5' and username == 'abailoni':
-        return '/srv/scratch/abailoni'
+        return '/srv/scratch/abailoni/'
     elif hostname == 'sfb1129gpu02' and username == 'abailoni_tmp':
         return '/home_sdb/abailoni_tmp/trendyTukan_drive/'
     else:

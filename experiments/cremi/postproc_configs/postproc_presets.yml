@@ -458,6 +458,12 @@ multicut_exact:
       solver_type: 'multicutIlpCplex'
 #      beta: 0.9 # 1.0 split everything, 0.0 merge everything
 
+multicut_kerLin:
+  parent_model: ['multicut']
+  postproc:
+    multicut_kwargs:
+      solver_type: 'kernighanLin'
+
 multicut_givenSP:
   parent_model: ['multicut', 'given_SP']
 

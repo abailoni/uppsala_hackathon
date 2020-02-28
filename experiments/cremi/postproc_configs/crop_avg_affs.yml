@@ -1,10 +1,11 @@
 postproc_config:
-  save_name_postfix: "avgAffs_noGliaGT"
+#  save_name_postfix: "avgAffs_noGliaGT"
   iterated_options:
-    crop_slice:
-      '0': ":12,:,:,:"
-      '1': ":12,:,:,:"
-      '2': ":12,:,:,:"
-      C: ":12,:,:,:"
+    crop_slice: ":16,:,:,:"
+#      '0': ":16,:,:,:"
+#      '1': ":16,:,:,:"
+#      '2': ":16,:,:,:"
+#      C: ":16,:,:,:"
+#      C: ":16,:,:,:"
 
 

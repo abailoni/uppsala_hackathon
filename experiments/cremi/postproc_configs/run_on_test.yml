@@ -5,5 +5,10 @@ postproc_config:
   # TODO: Create a test-setup?
   compute_scores: False
   restrict_to_GT_bbox: True
-  prepare_submission: True
+  prepare_submission: False
+
+  iterated_options:
+    sample: ["A+", "B+", "C+"]
+#    sample: ["A+"]
+#    crop_slice: ":,50:60,:,:"
 
