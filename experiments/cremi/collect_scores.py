@@ -18,23 +18,23 @@ EXP_NAMES = [
     "v4_onlySparseAffs_eff",
     "v4_main_avgDirectVar",
     "v4_addSparseAffs_avgDirectVar",
-    # "v3_diceAffs_noTrainGlia_direct",
-    # "v3_main_noTrainGlia_avgDirectVarCropped",
-    # "v3_diceAffs_direct",
-    # "v3_noMultiScale_small_avgDirectVar",
 ]
 
 REQUIRED_STRINGS = [
-    # "C__"
+    # "_mergedGlia",
+    "affs_withLR_z"
 ]
 
 EXCLUDE_STRINGS = [
     "multicut_kerLin",
+    "multicut_exact",
+    "plusGliaMask2",
 ]
 
 INCLUDE_STRINGS = [
 ]
 
+POSTFIX_FILE = "_withLRnoZ_val"
 
 LATEX_OUTPUT = False
 
@@ -189,10 +189,10 @@ export_dir = os.path.join(project_dir, "collected_scores")
 check_dir_and_create(export_dir)
 # print(collected_results)
 if LATEX_OUTPUT:
-    np.savetxt(os.path.join(export_dir, "collected_cremi_{}.csv".format(ID)), collected_results, delimiter=' & ',
+    np.savetxt(os.path.join(export_dir, "collected_cremi_{}{}.csv".format(ID, POSTFIX_FILE)), collected_results, delimiter=' & ',
            fmt='%s',
            newline=' \\\\\n')
 else:
-    np.savetxt(os.path.join(export_dir, "collected_cremi_{}.csv".format(ID)), collected_results, delimiter=';',
+    np.savetxt(os.path.join(export_dir, "collected_cremi_{}{}.csv".format(ID, POSTFIX_FILE)), collected_results, delimiter=';',
                fmt='%s',
                newline=' \n')

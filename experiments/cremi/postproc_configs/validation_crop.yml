@@ -1,4 +1,5 @@
 postproc_config:
   iterated_options:
     sub_crop_slice: ":,70:-6,25:-25,25:-25"
+#    sub_crop_slice: ":,:,:,:"
 

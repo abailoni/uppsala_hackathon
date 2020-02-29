@@ -2,7 +2,7 @@ postproc_config:
   # ------------------------------
   # Generic options
   # ------------------------------
-  from_superpixels: True #TODO
+  from_superpixels: False #TODO
   restrict_to_GT_bbox: True
   use_multicut: False # Deprecate...?
   save_segm: True
@@ -25,8 +25,8 @@ postproc_config:
   # Iterated options (from each combination of the below, a segm is generated):
   # ------------------------------
   iterated_options:
-#    preset: ["MutexWatershed", "MEAN"]
-    preset: ["MutexWatershed"]
+#    preset: ["MutexWatershed", "c"]
+    preset: ["MEAN"]
 #    preset: ["MEAN"]
 #    sample: ["B", "C", "A"]
 #    sample: ["B", "C", "A", "0", "1", "2"]

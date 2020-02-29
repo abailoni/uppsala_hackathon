@@ -129,9 +129,9 @@ list_of_args = [
     (["--config.postproc_config.nb_thread_pools"], ["1"]),
     (["--config.volume_config.ignore_glia"], ["False"]),
     (["--config.postproc_config.iterated_options.sample"], [
-        # "A+",
-        "C",
-        # "B+",
+        "A+",
+        "C+",
+        "B+",
     ]),
 ]
 

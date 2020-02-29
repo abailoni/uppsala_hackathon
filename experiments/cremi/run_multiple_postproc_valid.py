@@ -89,42 +89,47 @@ list_of_args = [
      [
          "v4_addSparseAffs_eff",
          "v4_onlySparseAffs_eff",
-         # "v4_addSparseAffs_avgDirectVar",
-         # "v4_main_avgDirectVar",
+         "v4_addSparseAffs_avgDirectVar",
+         "v4_main_avgDirectVar",
      ],[
          "empty_config.yml",
          "empty_config.yml",
-         # "crop_avg_affs.yml",
-         # "crop_avg_affs.yml",
+         "crop_avg_affs.yml",
+         "crop_avg_affs.yml",
      ], [
         "dice_affs_v3.json",
         "dice_affs_v3.json",
-        # "aggr_affs_v4.json",
-        # "aggr_affs_v4.json",
+        "aggr_affs_v4.json",
+        "aggr_affs_v4.json",
      ], [
         "True",
         "True",
-        # "False",
-        # "False",
+        "False",
+        "False",
      ]
      ),
 
     (["--update1"], [
         # "empty_config.yml",
-        # "GASP_from_pix.yml",
-        "longRange_DWST.yml",
+        "GASP_from_pix.yml",
+        # "longRange_DWST.yml",
         # "multicut.yml",
         # "multicut_longR.yml",
     ]),
     (["--config.offsets_file_name"], ["dice_affs_v3.json"]),
-    (["--config.volume_config.affinities.inner_path", "--config.postproc_config.save_name_postfix"],
+    (["--config.volume_config.affinities.inner_path", "--config.postproc_config.save_name_postfix", "--config.postproc_config.iterated_options.edge_prob"],
      [
+         "data",
          "data",
          # "affs_plus_glia_2",
      ],
      [
-         "_affs",
+         "_affs_withLR_z",
+         "_affs_noLR",
          # "plusGliaMask2",
+     ], [
+        "0.1",
+        "0.0"
      ]
      ),
     (["--config.volume_config.ignore_glia"], ["False"]),

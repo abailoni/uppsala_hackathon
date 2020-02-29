@@ -256,6 +256,15 @@ class PostProcessingExperiment(BaseExperiment):
         config_to_save["postproc_config"]["edge_prob"] = edge_prob
         config_to_save["postproc_config"]['noise_factor'] = noise_factor
 
+        # Restrict to GT box:
+        if grow_WS:
+            pred_segm_WS += 1
+            pred_segm_WS[GT == 0] = 0
+            pred_segm_WS = vigra.analysis.labelVolumeWithBackground(pred_segm_WS.astype('uint32'))
+        pred_segm += 1
+        pred_segm[GT == 0] = 0
+        pred_segm = vigra.analysis.labelVolumeWithBackground(pred_segm.astype('uint32'))
+
         # Compute scores:
         if post_proc_config.get("compute_scores", False):
             evals = segm_utils.cremi_score(GT, pred_segm, border_threshold=None, return_all_scores=True)
@@ -420,6 +429,12 @@ class PostProcessingExperiment(BaseExperiment):
                                             crop_slice=gt_crop_slc,
                                             run_connected_components=False
                                             )
+                        # print(GT.shape)
+                        # print("NUmber of clusters before: ", np.unique(GT).shape)
+                        # GT = vigra.analysis.labelVolumeWithBackground(GT.astype('uint32'))
+                        # print("NUmber of clusters after: ", np.unique(GT).shape)
+                        # raise ValueError
+
 
                         if self.get("volume_config/ignore_glia", False):
                             print("Ignoring glia during evaluation")

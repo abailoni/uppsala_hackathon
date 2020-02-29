@@ -8,4 +8,6 @@ postproc_config:
 #      C: ":16,:,:,:"
 #      C: ":16,:,:,:"
 
-
+  generalized_HC_kwargs:
+    agglomeration_kwargs:
+      used_offsets: [0,1,2,3,4,5,6,12,13,14,15]
