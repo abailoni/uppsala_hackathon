@@ -17,28 +17,32 @@ EXP_NAMES = [
     "v4_addSparseAffs_eff",
     "v4_onlySparseAffs_eff",
     "v4_main_avgDirectVar",
+    "v4_main_eff",
     "v4_addSparseAffs_avgDirectVar",
 ]
 
 REQUIRED_STRINGS = [
     # "_mergedGlia",
-    "affs_withLR_z"
+    # "affs_withLR_z"
 ]
 
 EXCLUDE_STRINGS = [
+    "_mergedGlia",
     "multicut_kerLin",
-    "multicut_exact",
+    # "multicut_exact",
+    "affs_noLR",
     "plusGliaMask2",
+    "MEAN_affs",
 ]
 
 INCLUDE_STRINGS = [
 ]
 
-POSTFIX_FILE = "_withLRnoZ_val"
+POSTFIX_FILE = "_ALL_val_noGLiaMerge"
 
 LATEX_OUTPUT = False
 
-sorting_column_idx = 1
+sorting_column_idx = 0
 
 # -------------------------------------------------------
 

@@ -3,6 +3,9 @@ volume_config:
     A+: '/home/abailoni_local/ialgpu1_local_home/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleA+_cropped.csv'
     B+: '/home/abailoni_local/ialgpu1_local_home/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleB+_cropped.csv'
     C+: '/home/abailoni_local/ialgpu1_local_home/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleC+_cropped.csv'
+#    A+: '/home/abailoni_local/ialgpu1_local_home/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleA+_cropped_no_crop.csv'
+#    B+: '/home/abailoni_local/ialgpu1_local_home/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleB+_cropped_no_crop.csv'
+#    C+: '/home/abailoni_local/ialgpu1_local_home/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleC+_cropped_no_crop.csv'
 
   GT:
     path:
@@ -15,6 +18,9 @@ volume_config:
       A+: '/home/abailoni_local/ialgpu1_local_home/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleA+_cropped.h5'
       B+: '/home/abailoni_local/ialgpu1_local_home/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleB+_cropped.h5'
       C+: '/home/abailoni_local/ialgpu1_local_home/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleC+_cropped.h5'
+#      A+: '/home/abailoni_local/ialgpu1_local_home/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleA+_cropped_no_crop.h5'
+#      B+: '/home/abailoni_local/ialgpu1_local_home/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleB+_cropped_no_crop.h5'
+#      C+: '/home/abailoni_local/ialgpu1_local_home/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleC+_cropped_no_crop.h5'
     inner_path:
 #      0: 'volumes/labels/neuron_ids_fixed_2x'
 #      1: 'volumes/labels/neuron_ids_fixed_2x'
@@ -25,6 +31,9 @@ volume_config:
       A+: 'volumes/labels/mask_gt_2x'
       B+: 'volumes/labels/mask_gt_2x'
       C+: 'volumes/labels/mask_gt_2x'
+#      A+: 'volumes/labels/mask_raw_2x'
+#      B+: 'volumes/labels/mask_raw_2x'
+#      C+: 'volumes/labels/mask_raw_2x'
     dtype: int32
     crop_slice:
       C: '70:-6,25:-25,25:-25'

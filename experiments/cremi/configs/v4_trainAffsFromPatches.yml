@@ -54,7 +54,15 @@ loaders:
 #
 # CUDA_VISIBLE_DEVICES=0 ipython experiments/cremi/train_stckHourGlass.py -- v2_main_trainAffs_b --inherit newCremi_v2_main.yml --update0 newCremi_v2_trainAffsFromPatches.yml --config.model.model_kwargs.path_backbone RUNS__HOME/v2_main_b/checkpoint.pytorch --config.model.model_kwargs.loadfrom RUNS__HOME/v2_main_trainAffs/checkpoint.pytorch  --config.trainer.optimizer.Adam.lr 1e-4
 
-
+inference:
+  crop_prediction: # How much I crop the predicted tensor: (local_crop in the output resolution)
+    - [4,1]
+    - [24,24]
+    - [24,24]
+  window_overlap: [3, 50, 50]
+  blending_kwargs:
+    dim: 3
+  index_output: 0
 
 model:
   model_class: embeddingutils.models.unet.AffinitiesFromEmb

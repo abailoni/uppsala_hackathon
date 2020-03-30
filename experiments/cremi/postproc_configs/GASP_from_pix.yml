@@ -2,7 +2,7 @@ postproc_config:
   # ------------------------------
   # Generic options
   # ------------------------------
-  from_superpixels: False #TODO
+  from_superpixels: True #TODO
   restrict_to_GT_bbox: True
   use_multicut: False # Deprecate...?
   save_segm: True

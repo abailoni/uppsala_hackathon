@@ -17,9 +17,12 @@ volume_config:
     ignore_label: 0
 
   paths_padded_boxes:
-    A+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleA+_cropped.csv'
-    B+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleB+_cropped.csv'
-    C+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleC+_cropped.csv'
+#    A+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleA+_cropped.csv'
+#    B+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleB+_cropped.csv'
+#    C+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleC+_cropped.csv'
+    A+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleA+_cropped_no_crop.csv'
+    B+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleB+_cropped_no_crop.csv'
+    C+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleC+_cropped_no_crop.csv'
 
   GT:
     path:
@@ -29,9 +32,12 @@ volume_config:
       A: '$HCI_HOME/datasets/new_cremi/sampleA.h5'
       B: '$HCI_HOME/datasets/new_cremi/sampleB.h5'
       C: '$HCI_HOME/datasets/new_cremi/sampleC.h5'
-      A+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleA+_cropped.h5'
-      B+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleB+_cropped.h5'
-      C+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleC+_cropped.h5'
+#      A+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleA+_cropped.h5'
+#      B+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleB+_cropped.h5'
+#      C+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleC+_cropped.h5'
+      A+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleA+_cropped_no_crop.h5'
+      B+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleB+_cropped_no_crop.h5'
+      C+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleC+_cropped_no_crop.h5'
     inner_path:
       0: 'volumes/labels/neuron_ids_fixed_2x'
       1: 'volumes/labels/neuron_ids_fixed_2x'
@@ -39,9 +45,12 @@ volume_config:
       A: 'volumes/labels/neuron_ids_fixed_2x'
       B: 'volumes/labels/neuron_ids_fixed_2x'
       C: 'volumes/labels/neuron_ids_fixed_2x'
-      A+: 'volumes/labels/mask_gt_2x'
-      B+: 'volumes/labels/mask_gt_2x'
-      C+: 'volumes/labels/mask_gt_2x'
+#      A+: 'volumes/labels/mask_gt_2x'
+#      B+: 'volumes/labels/mask_gt_2x'
+#      C+: 'volumes/labels/mask_gt_2x'
+      A+: 'volumes/labels/mask_raw_2x'
+      B+: 'volumes/labels/mask_raw_2x'
+      C+: 'volumes/labels/mask_raw_2x'
     dtype: int32
 #    ds_factor: [1, 2, 2]
     ds_order: 1
@@ -174,7 +183,7 @@ postproc_config:
     agglomeration_kwargs:
       offsets_probabilities: 1.0 # Probs. for long-range edges
       return_UCM: False
-      used_offsets: [0,1,2,3,4,5,6,14,15,16,17]
+#      used_offsets: [0,1,2,3,4,5,6,14,15,16,17]
 
       debug: True
       extra_aggl_kwargs:

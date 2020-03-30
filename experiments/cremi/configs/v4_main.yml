@@ -276,7 +276,7 @@ loaders:
         - *xy_size
       stride: [40, 40, 40] # Not needed anymore, automatically deduced
       data_slice: ':,:,:'
-#      data_slice: ':40,:,:'
+#      data_slice: ':14,:,:'
       padding_mode: "reflect"
       padding:
         A+: [[0,0], [0,0], [0,0]]
@@ -289,9 +289,9 @@ loaders:
         1: *dataset_padding
         2: *dataset_padding
       path:
-        A+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleA+_cropped.h5'
-        B+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleB+_cropped.h5'
-        C+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleC+_cropped.h5'
+        A+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleA+_cropped_no_crop.h5'
+        B+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleB+_cropped_no_crop.h5'
+        C+: '$HCI_HOME/datasets/CREMI/official_test_samples/cropped_aligned_samples/sampleC+_cropped_no_crop.h5'
         A: '$HCI_HOME/datasets/new_cremi/sampleA.h5'
         B: '$HCI_HOME/datasets/new_cremi/sampleB.h5'
         C: '$HCI_HOME/datasets/new_cremi/sampleC.h5'

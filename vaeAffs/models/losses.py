@@ -591,9 +591,10 @@ class PatchBasedLoss(nn.Module):
                 # FIXME: raw is not correct for deeper ones
                 raw = raw_inputs[0][crop_slice_targets]
                 raw_to_plot, gt_labels_to_plot, gt_masks_to_plot, pred_emb_to_plot = [], [], [], []
-                for n in range(5):
+                for n in range(40):
                     # Select a random pixel and define sliding-window crop slices:
                     selected_coord = [np.random.randint(shp) for shp in pred.shape[2:]]
+                    selected_coord[0] = 4 # For plots, get always 4
                     full_patch_slice = (slice(None), slice(0,1)) + tuple(
                         slice(selected_coord[i], selected_coord[i] + real_patch_shape[i]) for i in range(len(selected_coord)))
                     emb_slice = (slice(None), slice(0,1)) + tuple(slice(selected_coord[i] + int(real_patch_shape[i] / 2),

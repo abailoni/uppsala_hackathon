@@ -124,10 +124,13 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         return model
 
     def set_devices(self):
+        # # In case I want to use multiple GPUs:
         # n_gpus = torch.cuda.device_count()
         # gpu_list = range(n_gpus)
         # self.set("gpu_list", gpu_list)
         # self.trainer.cuda(gpu_list)
+
+        # For one GPU only:
         self.set("gpu_list", [0])
         self.trainer.cuda([0])
 

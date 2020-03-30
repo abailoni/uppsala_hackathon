@@ -35,15 +35,15 @@ nb_threads = 6
 
 EXP_NAMES = [
     # TEST:
-    "v4_addSparseAffs_fullGT_eff",
-    "v4_addSparseAffs_fullGT_avgDirectVar",
+    # "v4_addSparseAffs_fullGT_eff",
+    # "v4_addSparseAffs_fullGT_avgDirectVar",
 
     # VAL:
     # "v4_addSparseAffs_eff",
     # "v4_onlySparseAffs_eff",
     # "v4_main_avgDirectVar",
     # "v4_addSparseAffs_avgDirectVar",
-    # "v4_main_eff"
+    "v4_addSparseAffs_fullGT_eff_padded"
 ]
 
 # REQUIRED_STRINGS = [
@@ -58,7 +58,7 @@ EXP_NAMES = [
 
 REQUIRED_STRINGS = [
     # "_mergedGlia",
-    # "affs_withLR_z"
+    # "longRangeEdges"
 ]
 
 EXCLUDE_STRINGS = [
@@ -71,12 +71,13 @@ EXCLUDE_STRINGS = [
 INCLUDE_STRINGS = [
 ]
 
-glia_mask_exp = "v4_onlyTrainGlia_eff"
+glia_mask_exp = "v4_onlyTrainGlia_eff_padded"
 
 
 MERGE_GLIA = False
 COMPUTE_NEW_SCORES = False
 PREPARE_SUBMISSION = True
+run_connected_components = False
 
 # Load config:
 from segmfriends.utils.various import yaml2dict
@@ -223,7 +224,8 @@ for sample in ["A+", "B+", "C+"]:
                 gt_ignore_mask = gt_segm == 0
                 segm += 1
                 segm[gt_ignore_mask] = 0
-                segm = vigra.analysis.labelVolumeWithBackground(segm.astype('uint32'))
+                if run_connected_components:
+                    segm = vigra.analysis.labelVolumeWithBackground(segm.astype('uint32'))
 
                 if COMPUTE_NEW_SCORES:
 

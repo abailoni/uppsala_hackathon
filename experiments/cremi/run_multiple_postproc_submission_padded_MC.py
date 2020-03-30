@@ -75,75 +75,64 @@ list_of_args = [
     (["--inherit"], [
         "main_config.yml",
       ]),
-    (["--update0"], ["validation_crop.yml",]),
-    # (["--config.experiment_name", "--config.offsets_file_name"],
-    #  ["mainFullTrain_cls", "bigUNet_cls", "main_classic", "clsDefct_cls", "noSideLoss_cls", "noGlia_cls", "main_dice", "2patches_cls"],
-    #  ["default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "default_from_patch.json", "dice_affs.json", "two_patches_only.json"],
-    #  ),
+    (["--update0"], ["run_on_test.yml",]),
     ([
-         "--config.experiment_name",
-         "--update2",
+      "--config.experiment_name",
         "--config.offsets_file_name",
-        "--config.postproc_config.invert_affinities"
+        "--config.postproc_config.invert_affinities",
+        "--update2",
      ],
      [
-         # "v4_addSparseAffs_eff",
-         # "v4_onlySparseAffs_eff",
-         # "v4_addSparseAffs_avgDirectVar",
-         # "v4_main_avgDirectVar",
-         "v4_main_eff",
-     ],[
-         # "empty_config.yml",
-         # "empty_config.yml",
-         # "crop_avg_affs.yml",
-         # "crop_avg_affs.yml",
-         "empty_config.yml",
+         "v4_addSparseAffs_fullGT_eff_padded",
+         # "v4_addSparseAffs_fullGT_avg_padded"
      ], [
-        # "dice_affs_v3.json",
-        # "dice_affs_v3.json",
-        # "aggr_affs_v4.json",
-        # "aggr_affs_v4.json",
         "dice_affs_v3.json",
+        # "aggr_affs_v4_b.json",
      ], [
-        # "True",
-        # "True",
-        # "False",
-        # "False",
         "True",
+        # "False"
+     ], [
+        "empty_config.yml",
+        # "empty_config.yml",
      ]
      ),
 
+    # (["--config.postproc_config.save_name_postfix",
+    #   "--config.volume_config.ignore_glia"],
+    #  [
+    #      "combinedAffs_fullGT",
+    #      # "ignoreGlia"
+    #  ],
+    #  [
+    #      # "False",
+    #      "True"
+    #  ]),
     (["--update1"], [
         # "empty_config.yml",
-        "GASP_from_pix.yml",
         # "longRange_DWST.yml",
         # "multicut.yml",
-        # "multicut_longR.yml",
+        "multicut_longR.yml",
+        # "GASP_from_pix.yml"
     ]),
+    # (["--update2"], ["run_on_test.yml"]),
     # (["--config.offsets_file_name"], ["dice_affs_v3.json"]),
-    (["--config.volume_config.affinities.inner_path", "--config.postproc_config.save_name_postfix",
-      # "--config.postproc_config.iterated_options.edge_prob"
-      ],
+    (["--config.volume_config.affinities.inner_path", "--config.postproc_config.save_name_postfix"],
      [
          "data",
-         # "data",
          # "affs_plus_glia_2",
      ],
      [
-         "_affs",
-         # "_affs_withLR_z",
-         # "_affs_noLR",
+         "affs",
          # "plusGliaMask2",
-     ],
-     # [
-     #    "0.1",
-     #    "0.0"
-     # ]
+     ]
      ),
+    (["--config.postproc_config.nb_thread_pools"], ["3"]),
     (["--config.volume_config.ignore_glia"], ["False"]),
-    (["--config.postproc_config.iterated_options.sample"], [
-        "C",
-    ]),
+    # (["--config.postproc_config.iterated_options.sample"], [
+    #     "A+",
+    #     "C+",
+    #     "B+",
+    # ]),
 ]
 
 """

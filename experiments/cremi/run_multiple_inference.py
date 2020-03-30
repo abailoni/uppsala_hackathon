@@ -154,7 +154,7 @@ CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,5"
 # -----------
 # Infer new prob affs V3
 # -----------
-CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,3,7"
+CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,3,6,7"
 
 
 list_of_args = [
@@ -168,27 +168,28 @@ list_of_args = [
         # "empty_config.yml///v4_main",
         # "v4_addSparseAffs.yml///v4_addSparseAffs",
         "v4_addSparseAffs.yml///v4_addSparseAffs_fullGT",
-        "empty_config.yml///v4_main_fullGT",
+        # "empty_config.yml///v4_main_fullGT",
     ],[
         # "RUNS__HOME/deb/checkpoint.pytorch",
         # "RUNS__HOME/v4_addSparseAffs_b/checkpoint.pytorch",
         "RUNS__HOME/v4_addSparseAffs_fullGT_b/checkpoint.pytorch",
-        "RUNS__HOME/v4_main_fullGT/checkpoint.pytorch",
+        # "RUNS__HOME/v4_main_fullGT/checkpoint.pytorch",
     ], [
         # "empty_config.yml",
         # "empty_config.yml",
         "v4_submission.yml",
-        "v4_submission.yml",
+        # "v4_submission.yml",
     ]
      ),
     (["--update2"], [
         # "empty_config.yml///_eff",
         # "empty_config.yml",
-        "v4_inferAffsFromPatches.yml///_avgDirectVar",
+        # "v4_inferAffsFromPatches.yml///_avgDirectVar",
+        "v4_inferAffsFromPatches_2.yml///_avg_padded",
         # "v3_inferAffsFromPatches_b.yml///_avgDirectVarCropped",
     ]),
     (["--config.name_experiment"], [ ("{}{}", "2:0", "3:0") ]),
-    (["--config.loaders.infer.loader_config.batch_size"], ["5"]),
+    (["--config.loaders.infer.loader_config.batch_size"], ["6"]),
     # (["--config.loaders.infer.loader_config.batch_size"], ["1"]),
     (["--config.loaders.infer.loader_config.num_workers"], ["20"]),
     (["--config.loaders.infer.name"], [
@@ -198,8 +199,8 @@ list_of_args = [
         # "0",
         # "1",
         # "2",
-        "C+",
         "A+",
+        "C+",
         "B+",
     ]),
 ]

@@ -154,7 +154,7 @@ CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,5"
 # -----------
 # Infer new prob affs V3
 # -----------
-CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,3,7"
+CUDA = "CUDA_VISIBLE_DEVICES=0"
 
 
 list_of_args = [
@@ -165,34 +165,34 @@ list_of_args = [
     (["--update0", "--config.model.model_kwargs.loadfrom", "--update2"
       # "--config.model.model_kwargs.path_backbone"
       ], [
-        # "v4_onlySparseAffs.yml///v4_onlySparseAffs",
+        "v4_onlySparseAffs.yml///v4_onlySparseAffs",
         # "v4_addSparseAffs.yml///v4_addSparseAffs",
-        "v4_addSparseAffs.yml///v4_addSparseAffs_fullGT",
         # "v4_onlyTrainGlia.yml///v4_onlyTrainGlia",
+        # "v4_addSparseAffs.yml///v4_addSparseAffs_fullGT",
         # "empty_config.yml///v4_main",
     ],[
-        # "RUNS__HOME/v4_onlySparseAffs_b/checkpoint.pytorch",
+        "RUNS__HOME/v4_onlySparseAffs_b/checkpoint.pytorch",
         # "RUNS__HOME/v4_addSparseAffs_b/checkpoint.pytorch",
-        "RUNS__HOME/v4_addSparseAffs_fullGT_b/checkpoint.pytorch",
         # "RUNS__HOME/v4_onlyTrainGlia/checkpoint.pytorch",
+        # "RUNS__HOME/v4_addSparseAffs_fullGT_b/checkpoint.pytorch",
         # "RUNS__HOME/deb/checkpoint.pytorch",
     ], [
+        "empty_config.yml",
         # "empty_config.yml",
-        # "empty_config.yml",
+        "empty_config.yml",
         "v4_submission.yml",
-        # "empty_config.yml",
         # "empty_config.yml",
     ]
      ),
     (["--update1"], [
-        # "empty_config.yml///_eff",
-        "v4_inferGlia.yml///_eff",
+        "empty_config.yml///_eff_padded",
+        # "v4_inferGlia.yml///_eff",
         # "empty_config.yml",
         # "v3_inferAffsFromPatches.yml///_avgDirectVar",
         # "v3_inferAffsFromPatches_b.yml///_avgDirectVarCropped",
     ]),
     (["--config.name_experiment"], [ ("{}{}", "2:0", "3:0") ]),
-    (["--config.loaders.infer.loader_config.batch_size"], ["5"]),
+(["--config.loaders.infer.loader_config.batch_size"], ["2       "]),
     # (["--config.loaders.infer.loader_config.batch_size"], ["1"]),
     (["--config.loaders.infer.loader_config.num_workers"], ["20"]),
     (["--config.loaders.infer.name"], [
@@ -203,8 +203,8 @@ list_of_args = [
         # "1",
         # "2",
         "A+",
-        "B+",
         "C+",
+        "B+",
     ]),
 ]
 

@@ -1008,6 +1008,7 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
             boundary_stats = np.empty(boundary_stats_shape)
             raise NotImplementedError()
 
+        save_all = False
 
 
         # Predict all patches:
@@ -1126,7 +1127,8 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
                         restricted_prediction_slice = tuple(
                             slice(sl.start + max_pad, sl.stop + max_pad)
                             for sl, max_pad, cur_pad in zip(current_slice, max_patch_padding, updated_patch_padding))
-                        boundary_stats[4, nb_off][restricted_prediction_slice] = probs[center_slice]
+                        if save_all:
+                            boundary_stats[4, nb_off][restricted_prediction_slice] = probs[center_slice]
 
 
                         # Update sum of weights:
@@ -1137,10 +1139,11 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
                                                               probs.shape[-3:], patch_dws_fact)
 
                         # Update sum of squared weights:
-                        boundary_stats[1:2,nb_off:nb_off+1][prediction_slice] += \
-                                fold_3d(w * w,
-                                        output_size_xy, dilation=patch_dws_fact,
-                                          padding=(0, 0, 0), stride=(1, 1, 1))
+                        if save_all:
+                            boundary_stats[1:2,nb_off:nb_off+1][prediction_slice] += \
+                                    fold_3d(w * w,
+                                            output_size_xy, dilation=patch_dws_fact,
+                                              padding=(0, 0, 0), stride=(1, 1, 1))
 
 
                         # Update weighted mean:
@@ -1162,16 +1165,18 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
                         valid_mean_mask = ~torch.isnan(new_mean_contribution)
                         boundary_stats[2:3, nb_off:nb_off + 1][prediction_slice][valid_mean_mask] += \
                             new_mean_contribution[valid_mean_mask]
-                        mean_new_unfolded = unfold_old_statistics(
-                            boundary_stats[2:3, nb_off:nb_off + 1][prediction_slice],
-                            probs.shape[-3:], patch_dws_fact)
-                        assert torch.isnan(mean_new_unfolded).sum() == 0
 
-                        # Update M2:
-                        boundary_stats[3:4, nb_off:nb_off + 1][prediction_slice] += fold_3d(
-                            w * (probs - mean_old_unfolded) * (probs - mean_new_unfolded),
-                                    output_size_xy, dilation=patch_dws_fact,
-                                                padding=(0, 0, 0), stride=(1, 1, 1))
+                        if save_all:
+                            mean_new_unfolded = unfold_old_statistics(
+                                boundary_stats[2:3, nb_off:nb_off + 1][prediction_slice],
+                                probs.shape[-3:], patch_dws_fact)
+                            assert torch.isnan(mean_new_unfolded).sum() == 0
+
+                            # Update M2:
+                            boundary_stats[3:4, nb_off:nb_off + 1][prediction_slice] += fold_3d(
+                                w * (probs - mean_old_unfolded) * (probs - mean_new_unfolded),
+                                        output_size_xy, dilation=patch_dws_fact,
+                                                    padding=(0, 0, 0), stride=(1, 1, 1))
 
 
         # Now crop the invalid borders:
@@ -1183,20 +1188,27 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         # Compute the actual boundary statistics:
         valid_mask = (boundary_stats[0] > 0) # Check if the edge was considered at least once
 
-        output_tensor = torch.zeros_like(boundary_stats[:3])
+        if save_all:
+            output_tensor = torch.zeros_like(boundary_stats[:3])
 
-        # Save weighted mean:
-        # output_tensor[0][valid_mask] = torch.min(boundary_stats[2][valid_mask], boundary_stats[4][valid_mask])
-        output_tensor[0][valid_mask] = boundary_stats[2][valid_mask] # Weighted average
-        output_tensor[1][valid_mask] = boundary_stats[4][valid_mask] # Directly predicted values
+            # Save weighted mean:
+            # output_tensor[0][valid_mask] = torch.min(boundary_stats[2][valid_mask], boundary_stats[4][valid_mask])
+            output_tensor[0][valid_mask] = boundary_stats[2][valid_mask] # Weighted average
+            output_tensor[1][valid_mask] = boundary_stats[4][valid_mask] # Directly predicted values
 
-        # Save weighted variance (with Bessel's correction for reliability weights):
-        output_tensor[2][valid_mask] = boundary_stats[3][valid_mask] / \
-                                       (boundary_stats[0][valid_mask] - (boundary_stats[1][valid_mask] / boundary_stats[0][valid_mask]))
+            # Save weighted variance (with Bessel's correction for reliability weights):
+            output_tensor[2][valid_mask] = boundary_stats[3][valid_mask] / \
+                                           (boundary_stats[0][valid_mask] - (boundary_stats[1][valid_mask] / boundary_stats[0][valid_mask]))
 
-        # Concatenate:
-        # output_tensor = torch.cat([output_tensor[0], output_tensor[1]], dim=0)
-        output_tensor = torch.cat([output_tensor[0], output_tensor[1], output_tensor[2]], dim=0)
+            # Concatenate:
+            # output_tensor = torch.cat([output_tensor[0], output_tensor[1]], dim=0)
+            output_tensor = torch.cat([output_tensor[0], output_tensor[1], output_tensor[2]], dim=0)
+        else:
+            output_tensor = torch.zeros_like(boundary_stats[0])
+
+            # Save weighted mean:
+            # output_tensor[0][valid_mask] = torch.min(boundary_stats[2][valid_mask], boundary_stats[4][valid_mask])
+            output_tensor[valid_mask] = boundary_stats[2][valid_mask]  # Weighted average
 
         if self.IoU_on_GPU:
             return output_tensor.unsqueeze(0)
