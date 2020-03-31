@@ -474,7 +474,7 @@ class PatchBasedLoss(nn.Module):
         # print([(targ.shape[-3], targ.shape[-2], targ.shape[-1]) for targ in target])
 
         # Plot some patches with the raw:
-        if self.model.models[-1].keep_raw:
+        if self.model.models[-1].return_input:
             raw_inputs = all_predictions[-nb_inputs:]
             all_predictions = all_predictions[:-nb_inputs]
 
@@ -586,7 +586,7 @@ class PatchBasedLoss(nn.Module):
             # # ----------------------------
             # # Plot some random patches with associated raw patch:
             # # ----------------------------
-            if self.model.models[-1].keep_raw and nb_patch_net<5:
+            if self.model.models[-1].return_input and nb_patch_net<5:
                 # raw = raw_inputs[kwargs["nb_target"]][crop_slice_targets]
                 # FIXME: raw is not correct for deeper ones
                 raw = raw_inputs[0][crop_slice_targets]
@@ -594,7 +594,7 @@ class PatchBasedLoss(nn.Module):
                 for n in range(40):
                     # Select a random pixel and define sliding-window crop slices:
                     selected_coord = [np.random.randint(shp) for shp in pred.shape[2:]]
-                    selected_coord[0] = 4 # For plots, get always 4
+                    # selected_coord[0] = 4 # For plots, get always 4
                     full_patch_slice = (slice(None), slice(0,1)) + tuple(
                         slice(selected_coord[i], selected_coord[i] + real_patch_shape[i]) for i in range(len(selected_coord)))
                     emb_slice = (slice(None), slice(0,1)) + tuple(slice(selected_coord[i] + int(real_patch_shape[i] / 2),

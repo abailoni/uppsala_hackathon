@@ -73,10 +73,7 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
 
             ds_config = self.get("loaders/general/master_config/downscale_and_crop")
             nb_tensors = len(ds_config)
-            if "model_kwargs" in self.get('model'):
-                nb_inputs = self.get("model/model_kwargs/nb_inputs_per_model")
-            else:
-                nb_inputs = self.get("model/{}/nb_inputs_per_model".format(self.model_class))
+            nb_inputs = self.get("model/model_kwargs/number_multiscale_inputs")
             nb_targets = nb_tensors - nb_inputs
             if "affinity_config" in master_conf:
                 affs_config = deepcopy(master_conf.get("affinity_config", {}))
@@ -111,14 +108,20 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
 
         if model_path is not None:
             print(f"loading model from {model_path}")
-            state_dict = torch.load(model_path)["_model"].state_dict()
+            loaded_model = torch.load(model_path)["_model"]
+            if self.get("legacy_experiment", False):
+                state_dict = loaded_model.models[0].state_dict()
+            else:
+                state_dict = loaded_model.state_dict()
             model.load_state_dict(state_dict)
-        if stacked_models_path is not None:
-            for mdl in stacked_models_path:
-                stck_mdl_path = stacked_models_path[mdl]
-                print("loading stacked model {} from {}".format(mdl, stck_mdl_path))
-                mdl_state_dict = torch.load(stck_mdl_path)["_model"].models[mdl].state_dict()
-                model.models[mdl].load_state_dict(mdl_state_dict)
+            print("Prova")
+
+        # if stacked_models_path is not None:
+        #     for mdl in stacked_models_path:
+        #         stck_mdl_path = stacked_models_path[mdl]
+        #         print("loading stacked model {} from {}".format(mdl, stck_mdl_path))
+        #         mdl_state_dict = torch.load(stck_mdl_path)["_model"].models[mdl].state_dict()
+        #         model.models[mdl].load_state_dict(mdl_state_dict)
 
 
         return model
