@@ -108,14 +108,13 @@ class PatchBasedLoss(nn.Module):
         mdl_kwargs = self.model_kwargs
         ptch_kwargs = mdl_kwargs["patchNet_kwargs"]
 
-
-        nb_inputs = mdl_kwargs.get("nb_inputs_per_model")
+        nb_inputs = mdl_kwargs.get("number_multiscale_inputs")
 
         # print([(pred.shape[-3], pred.shape[-2], pred.shape[-1]) for pred in all_predictions])
         # print([(targ.shape[-3], targ.shape[-2], targ.shape[-1]) for targ in target])
 
         # Plot some patches with the raw:
-        if self.model.models[-1].return_input:
+        if self.model.return_input:
             raw_inputs = all_predictions[-nb_inputs:]
             all_predictions = all_predictions[:-nb_inputs]
 
@@ -127,7 +126,7 @@ class PatchBasedLoss(nn.Module):
         if self.train_glia_mask:
             assert self.glia_label is not None
 
-            frg_kwargs = self.model.models[-1].foreground_prediction_kwargs
+            frg_kwargs = self.model.foreground_prediction_kwargs
             if frg_kwargs is None:
                 # Legacy:
                 nb_glia_preds = 1
@@ -227,7 +226,7 @@ class PatchBasedLoss(nn.Module):
             # # ----------------------------
             # # Plot some random patches with associated raw patch:
             # # ----------------------------
-            if self.model.models[-1].return_input and nb_patch_net<5:
+            if self.model.return_input and nb_patch_net<5:
                 # raw = raw_inputs[kwargs["nb_target"]][crop_slice_targets]
                 # FIXME: raw is not correct for deeper ones
                 raw = raw_inputs[0][crop_slice_targets]
@@ -268,9 +267,8 @@ class PatchBasedLoss(nn.Module):
                 pred_emb_to_plot = torch.cat(pred_emb_to_plot, dim=0)
 
                 # Decode embeddings:
-                mdl_num = kwargs["model_number"]
                 ptch_num = kwargs["patchNet_number"]
-                pred_patch_to_plot = data_parallel(self.model.models[mdl_num].patch_models[ptch_num], pred_emb_to_plot[:, :, 0, 0, 0], self.devices)
+                pred_patch_to_plot = data_parallel(self.model.patch_models[ptch_num], pred_emb_to_plot[:, :, 0, 0, 0], self.devices)
 
                 # Downscale and rescale targets:
                 down_sc_slice = (slice(None), slice(None)) + tuple(
@@ -399,8 +397,6 @@ class PatchBasedLoss(nn.Module):
                 down_sc_slice = (slice(None), slice(None)) + tuple(slice(int(dws_fact/2), None, dws_fact) for dws_fact in patch_dws_fact)
 
                 # Final targets:
-                # patch_targets = maxpool(me_masks[valid_batch_indices].float()).float()
-                # patch_ignore_masks = maxpool(ignore_masks[valid_batch_indices].float()).byte()
                 patch_targets = me_masks[valid_batch_indices].float()[down_sc_slice]
                 patch_ignore_masks = ignore_masks[valid_batch_indices][down_sc_slice].byte()
 

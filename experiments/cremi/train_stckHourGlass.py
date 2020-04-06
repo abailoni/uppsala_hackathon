@@ -18,7 +18,6 @@ import torch.nn as nn
 # from inferno.trainers.callbacks.essentials import SaveAtBestValidationScore
 from neurofire.criteria.loss_wrapper import LossWrapper
 from inferno.extensions.criteria.set_similarity_measures import SorensenDiceLoss
-from inferno.extensions.layers.convolutional import Conv3D
 from inferno.trainers.callbacks import Callback
 from inferno.io.transform.base import Compose
 
@@ -28,15 +27,16 @@ from segmfriends.utils.config_utils import recursive_dict_update
 from shutil import copyfile
 import sys
 
-from inferno.extensions.layers.convolutional import ConvELU3D, Conv3D, BNReLUConv3D
 
 from neurofire.criteria.loss_wrapper import LossWrapper
 from neurofire.criteria.loss_transforms import ApplyAndRemoveMask
 from neurofire.criteria.loss_transforms import RemoveSegmentationFromTarget
 from neurofire.criteria.loss_transforms import InvertTarget
 
-from vaeAffs.datasets.cremi_stackedHourGlass import get_cremi_loader
+from segmfriends.datasets.cremi import get_cremi_loader
 from vaeAffs.utils.path_utils import get_source_dir
+
+import confnets
 
 
 # torch.backends.cudnn.deterministic = True
@@ -127,13 +127,13 @@ class BaseCremiExperiment(BaseExperiment, InfernoMixin, TensorboardMixin):
         return model
 
     def set_devices(self):
-        # # In case I want to use multiple GPUs:
+        # --------- In case of multiple GPUs: ------------
         # n_gpus = torch.cuda.device_count()
         # gpu_list = range(n_gpus)
         # self.set("gpu_list", gpu_list)
         # self.trainer.cuda(gpu_list)
 
-        # For one GPU only:
+        # --------- For one GPU only: ------------
         self.set("gpu_list", [0])
         self.trainer.cuda([0])
 

@@ -24,18 +24,16 @@ loaders:
       keep_track_of:
 #          - "artifacts"
         - "missing_slice"
-      min_distance_between_defects: 2
-      nb_contiguous_artifacts: 2
+      max_contiguous_defected_slices: 2
+      # TODO: update to accept names of dataset
       ignore_slice_list:
-        B:
-          - 23 # B
-          - 24 # B
-          - 52 # B
-          - 53 # B
-        C:
-          - 22 # C
-          - 82 # C
-          - 94 # C
+        - 23 # B
+        - 24 # B
+        - 52 # B
+        - 53 # B
+        - 22 # C
+        - 82 # C
+        - 94 # C
       p_missing_slice: 0.006 #0.006
       p_low_contrast: 0.000
       p_deformed_slice: 0.000
@@ -80,11 +78,11 @@ loaders:
         shift_vs_slide_proba: 0.
         apply_proba: 0.5 # 0.2
         # Here we make sure that shifting (only one slice) does not change the GT:
-        apply_to: [0]
-#        dont_slide_defected_slices: False # Apply slide in any case
+        apply_to: [0] #TODO: generalize if I have more inputs...
+        dont_slide_defected_slices: False # Apply slide in any case
 
       random_flip: True
-      defects_label: 3
+      defected_label: 3
       ignore_label: 0
 
 #      crop_after_target:
@@ -117,7 +115,7 @@ loaders:
       # use 10 CPU cores, or to 0 if you wish to use the same process for training and
       # data-loading (generally not recommended).
       batch_size: 1
-      num_workers: 1
+      num_workers: 8
       drop_last: True
       pin_memory: False
       shuffle: True
@@ -188,7 +186,7 @@ loaders:
 #        preserved_label:
 #          label: [2147483647, 2147483646]
 #          reset_to: [-1, -2]
-      extra_masks:
+      various_masks:
         path:
           A: '$HCI_HOME/datasets/new_cremi/sampleA.h5'
           B: '$HCI_HOME/datasets/new_cremi/sampleB.h5'
@@ -240,7 +238,7 @@ loaders:
         dtype: int32
         padding_mode: "constant"
         padding: *dataset_padding
-      extra_masks:
+      various_masks:
         path:
           B: '$HCI_HOME/datasets/new_cremi/sampleB.h5'
           C: '$HCI_HOME/datasets/new_cremi/sampleC.h5'
@@ -318,7 +316,7 @@ inference:
 
 
 model:
-  model_class: confnets.models.MultiScaleInputMultiOutput3DUNet
+  model_class: embeddingutils.models.unet.MultiScaleInputsUNet3D
 #  model_class: vaeAffs.models.compute_IoU.ProbabilisticBoundaryFromEmb
   model_kwargs:
     depth: 3
@@ -329,138 +327,130 @@ model:
     decoder_fmaps: [48, 64, 128, 256]
     return_input: True
     number_multiscale_inputs: 1
+    foreground_prediction_kwargs:
+      0:
+        nb_target: 0
     in_channels: 1
-    scale_factor: [1, 2, 2]
+    scale_factor:
+      - [1, 2, 2]
+      - [1, 2, 2]
+      - [1, 2, 2]
+    #          - [1, 2, 2]
     decoder_crops: # Crops AFTER the res_blocks at each level (at zero, we crop at the end)
       0: ":, 8:-8, 8:-8"
       1: ":, 4:-4, 4:-4"
       2: ":, 2:-2, 2:-2"
-
-#    output_branches_specs:
-#      - {out_channels: 1, activation: "Sigmoid", normalization: None}
-#      - {out_channels: 1, activation: "ReLU", normalization: "GroupNorm", }
-    output_branches_specs:
+    patchNet_kwargs:
       global:
-        activation: ReLU
-        nb_norm_groups: 16
-        out_channels: 32
-      0: {depth: 0, normalization: GroupNorm}
-      1: {depth: 0, normalization: GroupNorm}
-      2: {depth: 1, normalization: GroupNorm}
-      3: {depth: 2, normalization: GroupNorm}
-
-
-#    patchNet_kwargs:
-#      global:
-#        latent_variable_size: 32
-#        feature_maps: 16
-#        downscaling_factor: [1, 1, 1] # Inside patchNet, to reduce memory
-#        precrop_pred: "2:-2,:,:" # Pre-crop part of prediction to avoid training on borders
-#      0:
-#        depth_level: 0
-#        nb_target: 0
-#        #            skip_standard_patch_loss: True
-#        patch_size: [5,7,7]
-#        patch_dws_fact: [1, 1, 1]
-#        pred_dws_fact: [1, 1, 1]
-#        central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
-#        patch_stride: # in the original resolution (of the target)
-#          - [2, 7, 7]
-#        limit_nb_patches: # 'factor', 'number'
-#          - [120, 'number']
-#        max_random_crop: [1, 7, 7] # in the donwscaled res
-#        ASPP_kwargs:
-#          use_ASPP: False
-#          inner_planes: 32
-##              dilations: [[1,3,3], [2,3,3]]
-#          dilations: []
-#      #            IoU_kwargs:
-#      #              nb_random_IoU: 10
-#      #              min_random_offset: [0, 3, 3] # In patch-pixels
-#      #              min_stride: [2, 9, 9] # If offset is 0 along a given dim, this stride is applied
-#      #              subcrop_shape: [0, 50, 50]
-#      1:
-#        depth_level: 0
-#        nb_target: 0
-#        #            skip_standard_patch_loss: True
-#        patch_size: [5,7,7]
-#        patch_dws_fact: [1, 4, 4] # With respect to the given target!
-#        pred_dws_fact: [1, 1, 1]
-#        central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
-#        patch_stride: # in the original resolution (of the target)
-#          - [2, 7, 7]
-#        limit_nb_patches: # 'factor', 'number'
-#          - [120, 'number']
-#        max_random_crop: [1, 7, 7] # in the donwscaled res
-#        ASPP_kwargs:
-#          use_ASPP: False
-#          inner_planes: 32
-#          #              dilations: [[1,8,8], [1,16,16], [1,24,24], [2,8,8], [2,16,16]]
-#          dilations: []
-##          2:
-##            depth_level: 0
-##            nb_target: 0
-##            #            skip_standard_patch_loss: True
-##            patch_size: [5,7,7]
-##            patch_dws_fact: [1, 8, 8] # With respect to the given target!
-##            pred_dws_fact: [1, 1, 1]
-##            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
-##            patch_stride: # in the original resolution (of the target)
-##              - [2, 7, 7]
-##            limit_nb_patches: # 'factor', 'number'
-##              - [120, 'number']
-##            max_random_crop: [1, 7, 7] # in the donwscaled res
-##            ASPP_kwargs:
-##              use_ASPP: False
-##              inner_planes: 32
-###              dilations: [[1,8,8], [1,16,16], [1,24,24], [2,8,8], [2,16,16]]
-##              dilations: []
-##          #            IoU_kwargs:
-##          #              nb_random_IoU: 10
-##          #              min_random_offset: [0, 1, 1] # In patch-pixels
-##          #              min_stride: [1, 7, 7] # If offset is 0 along a given dim, this stride is applied
-#      2:
-#        depth_level: 1
-#        nb_target: 1
-#        #            skip_standard_patch_loss: True
-#        patch_size: [5,7,7]
-#        patch_dws_fact: [1, 2, 2] # With respect to the given target!
-#        pred_dws_fact: [1, 1, 1]
-#        central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
-#        patch_stride: [2, 7, 7] # in the original resolution (of the target)
-#        limit_nb_patches: [120, 'number'] # 'factor', 'number'
-#        max_random_crop: [1, 4, 4] # in the donwscaled res!!
-#        ASPP_kwargs:
-#          use_ASPP: False
-#          inner_planes: 32
-##              dilations: [[1,2,2], [1,6,6], [2,2,2]]
-#          dilations: []
-#      #            IoU_kwargs:
-#      #              nb_random_IoU: 10
-#      #              min_random_offset: [0, 2, 2] # In patch-pixels
-#      #              subcrop_shape: [0, 50, 50]
-#      #             min_stride: [2, 9, 9] # If offset is 0 along a given dim, this stride is applied
-#      3:
-#        depth_level: 2
-#        nb_target: 2
-#        #            skip_standard_patch_loss: True
-#        patch_dws_fact: [1, 2, 2] # With respect to the given target!
-#        pred_dws_fact: [1, 1, 1] # With respect to the given target!
-#        patch_size: [5,7,7]
-#        central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
-#        patch_stride: [2, 7, 7] # in the original resolution (of the target)
-#        limit_nb_patches: [90, 'number'] # 'factor', 'number'
-##            limit_nb_patches: [0.25, 'factor'] # 'factor', 'number'
-#        max_random_crop: [1, 2, 2] # in the donwscaled res!!
-#        ASPP_kwargs:
-#          use_ASPP: False
-#          inner_planes: 64
-##              dilations: [[1,4,4], [1,8,8], [1,12,12], [2,4,4], [2,8,8]]
-#          dilations: []
-##            IoU_kwargs:
-##              nb_random_IoU: 10
-##              min_random_offset: [0, 2, 2] # In patch-pixels
-##              min_stride: [1, 5, 5] # If offset is 0 along a given dim, this stride is applied
+        latent_variable_size: 32
+        feature_maps: 16
+        downscaling_factor: [1, 1, 1] # Inside patchNet, to reduce memory
+        precrop_pred: "2:-2,:,:" # Pre-crop part of prediction to avoid training on borders
+      0:
+        depth_level: 0
+        nb_target: 0
+        #            skip_standard_patch_loss: True
+        patch_size: [5,7,7]
+        patch_dws_fact: [1, 1, 1]
+        pred_dws_fact: [1, 1, 1]
+        central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+        patch_stride: # in the original resolution (of the target)
+          - [2, 7, 7]
+        limit_nb_patches: # 'factor', 'number'
+          - [120, 'number']
+        max_random_crop: [1, 7, 7] # in the donwscaled res
+        ASPP_kwargs:
+          use_ASPP: False
+          inner_planes: 32
+#              dilations: [[1,3,3], [2,3,3]]
+          dilations: []
+      #            IoU_kwargs:
+      #              nb_random_IoU: 10
+      #              min_random_offset: [0, 3, 3] # In patch-pixels
+      #              min_stride: [2, 9, 9] # If offset is 0 along a given dim, this stride is applied
+      #              subcrop_shape: [0, 50, 50]
+      1:
+        depth_level: 0
+        nb_target: 0
+        #            skip_standard_patch_loss: True
+        patch_size: [5,7,7]
+        patch_dws_fact: [1, 4, 4] # With respect to the given target!
+        pred_dws_fact: [1, 1, 1]
+        central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+        patch_stride: # in the original resolution (of the target)
+          - [2, 7, 7]
+        limit_nb_patches: # 'factor', 'number'
+          - [120, 'number']
+        max_random_crop: [1, 7, 7] # in the donwscaled res
+        ASPP_kwargs:
+          use_ASPP: False
+          inner_planes: 32
+          #              dilations: [[1,8,8], [1,16,16], [1,24,24], [2,8,8], [2,16,16]]
+          dilations: []
+#          2:
+#            depth_level: 0
+#            nb_target: 0
+#            #            skip_standard_patch_loss: True
+#            patch_size: [5,7,7]
+#            patch_dws_fact: [1, 8, 8] # With respect to the given target!
+#            pred_dws_fact: [1, 1, 1]
+#            central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+#            patch_stride: # in the original resolution (of the target)
+#              - [2, 7, 7]
+#            limit_nb_patches: # 'factor', 'number'
+#              - [120, 'number']
+#            max_random_crop: [1, 7, 7] # in the donwscaled res
+#            ASPP_kwargs:
+#              use_ASPP: False
+#              inner_planes: 32
+##              dilations: [[1,8,8], [1,16,16], [1,24,24], [2,8,8], [2,16,16]]
+#              dilations: []
+#          #            IoU_kwargs:
+#          #              nb_random_IoU: 10
+#          #              min_random_offset: [0, 1, 1] # In patch-pixels
+#          #              min_stride: [1, 7, 7] # If offset is 0 along a given dim, this stride is applied
+      2:
+        depth_level: 1
+        nb_target: 1
+        #            skip_standard_patch_loss: True
+        patch_size: [5,7,7]
+        patch_dws_fact: [1, 2, 2] # With respect to the given target!
+        pred_dws_fact: [1, 1, 1]
+        central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+        patch_stride: [2, 7, 7] # in the original resolution (of the target)
+        limit_nb_patches: [120, 'number'] # 'factor', 'number'
+        max_random_crop: [1, 4, 4] # in the donwscaled res!!
+        ASPP_kwargs:
+          use_ASPP: False
+          inner_planes: 32
+#              dilations: [[1,2,2], [1,6,6], [2,2,2]]
+          dilations: []
+      #            IoU_kwargs:
+      #              nb_random_IoU: 10
+      #              min_random_offset: [0, 2, 2] # In patch-pixels
+      #              subcrop_shape: [0, 50, 50]
+      #             min_stride: [2, 9, 9] # If offset is 0 along a given dim, this stride is applied
+      3:
+        depth_level: 2
+        nb_target: 2
+        #            skip_standard_patch_loss: True
+        patch_dws_fact: [1, 2, 2] # With respect to the given target!
+        pred_dws_fact: [1, 1, 1] # With respect to the given target!
+        patch_size: [5,7,7]
+        central_shape: [1, 1, 1] # Exclude a patch from training if the center does contain more than one gt label:
+        patch_stride: [2, 7, 7] # in the original resolution (of the target)
+        limit_nb_patches: [90, 'number'] # 'factor', 'number'
+#            limit_nb_patches: [0.25, 'factor'] # 'factor', 'number'
+        max_random_crop: [1, 2, 2] # in the donwscaled res!!
+        ASPP_kwargs:
+          use_ASPP: False
+          inner_planes: 64
+#              dilations: [[1,4,4], [1,8,8], [1,12,12], [2,4,4], [2,8,8]]
+          dilations: []
+#            IoU_kwargs:
+#              nb_random_IoU: 10
+#              min_random_offset: [0, 2, 2] # In patch-pixels
+#              min_stride: [1, 5, 5] # If offset is 0 along a given dim, this stride is applied
 
 
 

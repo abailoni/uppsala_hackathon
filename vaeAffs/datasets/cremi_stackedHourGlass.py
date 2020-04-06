@@ -32,9 +32,9 @@ class RejectSingleLabelVolumes(object):
 
     def __call__(self, fetched):
         # # Check if we have a defected slice at the beginning of the batch:
-        # if self.defected_label is not None:
-        #     if ((fetched[0].astype('int64') == self.defected_label).sum() != 0) or \
-        #             (fetched[-1].astype('int64') == self.defected_label).sum() != 0:
+        # if self.defects_label is not None:
+        #     if ((fetched[0].astype('int64') == self.defects_label).sum() != 0) or \
+        #             (fetched[-1].astype('int64') == self.defects_label).sum() != 0:
         #         # Check if we should reject:
         #         print("!!!!!!!!!!!!!!!!!!!!!!!!! WARNING !!!!!!!!!!!!!!!!!!!!!!!!!!)")
         #         print("Batch rejected because of defected slice first/last!")
@@ -59,7 +59,7 @@ class DuplicateGtDefectedSlices(Transform):
 
         # On the first slice we should never have defects:
         if defect_mask[0].max():
-            print("!!!!!!!!!!!!!!!!!!!!!!!!! WARNING: defects on first slice !!!!!!!!!!!!!!!!!!!!!!!!!!")
+            print("WARNING: defects on first slice!!!")
             # In this special case, we set GT of the first slice to ignore label:
             targets[:, 0] = self.ignore_label
 
@@ -95,6 +95,7 @@ class AdjustBatch(Transform):
 class CremiDataset(ZipReject):
     def __init__(self, name, volume_config, slicing_config,
                  defect_augmentation_config, master_config=None):
+        raise DeprecationWarning("Use newer version in segmfriends")
         assert isinstance(volume_config, dict)
         assert isinstance(slicing_config, dict)
         assert isinstance(defect_augmentation_config, dict)
@@ -148,12 +149,12 @@ class CremiDataset(ZipReject):
         transforms = Compose()
 
         if self.master_config.get('random_flip', False):
-            transforms.add(AdjustBatch(defected_label=self.master_config.get('defected_label', 3)))
+            transforms.add(AdjustBatch(defected_label=self.master_config.get('defects_label', 3)))
             transforms.add(RandomFlip3D())
             transforms.add(RandomRotate())
 
         transforms.add(DuplicateGtDefectedSlices(
-            defected_label=self.master_config.get('defected_label', 3),
+            defected_label=self.master_config.get('defects_label', 3),
             ignore_label=self.master_config.get('ignore_label', 0))
         )
 
@@ -176,7 +177,7 @@ class CremiDataset(ZipReject):
             max_misalign = random_slides_config.pop('max_misalign', None)
             transforms.add(RandomSlide(
                 output_image_size=ouput_shape, max_misalign=max_misalign,
-                defected_label=self.master_config.get('defected_label', 2),
+                # defects_label=self.master_config.get('defects_label', 2),
                 **random_slides_config))
 
         # Replicate and downscale batch:
