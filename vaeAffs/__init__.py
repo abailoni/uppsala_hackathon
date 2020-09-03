@@ -19,6 +19,7 @@ os.path.join(get_abailoni_hci_home_path(), "pyCharm_projects/speedrun"),
 os.path.join(get_abailoni_hci_home_path(), "pyCharm_projects/embeddingutils"),
 os.path.join(get_abailoni_hci_home_path(), "pyCharm_projects/firelight"),
 os.path.join(get_abailoni_hci_home_path(), "pyCharm_projects/ConfNets"),
+os.path.join(get_abailoni_hci_home_path(), "pyCharm_projects/GASP"),
 os.path.join(get_abailoni_hci_home_path(), "pyCharm_projects/latent_instance_masks"),
 # os.path.join(get_abailoni_hci_home_path(), "pyCharm_projects/hc_segmentation"),
 os.path.join(get_abailoni_hci_home_path(), "pyCharm_projects/neurofire"),]

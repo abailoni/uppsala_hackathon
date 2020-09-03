@@ -277,6 +277,15 @@ class PostProcessingExperiment(BaseExperiment):
             config_to_save.update(
                 {'energy': MC_energy.item(), 'score': evals, 'score_WS': evals_WS, 'runtime': out_dict['runtime']})
 
+        # ------------------------
+        # FIXME: temp hack for memory debug
+        out_dict.pop("agglomeration_data", None)
+        out_dict.pop("edge_data_contracted_graph", None)
+        out_dict.pop("MC_energy", None)
+        out_dict.pop("runtime", None)
+        config_to_save.update(out_dict)
+        # ------------------------
+
         # Dump config:
         with open(config_file_path, 'w') as f:
             # json.dump(config_to_save, f, indent=4, sort_keys=True)

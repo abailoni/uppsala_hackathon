@@ -2,23 +2,14 @@ postproc_config:
   # ------------------------------
   # Generic options
   # ------------------------------
-  from_superpixels: False #TODO
+  from_superpixels: False
   restrict_to_GT_bbox: True
   use_multicut: False # Deprecate...?
   save_segm: True
   WS_growing: True
   connected_components_on_final_segm: False
   overwrite_prev_files: True
-  extra_presets: []
-
-  WSDT_kwargs:
-    intersect_with_boundary_pixels: True
-    boundary_pixels_kwargs:
-      boundary_threshold: 1.0 #TODO
-      used_offsets: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-      offset_weights: [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]
-
-
+  extra_presets: ["stride10"]
 
 
   # ------------------------------
@@ -26,7 +17,7 @@ postproc_config:
   # ------------------------------
   iterated_options:
 #    preset: ["MutexWatershed"]
-    preset: ["MEAN"]
+    preset: ["MWS"]
 #    preset: ["MEAN"]
 #    sample: ["B", "C", "A"]
 #    sample: ["B", "C", "A", "0", "1", "2"]
