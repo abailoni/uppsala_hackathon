@@ -22,8 +22,10 @@ from inferno.extensions.containers.graph import Identity
 
 from vaeAffs.transforms import DownsampleAndCrop3D
 
-from neurofire.models.unet.unet_3d import CONV_TYPES, Decoder, DecoderResidual, BaseResidual, Base, Output, Encoder, \
-    EncoderResidual
+# from neurofire.models.unet.unet_3d import CONV_TYPES, Decoder, DecoderResidual, BaseResidual, Base, Output, Encoder, \
+#     EncoderResidual
+
+from embeddingutils.models.unet import GeneralizedStackedPyramidUNet3D
 
 import warnings
 
@@ -516,7 +518,7 @@ class ComputeIoU(nn.Module):
         print("Done, now reshape...")
 
 
-from embeddingutils.models.unet import GeneralizedStackedPyramidUNet3D
+
 
 
 class IntersectOverUnionUNet(GeneralizedStackedPyramidUNet3D):
@@ -706,7 +708,7 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         self.offsets = offsets
 
         # TODO: Assert
-        assert affinity_mode in ["classic", "probabilistic", "probNoThresh"]
+        assert affinity_mode in ["classic", "probabilistic", "probNoThresh", "fullPatches"]
         self.temperature_parameter = temperature_parameter
         self.T_norm_type = T_norm_type
         self.affinity_mode = affinity_mode
@@ -730,6 +732,8 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
             return self.forward_probAffs(*inputs)
         elif self.affinity_mode == "probNoThresh":
             return self.forward_probAffsNoThresh(*inputs)
+        elif self.affinity_mode == "fullPatches":
+            return self.forward_fullPatches(*inputs)
         else:
             raise ValueError
 
@@ -1215,6 +1219,130 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         else:
             raise NotImplementedError()
 
+    def forward_fullPatches(self, *inputs):
+        with torch.no_grad():
+            all_predictions = super(ProbabilisticBoundaryFromEmb, self).forward(*inputs)
+
+        def make_sliding_windows(volume_shape, window_size, stride, downsampling_ratio=None):
+            from inferno.io.volumetric import volumetric_utils as vu
+            assert isinstance(volume_shape, tuple)
+            ndim = len(volume_shape)
+            if downsampling_ratio is None:
+                downsampling_ratio = [1] * ndim
+            elif isinstance(downsampling_ratio, int):
+                downsampling_ratio = [downsampling_ratio] * ndim
+            elif isinstance(downsampling_ratio, (list, tuple)):
+                # assert_(len(downsampling_ratio) == ndim, exception_type=ShapeError)
+                downsampling_ratio = list(downsampling_ratio)
+            else:
+                raise NotImplementedError
+
+            return list(vu.slidingwindowslices(shape=list(volume_shape),
+                                               ds=downsampling_ratio,
+                                               window_size=window_size,
+                                               strides=stride,
+                                               shuffle=False,
+                                               add_overhanging=True))
+
+        del inputs
+        # torch.cuda.empty_cache()
+
+        max_indx_patchnets = 0
+        used_patchnets = []
+        for _, off_specs in enumerate(self.offsets):
+            used_patchnets += off_specs[1]
+            new_max = np.array(off_specs[1]).max()
+            max_indx_patchnets = new_max if new_max > max_indx_patchnets else max_indx_patchnets
+        used_patchnets = np.unique(np.array(used_patchnets))
+        all_predictions = all_predictions[:max_indx_patchnets+1]
+        # TODO: generalize to multiscale inputs?
+        check_shape = None
+        for nb_patch in used_patchnets:
+            if check_shape is None:
+                check_shape = all_predictions[nb_patch].shape
+            else:
+                assert check_shape == all_predictions[nb_patch].shape
+
+        """
+        # Pre-crop prediction:
+        # !!!!!!!!!!!!!!!!!!!!!
+        # Important: pre-cropping the prediction that was not trained during training is really important
+        # (for instance the first and last two slices), because otherwise their patches could mess up the
+        # statistics of the probabilistic affinities.
+        # !!!!!!!!!!!!!!!!!!!!!
+        """
+        if self.pre_crop_pred is not None:
+            all_predictions = [pred[self.pre_crop_pred] for pred in all_predictions]
+
+        # TODO: is there a better way to do this?
+        # The problem is that partially they already overlap (sometimes I compute partial results on the boundaries)
+        # So simply keeping a how-many-times-a-pixel-was-active mask is not enough in this case..
+        # Atm, the easiest solution is to ensure to have sliding windows fitting exactly
+        assert all(shp % wdw_shp == 0 for wdw_shp, shp in zip(self.slicing_config["window_size"], all_predictions[used_patchnets[0]].shape[2:])), \
+            "The slicing window size {} should be an exact multiple of the prediction shape {}".format(self.slicing_config["window_size"],
+                                                                                                       all_predictions[used_patchnets[0]].shape[2:])
+
+        # Initialize stuff:
+        device = all_predictions[0].get_device()
+        sliding_windows = make_sliding_windows(all_predictions[used_patchnets[0]].shape[2:], **self.slicing_config)
+
+        # Get padding of each patch: it will be useful later to crop/pad the predictions
+        patch_size = None
+        for nb_patch_net in used_patchnets:
+            kwargs = self.ptch_kwargs[nb_patch_net]
+            if patch_size is None:
+                patch_size = kwargs["patch_size"]
+            else:
+                assert patch_size == kwargs["patch_size"], "Only patches of the same size are supported at the moment"
+
+        # Get biggest real patch-dimensions (for the final output shape)
+        boundary_stats_shape = tuple([len(used_patchnets)] + [sh for sh in all_predictions[used_patchnets[0]].shape[2:]] + patch_size)
+        # Create array with output probability-affinities:
+        output_tensor = torch.zeros(boundary_stats_shape).cuda(device)
+
+        # Predict all patches:
+        # print("Sliding windows: ", len(sliding_windows))
+        for i, current_slice in enumerate(sliding_windows):
+            for patchNet_indx, nb_patch_net in enumerate(used_patchnets):
+                pred = all_predictions[nb_patch_net]
+                assert pred.shape[0] == 1, "Only batch == 1 is supported atm"
+
+                kwargs = self.ptch_kwargs[nb_patch_net]
+                sliding_window_size = self.slicing_config["window_size"]
+
+                # Collect options from config:
+                patch_shape = kwargs.get("patch_size")
+                assert all(i % 2 == 1 for i in patch_shape), "Patch should be odd"
+                patch_dws_fact = kwargs.get("patch_dws_fact", [1, 1, 1])
+                real_patch_shape = tuple(pt * fc for pt, fc in zip(patch_shape, patch_dws_fact))
+
+                full_slice = (slice(None), slice(None),) + current_slice
+                # Now this is simply doing a reshape...
+                emb_vectors, _, nb_patches = extract_patches_torch_new(pred[full_slice], shape=(1, 1, 1), stride=(1,1,1))
+                patches = self.models[-1].patch_models[nb_patch_net](emb_vectors[:, :, 0, 0, 0])
+
+                patches = patches.view(*nb_patches, *patch_shape)
+                # # From now on we can work on the CPU (too memory consuming):
+                # patch_shape = patches.shape[2:]
+                # if not self.IoU_on_GPU:
+                #     patches = patches.cpu().numpy()
+                #     patches = patches.reshape(*nb_patches, *patch_shape)
+                # else:
+                #     patches = patches.view(*nb_patches, *patch_shape)
+
+                # Make sure to have me-masks:
+                if patch_dws_fact[1] <= 6:
+                    patches = 1. - patches
+
+                # Save output:
+                output_slice = current_slice + tuple(slice(None) for _ in range(3))
+                output_tensor[patchNet_indx][output_slice] = patches
+
+
+        # Reshape as affinities:
+        full_shape = output_tensor.shape[1:4]
+        output_tensor = output_tensor.permute(0,4,5,6,1,2,3).reshape(-1, *full_shape)
+        return output_tensor.unsqueeze(0)
 
 
     def forward_affinities(self, *inputs):

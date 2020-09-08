@@ -10,7 +10,7 @@ from inferno.utils.io_utils import yaml2dict
 from torch.utils.data.dataloader import DataLoader, default_collate
 
 from neurofire.datasets.loader import RawVolume, SegmentationVolume, RawVolumeWithDefectAugmentation
-from neurofire.transform.affinities import Segmentation2AffinitiesDynamicOffsets, affinity_config_to_transform
+from neurofire.transform.affinities import affinity_config_to_transform
 from neurofire.transform.artifact_source import RejectNonZeroThreshold
 from neurofire.transform.volume import RandomSlide
 
@@ -197,7 +197,9 @@ class CremiDataset(ZipReject):
             global_kwargs = affs_config.pop("global", {})
 
             use_dynamic_offsets = affs_config.pop("use_dynamic_offsets", False)
-            aff_transform = Segmentation2AffinitiesDynamicOffsets if use_dynamic_offsets else affinity_config_to_transform
+            if use_dynamic_offsets:
+                raise ValueError("The class neurofire.transform.affinities.Segmentation2AffinitiesDynamicOffsets has been deprecated.")
+            aff_transform = affinity_config_to_transform
 
             for input_index in affs_config:
                 affs_kwargs = deepcopy(global_kwargs)
