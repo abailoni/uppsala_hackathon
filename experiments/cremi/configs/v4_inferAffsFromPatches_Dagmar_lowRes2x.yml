@@ -1,18 +1,21 @@
 inference:
   crop_prediction:
     - [2,2]
-    - [15,15]
-    - [15,15]
+#    - [15,15]
+#    - [15,15]
+    - [8,8]
+    - [8,8]
   window_overlap: [1, 30, 30]
   blending_kwargs:
     dim: 3
   index_output: "KeyDeleter"
-  output_dws_fact: [1,2,2]
+#  output_dws_fact: [1,2,2]
+  output_dws_fact: [1,4,4]
 
 loaders:
   infer:
     volume_config:
-      data_slice: ':45,:,:' # -8, +45
+      data_slice: ':,:,:' # -8, +45
 #      data_slice: '37:82,:,:'
 #      data_slice: '74:119,:,:'
 #      data_slice: '111:,:,:'
@@ -27,7 +30,7 @@ model:
 #    T_norm_type: "nilpotent_min"s
     offsets:
       # Short-range:
-      - [[-1,0,0], [2], "1:-1"]
+      - [[-1,0,0], [3], "1:-1"]
 #      - [[0,-1,0], [0], ":"]
 #      - [[0,0,-1], [0], ":"]
 #      - [[0,-4,0], [1], ":"]
@@ -64,5 +67,5 @@ model:
     pre_crop_pred: "2:-2,2:-2,2:-2"  # Validation crop
 #    pre_crop_pred: "2:-2,5:-5,5:-5"  # Submission crop
     slicing_config:
-      window_size: [3,116,116] # Validation window
-#      window_size: [3,60,60] # Validation window
+#      window_size: [3,116,116] # Validation window
+      window_size: [3,60,60] # Validation window

@@ -708,7 +708,7 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
         self.offsets = offsets
 
         # TODO: Assert
-        assert affinity_mode in ["classic", "probabilistic", "probNoThresh", "fullPatches"]
+        # assert affinity_mode in ["classic", "probabilistic", "probNoThresh", "fullPatches"]
         self.temperature_parameter = temperature_parameter
         self.T_norm_type = T_norm_type
         self.affinity_mode = affinity_mode
@@ -732,7 +732,7 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
             return self.forward_probAffs(*inputs)
         elif self.affinity_mode == "probNoThresh":
             return self.forward_probAffsNoThresh(*inputs)
-        elif self.affinity_mode == "fullPatches":
+        elif self.affinity_mode == "fullPatches" or self.affinity_mode == "dumpEmbeddings":
             return self.forward_fullPatches(*inputs)
         else:
             raise ValueError
@@ -1288,6 +1288,7 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
 
         # Get padding of each patch: it will be useful later to crop/pad the predictions
         patch_size = None
+        latent_variable_size = self.ptch_kwargs[used_patchnets[0]]["latent_variable_size"] # TODO: assert equal
         for nb_patch_net in used_patchnets:
             kwargs = self.ptch_kwargs[nb_patch_net]
             if patch_size is None:
@@ -1296,7 +1297,12 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
                 assert patch_size == kwargs["patch_size"], "Only patches of the same size are supported at the moment"
 
         # Get biggest real patch-dimensions (for the final output shape)
-        boundary_stats_shape = tuple([len(used_patchnets)] + [sh for sh in all_predictions[used_patchnets[0]].shape[2:]] + patch_size)
+        if self.affinity_mode == "dumpEmbeddings":
+            boundary_stats_shape = tuple([len(used_patchnets), latent_variable_size] + [sh for sh in all_predictions[used_patchnets[0]].shape[2:]])
+        elif self.affinity_mode == "fullPatches":
+            boundary_stats_shape = tuple([len(used_patchnets)] + [sh for sh in all_predictions[used_patchnets[0]].shape[2:]] + patch_size)
+        else:
+            raise NotImplementedError()
         # Create array with output probability-affinities:
         output_tensor = torch.zeros(boundary_stats_shape).cuda(device)
 
@@ -1317,31 +1323,41 @@ class ProbabilisticBoundaryFromEmb(GeneralizedStackedPyramidUNet3D):
                 real_patch_shape = tuple(pt * fc for pt, fc in zip(patch_shape, patch_dws_fact))
 
                 full_slice = (slice(None), slice(None),) + current_slice
-                # Now this is simply doing a reshape...
-                emb_vectors, _, nb_patches = extract_patches_torch_new(pred[full_slice], shape=(1, 1, 1), stride=(1,1,1))
-                patches = self.models[-1].patch_models[nb_patch_net](emb_vectors[:, :, 0, 0, 0])
+                if self.affinity_mode == "dumpEmbeddings":
+                    output_slice = (slice(None),) + current_slice
+                    output_tensor[patchNet_indx][output_slice] = pred[full_slice]
+                elif self.affinity_mode == "fullPatches":
+                    # Now this is simply doing a reshape...
+                    emb_vectors, _, nb_patches = extract_patches_torch_new(pred[full_slice], shape=(1, 1, 1),
+                                                                           stride=(1, 1, 1))
 
-                patches = patches.view(*nb_patches, *patch_shape)
-                # # From now on we can work on the CPU (too memory consuming):
-                # patch_shape = patches.shape[2:]
-                # if not self.IoU_on_GPU:
-                #     patches = patches.cpu().numpy()
-                #     patches = patches.reshape(*nb_patches, *patch_shape)
-                # else:
-                #     patches = patches.view(*nb_patches, *patch_shape)
+                    patches = self.models[-1].patch_models[nb_patch_net](emb_vectors[:, :, 0, 0, 0])
 
-                # Make sure to have me-masks:
-                if patch_dws_fact[1] <= 6:
-                    patches = 1. - patches
+                    patches = patches.view(*nb_patches, *patch_shape)
+                    # # From now on we can work on the CPU (too memory consuming):
+                    # patch_shape = patches.shape[2:]
+                    # if not self.IoU_on_GPU:
+                    #     patches = patches.cpu().numpy()
+                    #     patches = patches.reshape(*nb_patches, *patch_shape)
+                    # else:
+                    #     patches = patches.view(*nb_patches, *patch_shape)
 
-                # Save output:
-                output_slice = current_slice + tuple(slice(None) for _ in range(3))
-                output_tensor[patchNet_indx][output_slice] = patches
+                    # Make sure to have me-masks:
+                    if patch_dws_fact[1] <= 6:
+                        patches = 1. - patches
+
+                    # Save output:
+                    output_slice = current_slice + tuple(slice(None) for _ in range(3))
+                    output_tensor[patchNet_indx][output_slice] = patches
 
 
         # Reshape as affinities:
-        full_shape = output_tensor.shape[1:4]
-        output_tensor = output_tensor.permute(0,4,5,6,1,2,3).reshape(-1, *full_shape)
+        if self.affinity_mode == "dumpEmbeddings":
+            full_shape = output_tensor.shape[-3:]
+            output_tensor = output_tensor.reshape(-1, *full_shape)
+        elif self.affinity_mode == "fullPatches":
+            full_shape = output_tensor.shape[1:4]
+            output_tensor = output_tensor.permute(0,4,5,6,1,2,3).reshape(-1, *full_shape)
         return output_tensor.unsqueeze(0)
 
 

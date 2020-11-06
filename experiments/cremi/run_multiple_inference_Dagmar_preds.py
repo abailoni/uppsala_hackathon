@@ -154,7 +154,8 @@ CUDA = "CUDA_VISIBLE_DEVICES=0,1,2,5"
 # -----------
 # Infer new prob affs V3
 # -----------
-CUDA = "CUDA_VISIBLE_DEVICES=6,7"
+# CUDA = "CUDA_VISIBLE_DEVICES=6,7"
+CUDA = "CUDA_VISIBLE_DEVICES=4,5,6,7"
 
 
 list_of_args = [
@@ -184,16 +185,20 @@ list_of_args = [
         # "empty_config.yml",
     ]
      ),
-    (["--update1"], [
-        # "empty_config.yml///_eff_padded",
-        # "v4_inferGlia.yml///_eff",
-        # "empty_config.yml",
-        # "v4_inferAffsFromPatches_Dagmar.yml///_avgDirectVar",
-        "v4_inferAffsFromPatches_Dagmar_lowRes.yml///lowRes_avgDirectVar",
-        # "v3_inferAffsFromPatches_b.yml///_avgDirectVarCropped",
+    (["--update1", "--config.loaders.infer.volume_config.data_slice"], [
+        "v4_inferAffsFromPatches_Dagmar.yml///_fullPatch1",
+        "v4_inferAffsFromPatches_Dagmar.yml///_fullPatch3",
+        # "v4_inferAffsFromPatches_Dagmar.yml///_embeddings",
+        # "v4_inferAffsFromPatches_Dagmar_lowRes2x.yml///_veryLowResFullPatch",
+        # "v4_inferAffsFromPatches_Dagmar_lowRes.yml///_lowResEmbeddings",
+    ], [
+        # ":45,:,:",
+        # ":,:,:",
+        "37:82,:,:",
+        "111:,:,:"
     ]),
     (["--config.name_experiment"], [ ("{}{}_Dagmar", "2:0", "3:0") ]),
-(["--config.loaders.infer.loader_config.batch_size"], ["2"]),
+(["--config.loaders.infer.loader_config.batch_size"], ["4"]),
     # (["--config.loaders.infer.loader_config.batch_size"], ["1"]),
     (["--config.loaders.infer.loader_config.num_workers"], ["20"]),
     (["--config.loaders.infer.name"], [

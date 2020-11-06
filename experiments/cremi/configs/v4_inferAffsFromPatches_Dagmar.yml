@@ -11,9 +11,9 @@ inference:
 loaders:
   infer:
     volume_config:
-#      data_slice: ':45,:,:' # -8, +45
+      data_slice: ':45,:,:' # -8, +45
 #      data_slice: '37:82,:,:'
-      data_slice: '74:119,:,:'
+#      data_slice: '74:119,:,:'
 #      data_slice: '111:,:,:'
 
 
@@ -21,6 +21,7 @@ model:
   model_class: vaeAffs.models.compute_IoU.ProbabilisticBoundaryFromEmb
   model_kwargs:
     affinity_mode: "fullPatches"
+#    affinity_mode: "dumpEmbeddings"
     temperature_parameter: 1
 #    T_norm_type: "nilpotent_min"s
     offsets:
