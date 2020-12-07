@@ -17,7 +17,8 @@ import segmfriends.utils.various as segm_utils
 from segmfriends.utils.config_utils import adapt_configs_to_model_v2
 import vaeAffs.postproc.utils as postproc_utils
 from segmfriends.algorithms import get_segmentation_pipeline
-from segmfriends.algorithms.WS.WS_growing import SizeThreshAndGrowWithWS
+# from segmfriends.algorithms.WS.WS_growing import SizeThreshAndGrowWithWS
+from GASP.segmentation.watershed import SizeThreshAndGrowWithWS
 import time
 import shutil
 
@@ -434,9 +435,9 @@ class PostProcessingExperiment(BaseExperiment):
                             gt_crop_slc = segm_utils.parse_data_slice(crop)[1:]
 
                         GT = segm_utils.readHDF5_from_volume_config(sample,
-                                            **GT_vol_config,
                                             crop_slice=gt_crop_slc,
                                             run_connected_components=False
+                                            **GT_vol_config,
                                             )
                         # print(GT.shape)
                         # print("NUmber of clusters before: ", np.unique(GT).shape)
@@ -452,9 +453,9 @@ class PostProcessingExperiment(BaseExperiment):
                             ignore_label = self.get("volume_config/glia_specs/ignore_label", ensure_exists=True)
                             GT_vol_config['inner_path'] = inner_path_glia
                             various_masks = segm_utils.readHDF5_from_volume_config(sample,
-                                                                   **GT_vol_config,
                                                                    crop_slice=gt_crop_slc,
                                                                    run_connected_components=False
+                                                                   **GT_vol_config,
                                                                    )
                             GT[various_masks == glia_label] = ignore_label
 
@@ -469,9 +470,9 @@ class PostProcessingExperiment(BaseExperiment):
                             affs_crop_slc = segm_utils.parse_data_slice(crop)
 
                         affinities = segm_utils.readHDF5_from_volume_config(sample,
-                                            **affs_vol_config,
                                             crop_slice=affs_crop_slc,
                                             run_connected_components=False
+                                            **affs_vol_config,
                                             )
 
                         assert GT.shape == affinities.shape[1:], "Loaded GT and affinities do not match: {} - {}".format(GT.shape, affinities.shape[1:])
@@ -486,7 +487,7 @@ class PostProcessingExperiment(BaseExperiment):
                         for long_range_prob in iterated_options['edge_prob']:
                             for noise in iterated_options['noise_factor']:
                                 if noise != 0.:
-                                    raise DeprecationWarning("Double check that opensimplex works")
+                                    raise DeprecationWarning("Opensimplex noise no longer in nifty")
                                     noise_mod = postproc_config.get("noise_mod", 'split-biased')
                                     collected_data["affs"][sample][crop][sub_crop][noise] = \
                                         postproc_utils.add_opensimplex_noise_to_affs(

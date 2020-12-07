@@ -2,6 +2,7 @@ import getpass
 import socket
 import os
 
+raise DeprecationWarning("Use pathutils package")
 
 def get_abailoni_hci_home_path():
     username = getpass.getuser()
